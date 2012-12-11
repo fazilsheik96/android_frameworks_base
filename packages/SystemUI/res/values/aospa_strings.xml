@@ -138,4 +138,8 @@
     <string name="global_action_users">Users</string>
     <string name="global_action_panic">Panic trigger</string>
     <string name="global_action_restart_systemui">SystemUI</string>
+
+    <!-- Navigation bar dpad -->
+    <string name="accessibility_dpad_left">Cursor left</string>
+    <string name="accessibility_dpad_right">Cursor right</string>
 </resources>
