@@ -27,4 +27,8 @@
     <dimen name="pocket_view_cancel_margin_horizontal">24dp</dimen>
     <dimen name="pocket_view_top_tag_size">14sp</dimen>
     <dimen name="pocket_view_top_tag_margin_top">8dp</dimen>
+
+    <!-- Network traffic -->
+    <dimen name="network_traffic_width">25sp</dimen>
+  
 </resources>
