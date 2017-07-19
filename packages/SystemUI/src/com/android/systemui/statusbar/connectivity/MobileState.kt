@@ -109,6 +109,9 @@ internal class MobileState(
         videoCapable = o.videoCapable
         mobileDataEnabled = o.mobileDataEnabled
         roamingDataEnabled = o.roamingDataEnabled
+        imsRegistered = o.imsRegistered;
+        voiceCapable = o.voiceCapable;
+        videoCapable = o.videoCapable;
 
         telephonyDisplayInfo = o.telephonyDisplayInfo
         serviceState = o.serviceState
@@ -204,6 +207,8 @@ internal class MobileState(
         builder.append("videoCapable=$videoCapable,")
         builder.append("mobileDataEnabled=$mobileDataEnabled,")
         builder.append("roamingDataEnabled=$roamingDataEnabled,")
+        builder.append("voiceCapable=$voiceCapable,")
+        builder.append("videoCapable=$videoCapable,")
 
         // Computed properties
         builder.append("showQuickSettingsRatIcon=${showQuickSettingsRatIcon()},")
