@@ -239,4 +239,14 @@
     <string-array name="demo_device_provisioning_known_signers">
         <item>@string/config_retailDemoPackageSignature</item>
     </string-array>
+
+     <string-array translatable="false" name="config_rebootActionsList">
+        <item>restart</item>
+        <item>reboot_recovery</item>
+        <item>reboot_bootloader</item>
+        <item>reboot_sysui</item>
+    </string-array>
+
+    <string-array translatable="false" name="config_loggersPkgList" />
+
 </resources>

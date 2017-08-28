@@ -46,4 +46,12 @@
     <!-- A toast message shown after successfully deleting a screen recording [CHAR LIMIT=NONE] -->
     <string name="screenrecord_delete_description">Screen recording deleted</string>
 
+    <!-- Power menu reboot -->
+    <string name="global_action_reboot">Restart</string>
+    <string name="global_action_reboot_more">Advanced</string>
+    <string name="global_action_reboot_sub">System</string>
+    <string name="global_action_reboot_recovery">Recovery</string>
+    <string name="global_action_reboot_bootloader">Bootloader</string>
+    <string name="global_action_reboot_fastboot">Fastboot</string>
+
 </resources>
