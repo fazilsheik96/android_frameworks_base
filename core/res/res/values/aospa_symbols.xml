@@ -152,4 +152,7 @@
     <!-- Whether to use VPN Tethering -->
     <java-symbol type="bool" name="config_enable_vpntethering" />
 
+    <!-- Power menu -->
+    <java-symbol type="array" name="config_restartActionsList" />
+
 </resources>
