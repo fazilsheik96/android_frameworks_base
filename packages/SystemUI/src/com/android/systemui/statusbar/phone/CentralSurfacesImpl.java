@@ -1019,6 +1019,17 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
 
         mColorExtractor.addOnColorsChangedListener(mOnColorsChangedListener);
 
+        mNeedsNavigationBar = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_showNavigationBar);
+        // Allow a system property to override this. Used by the emulator.
+        // See also hasNavigationBar().
+        String navBarOverride = SystemProperties.get("qemu.hw.mainkeys");
+        if ("1".equals(navBarOverride)) {
+            mNeedsNavigationBar = false;
+        } else if ("0".equals(navBarOverride)) {
+            mNeedsNavigationBar = true;
+        }
+
         Uri statusbarBrightnessControl = Settings.System.getUriFor(
                 Settings.System.STATUS_BAR_BRIGHTNESS_CONTROL);
         Uri qsTransparency = Settings.System.getUriFor(Settings.System.QS_TRANSPARENCY);
@@ -1040,6 +1051,23 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
                     mContext.getMainExecutor().execute(() -> {
                         mScrimController.setCustomScrimAlpha(newValue);
                     });
+                } else if (mDisplayId == Display.DEFAULT_DISPLAY
+                        && mWindowManagerService != null) {
+                    boolean forcedVisibility = mNeedsNavigationBar || Settings.System.getInt(
+                            mContext.getContentResolver(),
+                            Settings.System.FORCE_SHOW_NAVBAR, 0) != 0;
+                    boolean hasNavbar = getNavigationBarView() != null;
+                    mContext.getMainExecutor().execute(() -> {
+                        if (forcedVisibility) {
+                            if (!hasNavbar) {
+                                mNavigationBarController.onDisplayReady(mDisplayId);
+                            }
+                        } else {
+                            if (hasNavbar) {
+                                mNavigationBarController.onDisplayRemoved(mDisplayId);
+                            }
+                        }
+                    });
                 }
             }
         };
@@ -1051,6 +1079,11 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
         mContext.getContentResolver().registerContentObserver(
                 qsTransparency, false, contentObserver);
         contentObserver.onChange(true, qsTransparency);
+
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.FORCE_SHOW_NAVBAR), false,
+                contentObserver);
+        contentObserver.onChange(true);
 
         mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
 
@@ -3473,6 +3506,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
     protected KeyguardManager mKeyguardManager;
     private final DeviceProvisionedController mDeviceProvisionedController;
 
+    private boolean mNeedsNavigationBar;
     private final NavigationBarController mNavigationBarController;
     private final AccessibilityFloatingMenuController mAccessibilityFloatingMenuController;
 
