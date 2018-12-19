@@ -113,6 +113,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -11985,6 +11986,14 @@ public final class Settings {
          */
         @Readable
         public static final String HIDE_DEVELOPER_STATUS = "hide_developer_status";
+
+        /**
+         * Whether volume panel should appear on the left (or right).
+         * 0 = false (on the right)
+         * 1 = true (on the left)
+         * @hide
+         */
+        public static final String VOLUME_PANEL_ON_LEFT = "volume_panel_on_left";
 
         /**
          * Keys we no longer back up under the current schema, but want to continue to
