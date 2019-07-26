@@ -366,6 +366,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
 
         mNotificationInterruptStateProvider =
                 new TestableNotificationInterruptStateProviderImpl(mContext.getContentResolver(),
+                        mContext,
                         mPowerManager,
                         mAmbientDisplayConfiguration,
                         mStatusBarStateController,
@@ -1305,6 +1306,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
 
         TestableNotificationInterruptStateProviderImpl(
                 ContentResolver contentResolver,
+                Context context,
                 PowerManager powerManager,
                 AmbientDisplayConfiguration ambientDisplayConfiguration,
                 StatusBarStateController controller,
@@ -1319,6 +1321,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 UserTracker userTracker) {
             super(
                     contentResolver,
+                    context,
                     powerManager,
                     ambientDisplayConfiguration,
                     batteryController,

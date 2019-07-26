@@ -17,6 +17,7 @@
 package com.android.systemui.wmshell;
 
 import android.content.ContentResolver;
+import android.content.Context;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.os.Handler;
 import android.os.PowerManager;
@@ -37,6 +38,7 @@ public class TestableNotificationInterruptStateProviderImpl
 
     TestableNotificationInterruptStateProviderImpl(
             ContentResolver contentResolver,
+            Context context,
             PowerManager powerManager,
             AmbientDisplayConfiguration ambientDisplayConfiguration,
             StatusBarStateController statusBarStateController,
@@ -50,6 +52,7 @@ public class TestableNotificationInterruptStateProviderImpl
             UiEventLogger uiEventLogger,
             UserTracker userTracker) {
         super(contentResolver,
+                context,
                 powerManager,
                 ambientDisplayConfiguration,
                 batteryController,

@@ -936,4 +936,14 @@
 
     <!-- Flag controlling whether visual query attention detection has been enabled. -->
     <bool name="config_enableVisualQueryAttentionDetection">false</bool>
+
+    <!-- Heads-Up whitelist packages -->
+    <string-array name="config_headsUpWhitelistPackages" translatable="false">
+        <item>com.android.dialer</item>
+        <item>com.android.messaging</item>
+        <item>com.android.contacts</item>
+        <item>com.google.android.dialer</item>
+        <item>com.google.android.apps.messaging</item>
+        <item>com.google.android.contacts</item>
+    </string-array>
 </resources>
