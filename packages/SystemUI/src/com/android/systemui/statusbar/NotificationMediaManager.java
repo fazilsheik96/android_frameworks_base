@@ -42,6 +42,7 @@ import android.os.Trace;
 import android.service.notification.NotificationStats;
 import android.service.notification.StatusBarNotification;
 import android.util.ArraySet;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.Display;
 import android.view.View;
@@ -101,6 +102,7 @@ public class NotificationMediaManager implements Dumpable {
     private final SysuiColorExtractor mColorExtractor;
     private final KeyguardStateController mKeyguardStateController;
     private final KeyguardBypassController mKeyguardBypassController;
+    private static final String NOWPLAYING_SERVICE = "com.google.android.as";
     private static final HashSet<Integer> PAUSED_MEDIA_STATES = new HashSet<>();
     private static final HashSet<Integer> CONNECTING_MEDIA_STATES = new HashSet<>();
     static {
@@ -153,6 +155,8 @@ public class NotificationMediaManager implements Dumpable {
     private Display mCurrentDisplay;
 
     private LockscreenWallpaper.WallpaperDrawable mWallapperDrawable;
+    private String mNowPlayingNotificationKey;
+    private String mNowPlayingTrack;
 
     private final MediaController.Callback mMediaListener = new MediaController.Callback() {
         @Override
@@ -323,6 +327,10 @@ public class NotificationMediaManager implements Dumpable {
             clearCurrentMediaNotification();
             dispatchUpdateMediaMetaData(true /* changed */, true /* allowEnterAnimation */);
         }
+        if (key.equals(mNowPlayingNotificationKey)) {
+            mNowPlayingNotificationKey = null;
+            dispatchUpdateMediaMetaData(true /* changed */, true /* allowEnterAnimation */);
+        }
     }
 
     @Nullable
@@ -374,6 +382,18 @@ public class NotificationMediaManager implements Dumpable {
         NotificationEntry mediaNotification = null;
         MediaController controller = null;
         for (NotificationEntry entry : allNotifications) {
+            if (entry.getSbn().getPackageName().toLowerCase().equals(NOWPLAYING_SERVICE)) {
+                mNowPlayingNotificationKey = entry.getSbn().getKey();
+                String notificationText = null;
+                final String title = entry.getSbn().getNotification()
+                        .extras.getString(Notification.EXTRA_TITLE);
+                if (!TextUtils.isEmpty(title)) {
+                    mNowPlayingTrack = title;
+                }
+                break;
+            }
+        }
+        for (NotificationEntry entry : allNotifications) {
             Notification notif = entry.getSbn().getNotification();
             if (notif.isMediaNotification()) {
                 final MediaSession.Token token =
@@ -419,6 +439,13 @@ public class NotificationMediaManager implements Dumpable {
         }
 
         return metaDataChanged;
+    }
+
+    public String getNowPlayingTrack() {
+        if (mNowPlayingNotificationKey == null) {
+            mNowPlayingTrack = null;
+        }
+        return mNowPlayingTrack;
     }
 
     public void clearCurrentMediaNotification() {
