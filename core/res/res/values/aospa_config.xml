@@ -161,4 +161,7 @@
     <string-array name="device_configs_override" translatable="false">
     </string-array>
 
+    <!-- Whether to use old mobile type icons as default -->
+    <bool name="config_useOldMobileIcons">false</bool>
+
 </resources>
