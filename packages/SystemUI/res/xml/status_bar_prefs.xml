@@ -142,11 +142,6 @@
         android:title="@string/quick_settings_camera_label"
         android:icon="@drawable/ic_statusbar_camera" />
 
-    <com.android.systemui.tuner.StatusBarSwitch
-        android:key="battery"
-        android:title="@string/battery"
-        android:icon="@*android:drawable/ic_battery" />
-
     <com.android.systemui.tuner.ClockPreference
         android:key="clock"
         android:title="@string/tuner_time"
