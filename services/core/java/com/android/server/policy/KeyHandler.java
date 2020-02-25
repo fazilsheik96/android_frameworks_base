@@ -150,6 +150,7 @@ public class KeyHandler {
 
     private boolean mGesturesEnabled;
     private boolean mSingleDoubleSpecialCase;
+    private boolean mIsInPocket;
 
     private final SparseIntArray mGestures = new SparseIntArray(MAX_SUPPORTED_GESTURES);
 
@@ -200,7 +201,6 @@ public class KeyHandler {
         ensureTelecomManager();
         ensureVibrator();
         ensurePowerManager();
-        ensureSensors();
         ensureStatusBarService();
         ensureCameraManager();
         ensureKeyguardManager();
@@ -214,6 +214,8 @@ public class KeyHandler {
 
         // Register observers
         registerObservers();
+
+        mIsInPocket = false;
     }
 
     private void getConfiguration() {
@@ -415,16 +417,6 @@ public class KeyHandler {
         }
         if (mPowerManagerInternal == null) {
             mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
-
-        }
-    }
-
-    private void ensureSensors() {
-        if (mSensorManager == null) {
-            mSensorManager = (SensorManager) mContext.getSystemService(Context.SENSOR_SERVICE);
-        }
-        if (mProximitySensor == null) {
-            mProximitySensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
         }
     }
 
@@ -444,10 +436,6 @@ public class KeyHandler {
         if (mGestureWakeLock == null) {
             mGestureWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
                     "GestureWakeLock");
-        }
-        if (mProximityWakeLock == null) {
-            mProximityWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
-                    "ProximityWakeLock");
         }
     }
 
@@ -669,10 +657,7 @@ public class KeyHandler {
         // If it's held, means we just processed a gesture or we are in the middle of one
         if (isKeySupportedAndEnabled && !mGestureWakeLock.isHeld()) {
             Message msg = getMessageForKeyEvent(event);
-            if (mProximitySensor != null) {
-                mHandler.sendMessageDelayed(msg, 250 /* proximity timeout */);
-                processEvent(event);
-            } else {
+            if (!mIsInPocket) {
                 if (scanCode == mSingleTapKeyCode && mSingleDoubleSpecialCase) {
                     mHandler.sendMessageDelayed(msg, ViewConfiguration.getDoubleTapTimeout());
                 } else {
@@ -683,6 +668,10 @@ public class KeyHandler {
         }
 
         return isKeySupportedAndEnabled;
+    }
+
+    public void setIsInPocket(boolean inPocket) {
+        mIsInPocket = inPocket;
     }
 
     private Message getMessageForKeyEvent(KeyEvent keyEvent) {
