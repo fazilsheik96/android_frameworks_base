@@ -29,10 +29,6 @@ import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraManager.TorchCallback;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
 import android.hardware.power.Boost;
 import android.media.AudioManager;
 import android.media.session.MediaSessionLegacyHelper;
@@ -103,15 +99,12 @@ public class KeyHandler {
     private PowerManagerInternal mPowerManagerInternal;
     private String mCameraId;
     private EventHandler mHandler;
-    private SensorManager mSensorManager;
     private CameraManager mCameraManager;
     private AudioManager mAudioManager;
     private TelecomManager mTelecomManager;
     private StatusBarManagerInternal mStatusBarManagerInternal;
     private KeyguardManager mKeyguardManager;
-    private Sensor mProximitySensor;
     private Vibrator mVibrator;
-    private WakeLock mProximityWakeLock;
     private WakeLock mGestureWakeLock;
     private boolean mTorchEnabled;
     private boolean mSystemReady = false;
@@ -678,30 +671,6 @@ public class KeyHandler {
         Message msg = mHandler.obtainMessage(GESTURE_REQUEST);
         msg.obj = keyEvent;
         return msg;
-    }
-
-    private void processEvent(final KeyEvent keyEvent) {
-        mProximityWakeLock.acquire();
-        mSensorManager.registerListener(new SensorEventListener() {
-            @Override
-            public void onSensorChanged(SensorEvent event) {
-                mProximityWakeLock.release();
-                mSensorManager.unregisterListener(this);
-                if (!mHandler.hasMessages(GESTURE_REQUEST)) {
-                    // The sensor took to long, ignoring.
-                    return;
-                }
-                mHandler.removeMessages(GESTURE_REQUEST);
-                if (event.values[0] == mProximitySensor.getMaximumRange()) {
-                    Message msg = getMessageForKeyEvent(keyEvent);
-                    mHandler.sendMessage(msg);
-                }
-            }
-
-            @Override
-            public void onAccuracyChanged(Sensor sensor, int accuracy) { }
-
-        }, mProximitySensor, SensorManager.SENSOR_DELAY_FASTEST);
     }
 
     private boolean dispatchMediaKeyWithWakeLockToMediaSession(int keycode) {
