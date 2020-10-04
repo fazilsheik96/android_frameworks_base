@@ -11423,6 +11423,14 @@ public final class Settings {
         public static final String WINDOW_IGNORE_SECURE = "window_ignore_secure";
 
         /**
+         * Gesture navbar length mode.
+         * Supported modes: 0 for normal length, 1 for medium and 2 for long.
+         * Default 0.
+         * @hide
+         */
+        public static final String GESTURE_NAVBAR_LENGTH_MODE = "gesture_navbar_length_mode";
+
+        /**
          * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */
