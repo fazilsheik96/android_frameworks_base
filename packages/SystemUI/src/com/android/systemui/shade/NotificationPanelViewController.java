@@ -4857,7 +4857,8 @@ public final class NotificationPanelViewController implements Dumpable {
                     mView.getContext().getResources().getInteger(
                         com.android.internal.R.integer.config_doubleTapDefault),
                     UserHandle.USER_CURRENT) == 1;
-            if (isOnKeyguard() && (isDoubleTapEnabled || isCustomDoubleTapEnabled)) {
+            if (isOnKeyguard() && (isDoubleTapEnabled || isCustomDoubleTapEnabled)
+                    && !mPulsing && !mDozing) {
                 mDoubleTapGestureListener.onTouchEvent(event);
             }
 
