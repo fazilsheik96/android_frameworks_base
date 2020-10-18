@@ -22,6 +22,11 @@
     <!-- WiFi standard numbering on statusbar -->
     <string name="status_bar_wifi_standard">Wi-Fi standard number</string>
 
+    <!-- Data usage info in QS footer -->
+    <string name="usage_data">used today</string>
+    <string name="usage_data_default_suffix">Data</string>
+    <string name="usage_wifi_default_suffix">Wi-Fi</string>
+
     <!-- Name of the VoLTE status bar icon. -->
     <string name="status_bar_volte">VoLTE</string>
 
@@ -35,5 +40,11 @@
         <item>Show percentage when charging (default)</item>
         <item>Don\'t show this icon</item>
     </string-array>
+
+    <!-- Advanced Reboot -->
+    <string name="global_action_restart_advanced">Advanced</string>
+    <string name="global_action_restart_recovery">Recovery</string>
+    <string name="global_action_restart_bootloader">Bootloader</string>
+    <string name="global_action_restart_ui">SystemUI</string>
 
 </resources>
