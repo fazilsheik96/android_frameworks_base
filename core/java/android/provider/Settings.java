@@ -12080,6 +12080,14 @@ public final class Settings {
         public static final String VOLUME_PANEL_ON_LEFT = "volume_panel_on_left";
 
         /**
+         *
+         * Whether user is allowed to interact with quick settings on lockscreen.
+         * @hide
+         */
+        public static final String QS_TILES_TOGGLEABLE_ON_LOCK_SCREEN =
+                "qs_tiles_toggleable_on_lock_screen";
+
+        /**
          * Whether to pulse ambient on new music tracks
          * @hide
          */
