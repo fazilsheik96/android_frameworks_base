@@ -42,14 +42,6 @@
     <!-- Name of the network activity indicator on status bar. -->
     <string name="status_bar_network_activity">Network activity</string>
 
-    <!-- SysUI Tuner: Options for how battery is displayed [CHAR LIMIT=NONE] -->
-    <string-array name="battery_options_custom">
-        <item>Only show percentage (without icon)</item>
-        <item>Always show percentage (with icon)</item>
-        <item>Show percentage when charging (default)</item>
-        <item>Don\'t show this icon</item>
-    </string-array>
-
     <!-- Indication on the keyguard that is shown when the device is charging with a warp charger. Should match keyguard_plugged_in_warp_charging [CHAR LIMIT=40]-->
     <string name="keyguard_indication_warp_charging_time"><xliff:g id="percentage">%2$s</xliff:g> • Warp Charging (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%1$s</xliff:g> until full)</string>
     <string name="keyguard_plugged_in_warp_charging"><xliff:g id="percentage">%s</xliff:g> • Warp Charging</string>
