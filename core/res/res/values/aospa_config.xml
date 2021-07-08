@@ -194,4 +194,7 @@
     <!-- Package that contains udfps animation customization or empty to disable -->
     <string name="config_udfps_animation_customization_package">co.aospa.overlay.udfps.animations</string>
 
+    <!-- Whether to use VPN Tethering -->
+    <bool name="config_enable_vpntethering">true</bool>
+
 </resources>

@@ -149,4 +149,7 @@
     <!-- Udfps animation package -->
     <java-symbol type="string" name="config_udfps_animation_customization_package" />
 
+    <!-- Whether to use VPN Tethering -->
+    <java-symbol type="bool" name="config_enable_vpntethering" />
+
 </resources>
