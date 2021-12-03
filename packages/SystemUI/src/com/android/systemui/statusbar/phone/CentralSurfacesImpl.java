@@ -171,6 +171,7 @@ import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.keyguard.ui.binder.LightRevealScrimViewBinder;
 import com.android.systemui.keyguard.ui.viewmodel.LightRevealScrimViewModel;
+import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.NavigationBarController;
 import com.android.systemui.navigationbar.NavigationBarView;
 import com.android.systemui.notetask.NoteTaskController;
@@ -691,6 +692,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
 
     private final BurnInProtectionController mBurnInProtectionController;
     private final SecureSettings mSecureSettings;
+    private final SysUiState mSysUiState;
 
     /** Existing callback that handles back gesture invoked for the Shade. */
     private final OnBackInvokedCallback mOnBackInvokedCallback;
@@ -835,7 +837,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
             ActivityStarter activityStarter,
             BurnInProtectionController burnInProtectionController,
             SecureSettings secureSettings,
-            NotificationPanelViewController notificationPanelViewController
+            NotificationPanelViewController notificationPanelViewController,
+            SysUiState sysUiState
     ) {
         mContext = context;
         mNotificationsController = notificationsController;
@@ -935,6 +938,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
         mTunerService = tunerService;
         mActivityStarter = activityStarter;
         mBurnInProtectionController = burnInProtectionController;
+        mSysUiState = sysUiState;
 
         mLockscreenShadeTransitionController = lockscreenShadeTransitionController;
         mStartingSurfaceOptional = startingSurfaceOptional;
@@ -3566,6 +3570,17 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
             KeyboardShortcutListSearch.dismiss();
         } else {
             KeyboardShortcuts.dismiss();
+        }
+    }
+
+    @Override
+    public void setBlockedGesturalNavigation(boolean blocked) {
+        if (getShadeViewController() != null) {
+            getShadeViewController().setBlockedGesturalNavigation(blocked);
+            getShadeViewController().updateSystemUiStateFlags();
+        }
+        if (getNavigationBarView() != null) {
+            getNavigationBarView().setBlockedGesturalNavigation(blocked, mSysUiState);
         }
     }
 
