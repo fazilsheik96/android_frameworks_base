@@ -137,6 +137,7 @@ public class NavigationBarInflaterView extends FrameLayout
 
     private OverviewProxyService mOverviewProxyService;
     private int mNavBarMode = NAV_BAR_MODE_3BUTTON;
+    private String mNavBarLayout;
 
     private boolean mInverseLayout;
     private boolean mIsHintDisabled;
@@ -155,9 +156,12 @@ public class NavigationBarInflaterView extends FrameLayout
             @Override
             public void onChange(boolean selfChange, @Nullable Uri uri) {
                 if (Settings.Secure.getUriFor(NAV_BAR_VIEWS).equals(uri)) {
+                    mNavBarLayout = Settings.Secure.getString(mContext.getContentResolver(),
+                            NAV_BAR_VIEWS);
                     mContext.getMainExecutor().execute(() -> {
-                        setNavigationBarLayout(Settings.Secure.getString(mContext.getContentResolver(),
-                                NAV_BAR_VIEWS));
+                        if (!QuickStepContract.isGesturalMode(mNavBarMode)) {
+                            setNavigationBarLayout(mNavBarLayout);
+                        }
                     });
                 }
                 if (QuickStepContract.isGesturalMode(mNavBarMode)) {
@@ -251,20 +255,15 @@ public class NavigationBarInflaterView extends FrameLayout
 
     public void setNavigationBarLayout(String layoutValue) {
         if (!Objects.equals(mCurrentLayout, layoutValue)) {
-            mUsingCustomLayout = layoutValue != null;
             clearViews();
             inflateLayout(layoutValue);
         }
     }
 
     public void onLikelyDefaultLayoutChange() {
-        // Don't override custom layouts
-        if (mUsingCustomLayout) return;
-        // Reevaluate new layout
-        final String newValue = getDefaultLayout();
-        if (!Objects.equals(mCurrentLayout, newValue)) {
-            clearViews();
-            inflateLayout(newValue);
+        setNavigationBarLayout(getDefaultLayout());
+        if (!QuickStepContract.isGesturalMode(mNavBarMode)) {
+            setNavigationBarLayout(mNavBarLayout);
         }
     }
 
