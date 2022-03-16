@@ -45,7 +45,7 @@ class ControlsComponent
 constructor(
     @ControlsFeatureEnabled private val featureEnabled: Boolean,
     private val context: Context,
-    private val lazyControlsController: Lazy<ControlsController>,
+    val lazyControlsController: Lazy<ControlsController>,
     private val lazyControlsUiController: Lazy<ControlsUiController>,
     private val lazyControlsListingController: Lazy<ControlsListingController>,
     private val lockPatternUtils: LockPatternUtils,
@@ -78,7 +78,7 @@ constructor(
     }
 
     /** @return true if controls are feature-enabled and the user has the setting enabled */
-    fun isEnabled() = featureEnabled
+    fun isEnabled() = featureEnabled && lazyControlsController.get().available
 
     /**
      * Returns one of 3 states:
