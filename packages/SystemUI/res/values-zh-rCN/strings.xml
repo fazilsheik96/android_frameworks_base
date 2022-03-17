@@ -1176,4 +1176,5 @@
     <string name="priority_mode_dream_overlay_content_description" msgid="6044561000253314632">"已开启优先模式"</string>
     <string name="assistant_attention_content_description" msgid="6830215897604642875">"已开启 Google 助理感知功能"</string>
     <string name="mobile_data_summary_not_allowed_to_disable_data">其它SIM卡通话期间，不可用</string>
+    <string name="quick_controls_subtitle" msgid="1667408093326318053">"为您所连接的设备添加控件"</string>
 </resources>

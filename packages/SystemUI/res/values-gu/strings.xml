@@ -1190,4 +1190,5 @@
     <string name="privacy_dialog_recent_app_usage_1" msgid="2551340497722370109">"<xliff:g id="APP_NAME">%1$s</xliff:g> (<xliff:g id="ATTRIBUTION_LABEL">%2$s</xliff:g>) દ્વારા તાજેતરમાં ઉપયોગ કરવામાં આવ્યો"</string>
     <string name="privacy_dialog_active_app_usage_2" msgid="2770926061339921767">"<xliff:g id="APP_NAME">%1$s</xliff:g> (<xliff:g id="ATTRIBUTION_LABEL">%2$s</xliff:g> • <xliff:g id="PROXY_LABEL">%3$s</xliff:g>) દ્વારા ઉપયોગ ચાલુ છે"</string>
     <string name="privacy_dialog_recent_app_usage_2" msgid="2874689735085367167">"<xliff:g id="APP_NAME">%1$s</xliff:g> (<xliff:g id="ATTRIBUTION_LABEL">%2$s</xliff:g> • <xliff:g id="PROXY_LABEL">%3$s</xliff:g>) દ્વારા તાજેતરમાં ઉપયોગ કરવામાં આવ્યો"</string>
+    <string name="quick_controls_subtitle" msgid="1667408093326318053">"તમારા કનેક્ટ કરેલા ડિવાઇસ માટે નિયંત્રણો ઉમેરો"</string>
 </resources>
