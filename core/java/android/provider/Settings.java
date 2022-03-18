@@ -11987,6 +11987,13 @@ public final class Settings {
         public static final String LOCK_SCREEN_WEATHER_ENABLED = "lockscreen_weather_enabled";
 
         /**
+         * Control whether FLAG_SECURE is ignored for all windows.
+         * @hide
+         */
+        @Readable 
+        public static final String WINDOW_IGNORE_SECURE = "window_ignore_secure";
+       
+       	/**
          * Whether to show ambient instead of waking for the tap gesture
          * @hide
          */
@@ -12000,7 +12007,7 @@ public final class Settings {
         public static final String DOZE_PICK_UP_GESTURE_AMBIENT = "doze_pick_up_gesture_ambient";
 
         /**
-         * These entries are considered common between the personal and the managed profile,
+	 * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */
         private static final Set<String> CLONE_TO_MANAGED_PROFILE = new ArraySet<>();
