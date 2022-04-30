@@ -1017,6 +1017,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
 
         Uri statusbarBrightnessControl = Settings.System.getUriFor(
                 Settings.System.STATUS_BAR_BRIGHTNESS_CONTROL);
+        Uri qsTransparency = Settings.System.getUriFor(Settings.System.QS_TRANSPARENCY);
         ContentObserver contentObserver = new ContentObserver(null) {
             @Override
             public void onChange(boolean selfChange, Uri uri) {
@@ -1028,6 +1029,13 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
                     if (mPhoneStatusBarViewController != null) {
                         mPhoneStatusBarViewController.setBrightnessControlEnabled(mBrightnessControl);
                     }
+                } else if (uri.equals(qsTransparency)) {
+                    int newValue = Settings.System.getIntForUser(mContext.getContentResolver(),
+                            Settings.System.QS_TRANSPARENCY, 100,
+                            UserHandle.USER_CURRENT);
+                    mContext.getMainExecutor().execute(() -> {
+                        mScrimController.setCustomScrimAlpha(newValue);
+                    });
                 }
             }
         };
@@ -1036,6 +1044,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces, Tune
         contentObserver.onChange(true, statusbarBrightnessControl);
 
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
+        mContext.getContentResolver().registerContentObserver(
+                qsTransparency, false, contentObserver);
+        contentObserver.onChange(true, qsTransparency);
 
         mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
 
