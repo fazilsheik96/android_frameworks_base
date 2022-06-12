@@ -235,6 +235,7 @@ import com.android.server.wm.CrossDeviceService;
 import com.android.server.wm.WindowManagerGlobalLock;
 import com.android.server.wm.WindowManagerService;
 import com.android.server.lineage.health.HealthInterfaceService;
+import com.android.server.derp.LineageGlobalActionsService;
 
 import dalvik.system.VMRuntime;
 import dalvik.system.PathClassLoader;
@@ -1743,11 +1744,16 @@ public final class SystemServer implements Dumpable {
             mSystemServiceManager.startService(Smart5gService.class);
             t.traceEnd();
 
+            t.traceBegin("LineageGlobalActionsService");
+            mSystemServiceManager.startService(LineageGlobalActionsService.class);
+            t.traceEnd();
+
             if (context.getResources().getBoolean(R.bool.config_dozeAlwaysOnDisplayAvailable)) {
                 t.traceBegin("AutoAODService");
                 mSystemServiceManager.startService(AutoAODService.class);
                 t.traceEnd();
             }
+
         } catch (Throwable e) {
             Slog.e("System", "******************************************");
             Slog.e("System", "************ Failure starting core service");
