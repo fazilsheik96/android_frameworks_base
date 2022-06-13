@@ -25,4 +25,7 @@
     <dimen name="mobile_type_icon_margin_vertical">1.5dp</dimen>
     <dimen name="mobile_type_icon_inset_vertical">-2dp</dimen>
 
+    <!-- Network traffic -->
+    <dimen name="network_traffic_width">25sp</dimen>
+
 </resources>
