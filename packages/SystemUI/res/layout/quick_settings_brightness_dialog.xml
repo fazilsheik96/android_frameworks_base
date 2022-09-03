@@ -38,4 +38,5 @@
             android:splitTrack="false"
             android:clickable="true"
         />
+
     </com.android.systemui.settings.brightness.BrightnessSliderView>

@@ -41,6 +41,7 @@ import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
 import android.util.Log;
 import android.util.MathUtils;
+import android.widget.ImageView;
 
 import androidx.annotation.Nullable;
 
@@ -70,6 +71,7 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
     private static final int MSG_ATTACH_LISTENER = 2;
     private static final int MSG_DETACH_LISTENER = 3;
     private static final int MSG_VR_MODE_CHANGED = 4;
+    private static final int MSG_UPDATE_ICON = 5;
 
     private static final Uri BRIGHTNESS_MODE_URI =
             Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS_MODE);

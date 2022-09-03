@@ -19,18 +19,23 @@ package com.android.systemui.statusbar.policy;
 import android.annotation.NonNull;
 import android.content.Context;
 import android.content.res.Resources;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.ArraySet;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 
 import com.android.systemui.R;
+import com.android.systemui.Dependency;
 import com.android.systemui.settings.brightness.BrightnessSliderController;
 import com.android.systemui.settings.brightness.ToggleSlider;
 import com.android.systemui.shade.NotificationShadeWindowView;
 import com.android.systemui.shade.ShadeViewController;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
+import com.android.systemui.tuner.TunerService;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -53,6 +58,7 @@ public class BrightnessMirrorController
     private int mBrightnessMirrorBackgroundPadding;
     private int mLastBrightnessSliderWidth = -1;
 
+
     public BrightnessMirrorController(NotificationShadeWindowView statusBarWindow,
             ShadeViewController shadeViewController,
             NotificationShadeDepthController notificationShadeDepthController,
@@ -69,6 +75,7 @@ public class BrightnessMirrorController
         });
         mVisibilityCallback = visibilityCallback;
         updateResources();
+        
     }
 
     public void showMirror() {

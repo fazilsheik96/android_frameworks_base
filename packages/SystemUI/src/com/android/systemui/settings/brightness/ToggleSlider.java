@@ -17,6 +17,7 @@
 package com.android.systemui.settings.brightness;
 
 import android.view.MotionEvent;
+import android.widget.ImageView;
 
 import com.android.settingslib.RestrictedLockUtils;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController;
@@ -42,4 +43,6 @@ public interface ToggleSlider {
     void showView();
     void hideView();
     boolean isVisible();
+
+    ImageView getIcon();
 }
