@@ -45,7 +45,7 @@
             app:scrimAnimationDuration="50"
             app:scrimVisibleHeightTrigger="@dimen/settingslib_scrim_visible_height_trigger"
             app:statusBarScrim="@null"
-            app:titleCollapseMode="fade"
+            app:titleCollapseMode="scale"
             app:collapsedTitleTextAppearance="@style/xd_toolbar.Collapsed"
             app:expandedTitleTextAppearance="@style/xd_toolbar.Expanded"
             app:expandedTitleMarginStart="@dimen/xd_toolbar_expanded_title_margin_start"
