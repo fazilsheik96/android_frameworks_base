@@ -38,6 +38,7 @@ import static com.android.internal.jank.InteractionJankMonitor.CUJ_VOLUME_CONTRO
 import static com.android.internal.jank.InteractionJankMonitor.Configuration.Builder;
 import static com.android.systemui.flags.Flags.ONE_WAY_HAPTICS_API_MIGRATION;
 import static com.android.systemui.volume.Events.DISMISS_REASON_POSTURE_CHANGED;
+import static com.android.systemui.people.PeopleSpaceUtils.convertDrawableToBitmap;
 import static com.android.systemui.volume.Events.DISMISS_REASON_SETTINGS_CLICKED;
 
 import static com.android.systemui.people.PeopleSpaceUtils.convertDrawableToBitmap;
@@ -85,6 +86,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
 import android.os.Trace;
+import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.provider.Settings;
 import android.provider.Settings.Global;
@@ -179,6 +181,8 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
             "customsecure:" + Settings.Secure.VOLUME_PANEL_ON_LEFT;
     public static final String VOLUME_MEDIA_OUTPUT_TOGGLE =
             "system:" + Settings.System.VOLUME_MEDIA_OUTPUT_TOGGLE;
+    public static final String CUSTOM_VOLUME_STYLES =
+            "system:" + Settings.System.CUSTOM_VOLUME_STYLES;
 
     private static final long USER_ATTEMPT_GRACE_PERIOD = 1000;
     private static final int UPDATE_ANIMATION_DURATION = 80;
@@ -284,15 +288,12 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
     private RotateAnimation rotateAnimation;
     private ImageButton mSettingsIcon;
     private ImageButton mExpandRows;
-    private View mExpandRowsView;
     private View mAppVolumeSpacer;
     private FrameLayout mZenIcon;
     private View mAppVolumeView;
     private ImageButton mAppVolumeIcon;
     private String mAppVolumeActivePackageName;
     private View mExpandRowsView;
-    private ExpandableIndicator mExpandRows;
-    private FrameLayout mZenIcon;
     private final List<VolumeRow> mRows = new ArrayList<>();
     private ConfigurableTexts mConfigurableTexts;
     private final SparseBooleanArray mDynamic = new SparseBooleanArray();
@@ -344,6 +345,8 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
 
     // Number of animating rows
     private int mAnimatingRows = 0;
+
+    private int customVolumeStyles = 0;
 
     private boolean mShowMediaController = true;
 
@@ -446,6 +449,7 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
             volumePanelOnLeftObserver.onChange(true);
         }
         mTunerService.addTunable(mTunable, VOLUME_MEDIA_OUTPUT_TOGGLE);
+        mTunerService.addTunable(mTunable, CUSTOM_VOLUME_STYLES);
 
         initDimens();
 
@@ -853,7 +857,7 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
                         R.drawable.ic_notifications_silence, true, false);
 
                 addRow(STREAM_ALARM,
-                        R.drawable.ic_alarm, R.drawable.ic_volume_alarm_mute, true, false);
+                        R.drawable.ic_volume_alarm, R.drawable.ic_volume_alarm_mute, true, false);
                 addRow(AudioManager.STREAM_VOICE_CALL,
                         com.android.internal.R.drawable.ic_phone,
                         com.android.internal.R.drawable.ic_phone, false, false);
@@ -909,6 +913,15 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
                 case VOLUME_MEDIA_OUTPUT_TOGGLE:
                     mShowMediaController = TunerService.parseIntegerSwitch(newValue, true);
                     initSettingsH(mActivityManager.getLockTaskModeState());
+                break;
+                case CUSTOM_VOLUME_STYLES:
+                    final int selectedVolStyle = TunerService.parseInteger(newValue, 2);
+                    if (customVolumeStyles != selectedVolStyle) {
+                        customVolumeStyles = selectedVolStyle;
+                        mHandler.post(() -> {
+                            mControllerCallbackH.onConfigurationChanged();
+                        });
+                    }
                 break;
                 default:
                     break;
@@ -1029,7 +1042,13 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         row.iconMuteRes = iconMuteRes;
         row.important = important;
         row.defaultStream = defaultStream;
-        row.view = mDialog.getLayoutInflater().inflate(R.layout.volume_dialog_row, null);
+        if (customVolumeStyles == 0) {
+           row.view = mDialog.getLayoutInflater().inflate(R.layout.volume_dialog_row_aosp, null);
+        } else if (customVolumeStyles == 1) {
+           row.view = mDialog.getLayoutInflater().inflate(R.layout.volume_dialog_row_rui, null);
+        } else {
+           row.view = mDialog.getLayoutInflater().inflate(R.layout.volume_dialog_row_rice, null);
+        }
         row.view.setId(row.stream);
         row.view.setTag(row);
         row.header = row.view.findViewById(R.id.volume_row_header);
@@ -1044,8 +1063,18 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
 
         row.anim = null;
 
-        final LayerDrawable seekbarDrawable =
-                (LayerDrawable) mContext.getDrawable(R.drawable.volume_row_seekbar);
+        final LayerDrawable seekbarDrawable;
+
+        if (customVolumeStyles == 0) {
+              seekbarDrawable =
+                      (LayerDrawable) mContext.getDrawable(R.drawable.volume_row_seekbar_aosp);
+        } else if (customVolumeStyles == 1) {
+              seekbarDrawable =
+                      (LayerDrawable) mContext.getDrawable(R.drawable.volume_row_seekbar_rui);
+        } else {
+              seekbarDrawable =
+                      (LayerDrawable) mContext.getDrawable(R.drawable.volume_row_seekbar_rice);
+        }
 
         final LayerDrawable seekbarProgressDrawable = (LayerDrawable)
                 ((RoundedCornerProgressDrawable) seekbarDrawable.findDrawableByLayerId(
@@ -1534,6 +1563,18 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
                 Dependency.get(MediaOutputDialogFactory.class).dismiss();
                 Dependency.get(ActivityStarter.class).startActivity(intent,
                         true /* dismissShade */);
+            });
+            mAppVolumeIcon.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View v) {
+                    if (mAppVolumeActivePackageName != null) {
+                        Intent launchIntent = mContext.getPackageManager().getLaunchIntentForPackage(mAppVolumeActivePackageName);
+                        if (launchIntent != null) {
+                            mContext.startActivity(launchIntent);
+                        }
+                    }
+                    return true;
+                }
             });
             Drawable icon = mAppVolumeActivePackageName != null ?
                     getApplicationIcon(mAppVolumeActivePackageName) : null;
@@ -2569,12 +2610,13 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
                 ? Color.alpha(colorTint.getDefaultColor())
                 : getAlphaAttr(android.R.attr.disabledAlpha);
 
+        final ColorStateList colorTint2 = useActiveColoring
+                ? Utils.getColorAccent(mContext)
+                : Utils.getColorAttr(mContext, com.android.internal.R.attr.colorAccentCustom);
+
         final ColorStateList bgTint = useActiveColoring
                 ? Utils.getColorAttr(mContext, android.R.attr.colorBackgroundFloating)
                 : Utils.getColorAttr(mContext, com.android.internal.R.attr.colorAccentCustom);
-
-        final ColorStateList inverseTextTint = Utils.getColorAttr(
-                mContext, com.android.internal.R.attr.colorAccentCustom);
 
         row.sliderProgressSolid.setTintList(colorTint);
         if (row.sliderProgressIcon != null) {
@@ -2582,8 +2624,7 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         }
 
         if (row.icon != null) {
-            row.icon.setImageTintList(inverseTextTint);
-            row.icon.setImageAlpha(alpha);
+            row.icon.setImageTintList(customVolumeStyles >= 1 ? colorTint : colorTint2);
         }
 
         if (row.number != null) {

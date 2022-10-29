@@ -35,6 +35,9 @@
     <!-- The color of the background in the grid of the Global Actions menu -->
     <color name="global_actions_grid_background">#F1F3F4</color>
 
+    <color name="volume_bg_color">@android:color/system_accent1_100</color>
+    <color name="volume_shape_color">@android:color/system_neutral2_900</color>
+
     <!-- Colors for Power Menu Lite -->
     <color name="global_actions_lite_background">#191C18</color>
     <color name="global_actions_lite_button_background">#303030</color>
