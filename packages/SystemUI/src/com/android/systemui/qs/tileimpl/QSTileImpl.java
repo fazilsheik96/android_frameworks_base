@@ -207,7 +207,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         mStatusBarStateController = statusBarStateController;
         mActivityStarter = activityStarter;
 
-        mVibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
+        mVibrator = mContext.getSystemService(Vibrator.class);
 
         resetStates();
         mUiHandler.post(() -> mLifecycle.setCurrentState(CREATED));
@@ -289,18 +289,11 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
 
     // safe to call from any thread
 
-    public void vibrateTile(int duration) {
+    private void vibrateTile(boolean light) {
         if (mVibrator != null) {
-            if (mVibrator.hasVibrator()) { mVibrator.vibrate(duration); }
-        }
-    }
-
-    public void vibrateTick() {
-        if (mVibrator != null) {
-            if (mVibrator.hasVibrator()) {
-                AsyncTask.execute(() ->
-                        mVibrator.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_TICK)));
-            }
+            AsyncTask.execute(() ->
+                mVibrator.vibrate(VibrationEffect.get(light ? VibrationEffect.EFFECT_CLICK :
+                    VibrationEffect.EFFECT_HEAVY_CLICK, true  /* fallback */)));
         }
     }
 
@@ -328,7 +321,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         if (!mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
             mHandler.obtainMessage(H.CLICK, eventId, 0, view).sendToTarget();
         }
-        vibrateTick();
+        vibrateTile(true);
     }
 
     public void secondaryClick(@Nullable View view) {
@@ -356,7 +349,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         if (!mFalsingManager.isFalseLongTap(FalsingManager.LOW_PENALTY)) {
             mHandler.obtainMessage(H.LONG_CLICK, eventId, 0, view).sendToTarget();
         }
-        vibrateTile(45);
+        vibrateTile(false);
     }
 
     public LogMaker populate(LogMaker logMaker) {
