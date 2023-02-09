@@ -44,17 +44,23 @@ public class PropImitationHooks {
     private static final String TAG = "PropImitationHooks";
     private static final boolean DEBUG = false;
 
+    private static final String PACKAGE_AICORE = "com.google.android.aicore";
     private static final String PACKAGE_ARCORE = "com.google.ar.core";
     private static final String PACKAGE_ASSISTANT = "com.google.android.apps.googleassistant";
+    private static final String PACKAGE_ASI = "com.google.android.as";
+    private static final String PACKAGE_CHROME = "com.android.chrome";
     private static final String PACKAGE_FINSKY = "com.android.vending";
     private static final String PACKAGE_GBOARD = "com.google.android.inputmethod.latin";
     private static final String PACKAGE_GMS = "com.google.android.gms";
+    private static final String PACKAGE_TURBO = "com.google.android.apps.turbo";
     private static final String PROCESS_GMS_UNSTABLE = PACKAGE_GMS + ".unstable";
     private static final String PACKAGE_NETFLIX = "com.netflix.mediaclient";
     private static final String PACKAGE_GPHOTOS = "com.google.android.apps.photos";
     private static final String FEATURE_NEXUS_PRELOAD = "com.google.android.apps.photos.NEXUS_PRELOAD";
     private static final String PACKAGE_SUBSCRIPTION_RED = "com.google.android.apps.subscriptions.red";
+    private static final String PACKAGE_SETUPWIZARD = "com.google.android.setupwizard";
     private static final String PACKAGE_VELVET = "com.google.android.googlequicksearchbox";
+    private static final String PROCESS_GMS_PERSISTENT = PACKAGE_GMS + ".persistent";
 
     private static final Map<String, String> sPixelEightProps = Map.of(
         "PRODUCT", "husky",
@@ -124,6 +130,7 @@ public class PropImitationHooks {
 
         /* Set Certified Properties for GMSCore
          * Set Stock Fingerprint for ARCore
+         * Set Pixel 8 Pro for Google, ASI and GMS device configurator
          * Set custom model for Netflix
          */
         if (sIsGms) {
@@ -131,8 +138,17 @@ public class PropImitationHooks {
         } else if (!sStockFp.isEmpty() && packageName.equals(PACKAGE_ARCORE)) {
             dlog("Setting stock fingerprint for: " + packageName);
             setPropValue("FINGERPRINT", sStockFp);
-        } else if ((packageName.equals(PACKAGE_ASSISTANT) || packageName.equals(PACKAGE_GBOARD)
-                || packageName.equals(PACKAGE_SUBSCRIPTION_RED) || packageName.equals(PACKAGE_VELVET))) {
+        } else if ((packageName.equals(PACKAGE_ASSISTANT)
+                || packageName.equals(PACKAGE_GBOARD)
+                || packageName.equals(PACKAGE_SUBSCRIPTION_RED)
+                || packageName.equals(PACKAGE_VELVET)
+                || packageName.equals(PACKAGE_AICORE)
+                || packageName.equals(PACKAGE_ASI)
+                || packageName.equals(PACKAGE_TURBO)
+                || packageName.equals(PACKAGE_CHROME)
+                || packageName.equals(PACKAGE_SETUPWIZARD)
+                || (packageName.equals(PACKAGE_GMS)
+		&& processName.equals(PROCESS_GMS_PERSISTENT)))) {
             dlog("Spoofing Pixel 8 Pro for: " + packageName + " process: " + processName);
             sPixelEightProps.forEach((k, v) -> setPropValue(k, v));
         } else if (!sNetflixModel.isEmpty() && packageName.equals(PACKAGE_NETFLIX)) {
