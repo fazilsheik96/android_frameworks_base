@@ -194,4 +194,7 @@
     <!-- DT2W Gesture -->
     <bool name="config_dt2sGestureEnabledByDefault">false</bool>
 
+    <!-- Whether device supports QTI Boost Framework -->
+    <bool name="config_supportsBoostFramework">true</bool>
+
 </resources>

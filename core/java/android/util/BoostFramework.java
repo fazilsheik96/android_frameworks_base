@@ -30,6 +30,7 @@
 package android.util;
 
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.BLASTBufferQueue;
 import android.os.SystemProperties;
 import android.util.Log;
@@ -80,6 +81,9 @@ public class BoostFramework {
     private static boolean sUxIsLoaded = false;
     private static Class<?> sUxPerfClass = null;
     private static Method sUxIOPStart = null;
+
+    private static final boolean sIsSupported = Resources.getSystem().getBoolean(
+            com.android.internal.R.bool.config_supportsBoostFramework);
 
 /** @hide */
     private Object mPerf = null;
@@ -247,7 +251,7 @@ public class BoostFramework {
 
     private void initFunctions () {
         synchronized(BoostFramework.class) {
-            if (sIsLoaded == false) {
+            if (sIsSupported && sIsLoaded == false) {
                 try {
                     sPerfClass = Class.forName(PERFORMANCE_CLASS);
 
@@ -341,6 +345,9 @@ public class BoostFramework {
 /** @hide */
     public int perfLockAcquire(int duration, int... list) {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sAcquireFunc != null) {
                 Object retVal = sAcquireFunc.invoke(mPerf, duration, list);
@@ -355,6 +362,9 @@ public class BoostFramework {
 /** @hide */
     public int perfLockRelease() {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sReleaseFunc != null) {
                 Object retVal = sReleaseFunc.invoke(mPerf);
@@ -369,6 +379,9 @@ public class BoostFramework {
 /** @hide */
     public int perfLockReleaseHandler(int handle) {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sReleaseHandlerFunc != null) {
                 Object retVal = sReleaseHandlerFunc.invoke(mPerf, handle);
@@ -393,6 +406,9 @@ public class BoostFramework {
 /** @hide */
     public int perfHint(int hint, String userDataStr, int userData1, int userData2) {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sPerfHintFunc != null) {
                 Object retVal = sPerfHintFunc.invoke(mPerf, hint, userDataStr, userData1, userData2);
@@ -421,6 +437,9 @@ public class BoostFramework {
 /** @hide */
     public int perfGetFeedback(int req, String pkg_name) {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sFeedbackFunc != null) {
                 Object retVal = sFeedbackFunc.invoke(mPerf, req, pkg_name);
@@ -435,6 +454,9 @@ public class BoostFramework {
 /** @hide */
     public int perfGetFeedbackExtn(int req, String pkg_name, int numArgs, int... list) {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sFeedbackFuncExtn != null) {
                 Object retVal = sFeedbackFuncExtn.invoke(mPerf, req, pkg_name, numArgs, list);
@@ -449,6 +471,9 @@ public class BoostFramework {
 /** @hide */
     public int perfIOPrefetchStart(int pid, String pkgName, String codePath) {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             Object retVal = sIOPStart.invoke(mPerf, pid, pkgName, codePath);
             ret = (int) retVal;
@@ -468,6 +493,9 @@ public class BoostFramework {
 /** @hide */
     public int perfIOPrefetchStop() {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             Object retVal = sIOPStop.invoke(mPerf);
             ret = (int) retVal;
@@ -485,6 +513,9 @@ public class BoostFramework {
 /** @hide */
     public int perfUXEngine_events(int opcode, int pid, String pkgName, int lat, String codePath) {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sUXEngineEvents == null) {
                 return ret;
@@ -502,6 +533,9 @@ public class BoostFramework {
 /** @hide */
     public String perfUXEngine_trigger(int opcode) {
         String ret = null;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sUXEngineTrigger == null) {
                 return ret;
@@ -517,6 +551,9 @@ public class BoostFramework {
 /** @hide */
     public String perfSyncRequest(int opcode) {
         String ret = null;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sPerfSyncRequest == null) {
                 return ret;
@@ -532,6 +569,9 @@ public class BoostFramework {
 /** @hide */
     public String perfGetProp(String prop_name, String def_val) {
         String ret = "";
+        if (!sIsSupported) {
+            return def_val;
+        }
         try {
             if (sPerfGetPropFunc != null) {
                 Object retVal = sPerfGetPropFunc.invoke(mPerf, prop_name, def_val);
@@ -548,6 +588,9 @@ public class BoostFramework {
 /** @hide */
     public int perfLockAcqAndRelease(int handle, int duration, int numArgs,int reserveNumArgs, int... list) {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sAcqAndReleaseFunc != null) {
                 Object retVal = sAcqAndReleaseFunc.invoke(mPerf, handle, duration, numArgs, reserveNumArgs, list);
@@ -566,6 +609,9 @@ public class BoostFramework {
 
 /** @hide */
     public void perfEvent(int eventId, String pkg_name, int numArgs, int... list) {
+        if (!sIsSupported) {
+            return;
+        }
         try {
             if (sPerfEventFunc != null) {
                 sPerfEventFunc.invoke(mPerf, eventId, pkg_name, numArgs, list);
@@ -594,6 +640,9 @@ public class BoostFramework {
     public int perfHintAcqRel(int handle, int hint, String pkg_name, int duration,
                               int hintType, int numArgs, int... list) {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sperfHintAcqRelFunc != null) {
                 Object retVal = sperfHintAcqRelFunc.invoke(mPerf,handle, hint, pkg_name,
@@ -625,6 +674,9 @@ public class BoostFramework {
     public int perfHintRenew(int handle, int hint, String pkg_name, int duration,
                              int hintType, int numArgs, int... list) {
         int ret = -1;
+        if (!sIsSupported) {
+            return ret;
+        }
         try {
             if (sperfHintRenewFunc != null) {
                 Object retVal = sperfHintRenewFunc.invoke(mPerf,handle, hint, pkg_name,
@@ -664,7 +716,7 @@ public class BoostFramework {
         private static Method sGetAdjustedAnimationClock = null;
 
         private static void initQXPerfFuncs() {
-            if (sQXIsLoaded) return;
+            if (!sIsSupported || sQXIsLoaded) return;
 
             try {
                 sScrollOptProp = SystemProperties.getBoolean(SCROLL_OPT_PROP, false);
@@ -719,6 +771,9 @@ public class BoostFramework {
 
         /** @hide */
         public static void setFrameInterval(long frameIntervalNanos) {
+            if (!sIsSupported) {
+                return;
+            }
             if (sQXIsLoaded) {
                 if (sScrollOptEnable && sSetFrameInterval != null) {
                     try {
@@ -751,6 +806,9 @@ public class BoostFramework {
 
         /** @hide */
         public static void disableOptimizer(boolean disabled) {
+            if (!sIsSupported) {
+                return;
+            }
             if (sScrollOptEnable && sDisableOptimizer != null) {
                 try {
                     sDisableOptimizer.invoke(null, disabled);
@@ -762,6 +820,9 @@ public class BoostFramework {
 
         /** @hide */
         public static void setBLASTBufferQueue(BLASTBufferQueue blastBufferQueue) {
+            if (!sIsSupported) {
+                return;
+            }
             if (sScrollOptEnable && sSetBLASTBufferQueue != null) {
                 try {
                     sSetBLASTBufferQueue.invoke(null, blastBufferQueue);
@@ -773,6 +834,9 @@ public class BoostFramework {
 
         /** @hide */
         public static void setMotionType(int eventType) {
+            if (!sIsSupported) {
+                return;
+            }
             if (sScrollOptEnable && sSetMotionType != null) {
                 try {
                     sSetMotionType.invoke(null, eventType);
@@ -784,6 +848,9 @@ public class BoostFramework {
 
         /** @hide */
         public static void setVsyncTime(long vsyncTimeNanos) {
+            if (!sIsSupported) {
+                return;
+            }
             if (sScrollOptEnable && sSetVsyncTime != null) {
                 try {
                     sSetVsyncTime.invoke(null, vsyncTimeNanos);
@@ -795,6 +862,9 @@ public class BoostFramework {
 
         /** @hide */
         public static void setUITaskStatus(boolean running) {
+            if (!sIsSupported) {
+                return;
+            }
             if (sScrollOptEnable && sSetUITaskStatus != null) {
                 try {
                     sSetUITaskStatus.invoke(null, running);
@@ -806,6 +876,9 @@ public class BoostFramework {
 
         /** @hide */
         public static void setFlingFlag(int flag) {
+            if (!sIsSupported) {
+                return;
+            }
             if (sScrollOptEnable && sSetFlingFlag != null) {
                 try {
                     sSetFlingFlag.invoke(null, flag);
@@ -818,6 +891,9 @@ public class BoostFramework {
         /** @hide */
         public static boolean shouldUseVsync(boolean defaultVsyncFlag) {
             boolean useVsync = defaultVsyncFlag;
+            if (!sIsSupported) {
+                return useVsync;
+            }
             if (sScrollOptEnable && sShouldUseVsync != null) {
                 try {
                     Object retVal = sShouldUseVsync.invoke(null);
@@ -832,6 +908,9 @@ public class BoostFramework {
         /** @hide */
         public static long getFrameDelay(long defaultDelay, long lastFrameTimeNanos) {
             long frameDelay = defaultDelay;
+            if (!sIsSupported) {
+                return frameDelay;
+            }
             if (sScrollOptEnable && sGetFrameDelay != null) {
                 try {
                     Object retVal = sGetFrameDelay.invoke(null, lastFrameTimeNanos);
@@ -846,6 +925,9 @@ public class BoostFramework {
         /** @hide */
         public static long getAdjustedAnimationClock(long frameTimeNanos) {
             long newFrameTimeNanos = frameTimeNanos;
+            if (!sIsSupported) {
+                return newFrameTimeNanos;
+            }
             if (sScrollOptEnable && sGetAdjustedAnimationClock != null) {
                 try {
                     Object retVal = sGetAdjustedAnimationClock.invoke(null,
