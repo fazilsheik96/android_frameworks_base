@@ -204,4 +204,7 @@
         <item>restart_bootloader</item>
     </string-array>
 
+    <!-- Whether device supports QTI Boost Framework -->
+    <bool name="config_supportsBoostFramework">true</bool>
+
 </resources>
