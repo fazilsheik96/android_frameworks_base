@@ -72,8 +72,7 @@ constructor(
                         )
                     }
 
-                    override fun onWalletCardRetrievalError(error: GetWalletCardsError) {
-                        Log.e(TAG, "Wallet card retrieval error, message: \"${error?.message}\"")
+                    override fun onWalletCardRetrievalError(error: GetWalletCardsError?) {
                         trySendWithFailureLogging(
                             KeyguardQuickAffordanceConfig.LockScreenState.Hidden,
                             TAG,
