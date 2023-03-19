@@ -225,10 +225,10 @@ public class BatteryMeterView extends LinearLayout implements DarkReceiver {
         mCircleDrawable.setCharging(pluggedIn);
         mAccessorizedDrawable.setBatteryLevel(level);
         mCircleDrawable.setBatteryLevel(level);
-        mPluggedIn = pluggedIn;
         mLevel = level;
         updatePercentText();
-        if (pluggedIn) {
+        if (mPluggedIn != pluggedIn) {
+            mPluggedIn = pluggedIn;
             updateShowPercent();
         }
     }
@@ -370,7 +370,7 @@ public class BatteryMeterView extends LinearLayout implements DarkReceiver {
         final boolean drawPercentInside = mShowPercentMode == MODE_DEFAULT &&
                 showBatteryPercent == 1;
         final boolean drawPercentOnly = mShowPercentMode == MODE_ESTIMATE ||
-                showBatteryPercent == 2;
+                showBatteryPercent == 2 || mPluggedIn;
         boolean shouldShow =
                 (drawPercentOnly && (!drawPercentInside || mPluggedIn) ||
                 getBatteryStyle() == BATTERY_STYLE_TEXT);
