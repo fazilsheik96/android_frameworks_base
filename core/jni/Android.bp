@@ -443,7 +443,9 @@ cc_library_shared {
         },
     },
 
+    //Workaround two ThinLTO bugs: one runtime due to mangled symbol,
+    //one lld crash
     lto: {
-        thin: true,
+        full: true,
     },
 }
