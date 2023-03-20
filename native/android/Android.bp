@@ -43,8 +43,9 @@ cc_defaults {
         "-Wunreachable-code",
     ],
     lto: {
-        thin: true,
+        full: true,
     },
+    whole_program_vtables: true, // Requires LTO
 }
 
 cc_library_shared {
