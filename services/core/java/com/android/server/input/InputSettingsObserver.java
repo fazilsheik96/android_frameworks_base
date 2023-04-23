@@ -79,7 +79,10 @@ class InputSettingsObserver extends ContentObserver {
                                 Settings.Global.MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH),
                         (reason) -> updateMaximumObscuringOpacityForTouch()),
                 Map.entry(Settings.System.getUriFor(Settings.System.SHOW_KEY_PRESSES),
-                        (reason) -> updateShowKeyPresses()));
+                        (reason) -> updateShowKeyPresses()),
+                Map.entry(Settings.System.getUriFor(
+                        Settings.System.PREVENT_POINTER_ACCELERATION),
+                        (reason) -> updatePreventPointerAcceleration()));
     }
 
     /**
@@ -199,5 +202,14 @@ class InputSettingsObserver extends ContentObserver {
             return;
         }
         mNative.setMaximumObscuringOpacityForTouch(opacity);
+    }
+
+    private void updatePreventPointerAcceleration() {
+        int preventPointerAcceleration = Settings.System.getIntForUser(
+                mContext.getContentResolver(),
+                Settings.System.PREVENT_POINTER_ACCELERATION, 0,
+                UserHandle.USER_CURRENT);
+        preventPointerAcceleration = Math.min(Math.max(preventPointerAcceleration, 0), 3);
+        mNative.setPreventPointerAcceleration(preventPointerAcceleration);
     }
 }
