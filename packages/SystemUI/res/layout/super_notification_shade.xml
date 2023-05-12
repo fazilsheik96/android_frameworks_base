@@ -50,6 +50,7 @@
         android:layout_height="match_parent"
         android:importantForAccessibility="no"
         sysui:ignoreRightInset="true"
+        sysui:ignoreLeftInset="true"
     />
 
     <com.android.systemui.scrim.ScrimView
@@ -58,12 +59,14 @@
         android:layout_height="match_parent"
         android:importantForAccessibility="no"
         sysui:ignoreRightInset="true"
+        sysui:ignoreLeftInset="true"
     />
 
     <com.android.systemui.statusbar.LightRevealScrim
         android:id="@+id/light_reveal_scrim"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        sysui:ignoreRightInset="true" />
 
     <include layout="@layout/status_bar_expanded"
              android:layout_width="match_parent"
@@ -136,5 +139,6 @@
         android:layout_height="match_parent"
         android:importantForAccessibility="no"
         sysui:ignoreRightInset="true"
+        sysui:ignoreLeftInset="true"
     />
 </com.android.systemui.shade.NotificationShadeWindowView>
