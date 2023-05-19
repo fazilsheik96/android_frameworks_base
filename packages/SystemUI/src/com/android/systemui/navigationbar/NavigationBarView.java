@@ -310,11 +310,14 @@ public class NavigationBarView extends FrameLayout implements NavigationModeCont
 
         // Set up the context group of buttons
         mContextualButtonGroup = new ContextualButtonGroup(R.id.menu_container);
+        final ContextualButton menuButton = new ContextualButton(R.id.menu,
+                mLightContext, R.drawable.ic_sysbar_menu);
         final ContextualButton imeSwitcherButton = new ContextualButton(R.id.ime_switcher,
                 mLightContext, R.drawable.ic_ime_switcher_default);
         final ContextualButton accessibilityButton =
                 new ContextualButton(R.id.accessibility_button, mLightContext,
                         R.drawable.ic_sysbar_accessibility_button);
+        mContextualButtonGroup.addButton(menuButton);
         mContextualButtonGroup.addButton(imeSwitcherButton);
         mContextualButtonGroup.addButton(accessibilityButton);
         mRotationContextButton = new RotationContextButton(R.id.rotate_suggestion,
@@ -347,6 +350,7 @@ public class NavigationBarView extends FrameLayout implements NavigationModeCont
         mButtonDispatchers.put(R.id.home, new ButtonDispatcher(R.id.home));
         mButtonDispatchers.put(R.id.home_handle, new ButtonDispatcher(R.id.home_handle));
         mButtonDispatchers.put(R.id.recent_apps, new ButtonDispatcher(R.id.recent_apps));
+        mButtonDispatchers.put(R.id.menu, menuButton);
         mButtonDispatchers.put(R.id.ime_switcher, imeSwitcherButton);
         mButtonDispatchers.put(R.id.accessibility_button, accessibilityButton);
         mButtonDispatchers.put(R.id.menu_container, mContextualButtonGroup);
@@ -469,6 +473,10 @@ public class NavigationBarView extends FrameLayout implements NavigationModeCont
 
     public ButtonDispatcher getRecentsButton() {
         return mButtonDispatchers.get(R.id.recent_apps);
+    }
+
+    public ButtonDispatcher getMenuButton() {
+        return mButtonDispatchers.get(R.id.menu);
     }
 
     public ButtonDispatcher getBackButton() {
@@ -964,13 +972,13 @@ public class NavigationBarView extends FrameLayout implements NavigationModeCont
         mEdgeBackGestureHandler.onNavigationHeightChanged();
     }
 
+    @Override
+    public void onNavigationModeChanged(int mode) { /* Do nothing */ }
+
     public void setMenuVisibility(final boolean show) {
         mContextualButtonGroup.setButtonVisibility(R.id.menu, show);
         updateBoundsConfig();
     }
-
-    @Override
-    public void onNavigationModeChanged(int mode) { /* Do nothing */ }
 
     public void setAccessibilityButtonState(final boolean visible, final boolean longClickable) {
         mLongClickableAccessibilityButton = longClickable;
@@ -1320,9 +1328,10 @@ public class NavigationBarView extends FrameLayout implements NavigationModeCont
                         visibilityToString(getCurrentView().getVisibility()),
                         getCurrentView().getAlpha()));
 
-        pw.println(String.format("      disabled=0x%08x vertical=%s darkIntensity=%.2f",
+        pw.println(String.format("      disabled=0x%08x vertical=%s menu=%s darkIntensity=%.2f",
                         mDisabledFlags,
                         mIsVertical ? "true" : "false",
+                        getMenuButton().isVisible() ? "true" : "false",
                         getLightTransitionsController().getCurrentDarkIntensity()));
 
         pw.println("    mScreenOn: " + mScreenOn);
@@ -1332,6 +1341,7 @@ public class NavigationBarView extends FrameLayout implements NavigationModeCont
         dumpButton(pw, "home", getHomeButton());
         dumpButton(pw, "handle", getHomeHandle());
         dumpButton(pw, "rcnt", getRecentsButton());
+        dumpButton(pw, "menu", getMenuButton());
         dumpButton(pw, "rota", getRotateSuggestionButton());
         dumpButton(pw, "a11y", getAccessibilityButton());
         dumpButton(pw, "ime", getImeSwitchButton());
