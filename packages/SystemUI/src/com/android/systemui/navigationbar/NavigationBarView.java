@@ -70,6 +70,7 @@ import com.android.systemui.navigationbar.buttons.ClipboardButtonDispatcher;
 import com.android.systemui.navigationbar.buttons.ContextualButton;
 import com.android.systemui.navigationbar.buttons.ContextualButtonGroup;
 import com.android.systemui.navigationbar.buttons.DeadZone;
+import com.android.systemui.navigationbar.buttons.DragDropSurfaceCallback;
 import com.android.systemui.navigationbar.buttons.KeyButtonDrawable;
 import com.android.systemui.navigationbar.buttons.NearestTouchFrame;
 import com.android.systemui.navigationbar.buttons.RotationContextButton;
@@ -96,8 +97,7 @@ import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 /** */
-public class NavigationBarView extends FrameLayout implements NavigationModeController.ModeChangedListener {
-
+public class NavigationBarView extends FrameLayout implements NavigationModeController.ModeChangedListener, DragDropSurfaceCallback {
     final static boolean DEBUG = false;
     final static String TAG = "NavBarView";
 
@@ -150,6 +150,8 @@ public class NavigationBarView extends FrameLayout implements NavigationModeCont
     private boolean mInCarMode = false;
     private boolean mDockedStackExists;
     private boolean mScreenOn = true;
+    private boolean mForceDisableOverview = false;
+    private DragDropSurfaceCallback mForceDisableOverviewCallback = null;
 
     private final SparseArray<ButtonDispatcher> mButtonDispatchers = new SparseArray<>();
     private final ContextualButtonGroup mContextualButtonGroup;
@@ -391,6 +393,18 @@ public class NavigationBarView extends FrameLayout implements NavigationModeCont
 
     public void setTouchHandler(Gefingerpoken touchHandler) {
         mTouchHandler = touchHandler;
+    }
+
+    @Override
+    public void setForceDisableOverview(boolean forceDisableOverview) {
+        mForceDisableOverview = forceDisableOverview;
+        if (mForceDisableOverviewCallback != null) {
+            mForceDisableOverviewCallback.setForceDisableOverview(forceDisableOverview);
+        }
+    }
+
+    public void setForceDisableOverviewCallback(DragDropSurfaceCallback forceDisableOverviewCallback) {
+        mForceDisableOverviewCallback = forceDisableOverviewCallback;
     }
 
     @Override
