@@ -24,6 +24,7 @@ import android.telephony.ServiceState
 import android.telephony.SignalStrength
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
 import com.android.internal.annotations.VisibleForTesting
 import com.android.settingslib.SignalIcon.MobileIconGroup
 import com.android.settingslib.Utils
@@ -54,6 +55,8 @@ internal class MobileState(
     @JvmField var mobileDataEnabled: Boolean = false,
     @JvmField var roamingDataEnabled: Boolean = false,
     @JvmField var imsRegistrationTech: Int = REGISTRATION_TECH_NONE
+    @JvmField var imsRegistrationTech: Int = REGISTRATION_TECH_NONE,
+    @JvmField var imsVoiceCapable: Boolean = false
 ) : ConnectivityState() {
 
     @JvmField var telephonyDisplayInfo = TelephonyDisplayInfo(TelephonyManager.NETWORK_TYPE_UNKNOWN,
@@ -112,6 +115,7 @@ internal class MobileState(
         imsRegistered = o.imsRegistered;
         voiceCapable = o.voiceCapable;
         videoCapable = o.videoCapable;
+        imsVoiceCapable = o.imsVoiceCapable
 
         telephonyDisplayInfo = o.telephonyDisplayInfo
         serviceState = o.serviceState
@@ -209,6 +213,7 @@ internal class MobileState(
         builder.append("roamingDataEnabled=$roamingDataEnabled,")
         builder.append("voiceCapable=$voiceCapable,")
         builder.append("videoCapable=$videoCapable,")
+        builder.append("imsVoiceCapable=$imsVoiceCapable,")
 
         // Computed properties
         builder.append("showQuickSettingsRatIcon=${showQuickSettingsRatIcon()},")
@@ -236,6 +241,9 @@ internal class MobileState(
             "userSetup",
             "dataState",
             "defaultDataOff",
+            "imsRegistered",
+            "imsRegistrationTech",
+            "imsVoiceCapable",
             "showQuickSettingsRatIcon",
             "voiceServiceState",
             "isInService",
@@ -261,6 +269,9 @@ internal class MobileState(
                 userSetup,
                 dataState,
                 defaultDataOff,
+                imsRegistered,
+                imsRegistrationTech,
+                imsVoiceCapable,
                 showQuickSettingsRatIcon(),
                 getVoiceServiceState(),
                 isInService(),
@@ -298,6 +309,7 @@ internal class MobileState(
         if (videoCapable != other.videoCapable) return false
         if (mobileDataEnabled != other.mobileDataEnabled) return false
         if (roamingDataEnabled != other.roamingDataEnabled) return false
+        if (imsVoiceCapable != other.imsVoiceCapable) return false
         if (telephonyDisplayInfo != other.telephonyDisplayInfo) return false
         if (serviceState != other.serviceState) return false
         if (signalStrength != other.signalStrength) return false
@@ -326,6 +338,7 @@ internal class MobileState(
         result = 31 * result + videoCapable.hashCode()
         result = 31 * result + mobileDataEnabled.hashCode()
         result = 31 * result + roamingDataEnabled.hashCode()
+        result = 31 * result + imsVoiceCapable.hashCode()
         result = 31 * result + telephonyDisplayInfo.hashCode()
         result = 31 * result + (serviceState?.hashCode() ?: 0)
         result = 31 * result + (signalStrength?.hashCode() ?: 0)
