@@ -64,10 +64,12 @@ import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.hardware.power.Boost;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.os.Process;
+import android.os.PowerManagerInternal;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -98,6 +100,8 @@ import android.view.animation.Interpolator;
 import android.widget.FrameLayout;
 
 import androidx.constraintlayout.widget.ConstraintLayout;
+
+import com.android.server.LocalServices;
 
 import com.android.app.animation.Interpolators;
 import com.android.internal.annotations.VisibleForTesting;
@@ -644,6 +648,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     private int mLockscreenToDreamingTransitionTranslationY;
     private int mGoneToDreamingTransitionTranslationY;
     private int mLockscreenToOccludedTransitionTranslationY;
+    private final PowerManagerInternal mLocalPowerManager;
 
     /**
      * For PanelView fling perflock call
@@ -1034,6 +1039,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mKeyguardRootView = keyguardRootView;
         dumpManager.registerDumpable(this);
         mPerf = new BoostFramework();
+        mLocalPowerManager = LocalServices.getService(PowerManagerInternal.class);
     }
 
     private void unlockAnimationFinished() {
@@ -2158,9 +2164,14 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 }
             });
         }
+
         if (mPerf != null) {
             String currentPackage = mView.getContext().getPackageName();
             mPerf.perfHint(BoostFramework.VENDOR_HINT_SCROLL_BOOST, currentPackage, -1, BoostFramework.Scroll.PANEL_VIEW);
+        }
+
+        if (mLocalPowerManager != null) {
+            mLocalPowerManager.setPowerBoost(Boost.DISPLAY_UPDATE_IMMINENT, 200);
         }
         animator.addListener(new AnimatorListenerAdapter() {
             private boolean mCancelled;
