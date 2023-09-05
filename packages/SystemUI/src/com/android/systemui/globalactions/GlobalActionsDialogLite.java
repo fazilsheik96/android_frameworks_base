@@ -2825,6 +2825,16 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                             | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
             window.setType(WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY);
             window.getAttributes().setFitInsetsTypes(0 /* types */);
+            if (mBlurUtils.supportsBlursOnWindows()) {
+                // Enable blur behind
+                // Enable dim behind since we are setting some amount dim for the blur.
+                window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                        | WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+                // Set blur behind radius
+                int blurBehindRadius = mContext.getResources()
+                        .getDimensionPixelSize(com.android.systemui.R.dimen.max_window_blur_radius);
+                window.getAttributes().setBlurBehindRadius(blurBehindRadius);
+            }
         }
 
         @Override
@@ -3000,6 +3010,9 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             // Set dim only when blur is enabled.
             if (mBlurUtils.supportsBlursOnWindows()) {
                 getWindow().setDimAmount(0.54f);
+                mScrimAlpha = 0.0f;
+            } else {
+                mScrimAlpha = 1.0f;
             }
 
             // If user entered from the lock screen and smart lock was enabled, disable it
