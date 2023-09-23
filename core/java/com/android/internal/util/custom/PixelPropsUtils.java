@@ -50,6 +50,7 @@ public class PixelPropsUtils {
 
     private static final Map<String, Object> propsToChangeGeneric;
     private static final Map<String, Object> propsToChangePixel7Pro;
+    private static final Map<String, Object> propsToChangePixelFold;
     private static final Map<String, Object> propsToChangePixel5;
     private static final Map<String, Object> propsToChangePixel2;
     private static final Map<String, Object> propsToChangePixelXL;
@@ -57,7 +58,6 @@ public class PixelPropsUtils {
 
     private static final String[] packagesToChangePixel7Pro = {
             "com.google.android.dialer",
-	    "com.google.android.googlequicksearchbox",
             "com.amazon.avod.thirdpartyclient",
             "com.android.chrome",
             "com.disney.disneyplus",
@@ -70,6 +70,10 @@ public class PixelPropsUtils {
             "com.google.android.apps.subscriptions.red",
             "com.microsoft.android.smsorganizer",
             "in.startv.hotstar",
+    };
+
+    private static final String[] packagesToChangePixelFold = {
+            "com.google.android.googlequicksearchbox"
     };
 
     private static final String[] extraPackagesToChange = {
@@ -136,6 +140,15 @@ public class PixelPropsUtils {
         propsToChangePixel7Pro.put("MODEL", "Pixel 7 Pro");
         propsToChangePixel7Pro.put("ID", "TQ3A.230901.001");
         propsToChangePixel7Pro.put("FINGERPRINT", "google/cheetah/cheetah:13/TQ3A.230901.001/10750268:user/release-keys");
+        propsToChangePixelFold = new HashMap<>();
+        propsToChangePixelFold.put("BRAND", "google");
+        propsToChangePixelFold.put("MANUFACTURER", "Google");
+        propsToChangePixelFold.put("DEVICE", "felix");
+        propsToChangePixelFold.put("PRODUCT", "felix");
+        propsToChangePixelFold.put("HARDWARE", "felix");
+        propsToChangePixelFold.put("MODEL", "Pixel Fold");
+        propsToChangePixelFold.put("ID", "TQ3A.230901.001");
+        propsToChangePixelFold.put("FINGERPRINT", "google/felix/felix:13/TQ3C.230905.001.A1/10750268:user/release-keys");
         propsToChangePixel5 = new HashMap<>();
         propsToChangePixel5.put("BRAND", "google");
         propsToChangePixel5.put("MANUFACTURER", "Google");
@@ -244,6 +257,8 @@ public class PixelPropsUtils {
                 return;
             } else if (Arrays.asList(packagesToChangePixel2).contains(packageName)) {
                 propsToChange.putAll(propsToChangePixel2);        
+            } else if (Arrays.asList(packagesToChangePixelFold).contains(packageName)) {
+                propsToChange.putAll(propsToChangePixelFold);            
             } else {
                 if (Arrays.asList(packagesToChangePixel7Pro).contains(packageName)) {
                     propsToChange.putAll(propsToChangePixel7Pro);
