@@ -27,12 +27,6 @@
     <string name="usage_data_default_suffix">Data</string>
     <string name="usage_wifi_default_suffix">Wi-Fi</string>
 
-    <!-- Name of the VoLTE status bar icon. -->
-    <string name="status_bar_volte">VoLTE</string>
-
-    <!-- Name of the VoWiFi status bar icon. -->
-    <string name="status_bar_vowifi">VoWiFi</string>
-
     <!-- SysUI Tuner: Options for how battery is displayed [CHAR LIMIT=NONE] -->
     <string-array name="battery_options_custom">
         <item>Only show percentage (without icon)</item>
