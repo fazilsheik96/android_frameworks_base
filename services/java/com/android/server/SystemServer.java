@@ -2599,13 +2599,6 @@ public final class SystemServer implements Dumpable {
                 t.traceEnd();
 	    }
 
-            // LineageHardware
-            if (!mOnlyCore){
-                t.traceBegin("StartLineageHardwareService");
-                mSystemServiceManager.startService(LineageHardwareService.class);
-                t.traceEnd();
-            }
-
             if (!mOnlyCore){
                 t.traceBegin("StartHealthService");
                 mSystemServiceManager.startService(HealthInterfaceService.class);

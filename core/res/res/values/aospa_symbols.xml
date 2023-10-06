@@ -72,11 +72,6 @@
     <!-- Cycle through ringer modes -->
     <java-symbol type="string" name="volume_dialog_ringer_guidance_normal" />
 
-    <!-- PropImitationHooks -->
-    <java-symbol type="array" name="config_certifiedBuildProperties" />
-    <java-symbol type="string" name="config_stockFingerprint" />
-    <java-symbol type="string" name="config_netflixSpoofModel" />
-
     <!-- For dynamic default font styles -->
     <java-symbol type="string" name="config_bodyFontFamily" />
 
@@ -125,14 +120,6 @@
     <!-- Pocket bridge -->
     <java-symbol type="string" name="config_pocketBridgeSysfsInpocket" />
 
-    <!-- Advanced reboot -->
-    <java-symbol type="string" name="reboot_to_recovery_title" />
-    <java-symbol type="string" name="reboot_to_recovery_message" />
-    <java-symbol type="string" name="reboot_to_bootloader_title" />
-    <java-symbol type="string" name="reboot_to_bootloader_message" />
-    <java-symbol type="string" name="reboot_title" />
-    <java-symbol type="string" name="reboot_message" />
-
     <!-- Display color inversion availability -->
     <java-symbol type="bool" name="config_displayInversionAvailable" />
        
@@ -141,22 +128,6 @@
 
     <!-- Boost Framework -->
     <java-symbol type="bool" name="config_supportsBoostFramework" />
-
-    <!-- Proximity check on wake -->
-    <java-symbol type="bool" name="config_proximityCheckOnWake" />
-    <java-symbol type="integer" name="config_proximityCheckTimeout" />
-    <java-symbol type="bool" name="config_proximityCheckOnWakeEnabledByDefault" />
-
-    <!-- Pocket Lock -->
-    <java-symbol type="layout" name="pocket_lock_view" />
-
-    <!-- Pocket Service -->
-    <java-symbol type="bool" name="config_pocketModeSupported" />
-    <java-symbol type="bool" name="config_pocketModeLightSensorSupported" />
-    <java-symbol type="string" name="config_pocketJudgeVendorSensorName" />
-
-    <!-- Pocket bridge -->
-    <java-symbol type="string" name="config_pocketBridgeSysfsInpocket" />
 
     <!-- Delay in ms before invoking single tap gesture
          Should be set to dt2w max time / 2 when needed -->
@@ -171,9 +142,6 @@
 
     <!-- Status bar volte -->
     <java-symbol type="string" name="status_bar_ims" />
-
-    <!-- Whether device has warp charging support -->
-    <java-symbol type="bool" name="config_hasWarpCharger" />
 
     <!-- Power menu reboot -->
     <java-symbol type="string" name="reboot_title" />
