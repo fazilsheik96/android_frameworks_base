@@ -51,4 +51,7 @@
     <string name="global_action_reboot_bootloader">Bootloader</string>
     <string name="global_action_reboot_fastboot">Fastboot</string>
 
+    <!-- Network Traffic  -->
+    <string name="kilobyteShort" translatable="false">kB</string>
+
 </resources>
