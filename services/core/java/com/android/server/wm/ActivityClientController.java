@@ -500,6 +500,7 @@ class ActivityClientController extends IActivityClientController.Stub {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "finishActivity");
             try {
                 r.releaseActivityBoost();
+                r.setActivityBoost(false);
                 final boolean res;
                 final boolean finishWithRootActivity =
                         finishTask == Activity.FINISH_TASK_WITH_ROOT_ACTIVITY;

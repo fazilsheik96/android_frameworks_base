@@ -3156,6 +3156,7 @@ class ActivityStarter {
     /** Places {@link #mStartActivity} in {@code task} or an embedded {@link TaskFragment}. */
     private void addOrReparentStartingActivity(@NonNull Task task, String reason) {
         mStartActivity.acquireActivityBoost();
+        mStartActivity.setActivityBoost(true);
         TaskFragment newParent = task;
         if (mInTaskFragment != null) {
             int embeddingCheckResult = canEmbedActivity(mInTaskFragment, mStartActivity, task);

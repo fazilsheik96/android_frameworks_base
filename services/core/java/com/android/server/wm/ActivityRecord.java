@@ -303,6 +303,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.gui.DropInputMode;
 import android.hardware.HardwareBuffer;
+import android.hardware.power.Mode;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -6264,12 +6265,14 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             callServiceTrackeronActivityStatechange(STARTED, true);
             setState(STARTED, "makeActiveIfNeeded");
             acquireActivityBoost();
+            setActivityBoost(true);
             try {
                 mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), token,
                         StartActivityItem.obtain(takeOptions()));
             } catch (Exception e) {
                 Slog.w(TAG, "Exception thrown sending start: " + intent.getComponent(), e);
                 releaseActivityBoost();
+                setActivityBoost(false);
             }
             // The activity may be waiting for stop, but that is no longer appropriate if we are
             // starting the activity again
@@ -6972,9 +6975,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
     }
 
+    protected void setActivityBoost(boolean enable) {
+        PowerManagerInternal powerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
+        if (powerManagerInternal != null) {
+            powerManagerInternal.setPowerMode(Mode.LAUNCH, enable);
+        }
+    }
+
     /** Called when the windows associated app window container are drawn. */
     private void onWindowsDrawn() {
         releaseActivityBoost();
+        setActivityBoost(false);
         final TransitionInfoSnapshot info = mTaskSupervisor
                 .getActivityMetricsLogger().notifyWindowsDrawn(this);
         final boolean validInfo = info != null;
