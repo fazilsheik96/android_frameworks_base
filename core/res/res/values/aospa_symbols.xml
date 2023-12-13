@@ -141,4 +141,9 @@
     <!-- Pocket bridge -->
     <java-symbol type="string" name="config_pocketBridgeSysfsInpocket" />
 
+    <!-- PixelPropUtils -->
+    <java-symbol type="string" name="build_device" />
+    <java-symbol type="string" name="build_fp" />
+    <java-symbol type="string" name="build_model" />
+
 </resources>

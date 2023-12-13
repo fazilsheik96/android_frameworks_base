@@ -14,7 +14,7 @@
      See the License for the specific language governing permissions and
      limitations under the License.
 -->
-<resources>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
 
     <!-- Alert slider proc nodes paths. -->
     <string name="alert_slider_state_path"></string>
@@ -41,5 +41,10 @@
     <string name="pocket_view_top_tag_cancel2">Long press the power button to force quit pocket mode.</string>
     <string name="pocket_view_top_tag_number1" translatable="false">1.\u0020</string>
     <string name="pocket_view_top_tag_number2" translatable="false">2.\u0020</string>
+
+    <!-- Strings for PixelPropUtils DO NOT TRANSLATE! -->
+    <string name="build_device" translatable="false"></string>
+    <string name="build_fp" translatable="false"></string>
+    <string name="build_model" translatable="false"></string>
 
 </resources>
