@@ -32,9 +32,11 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.biometrics.BiometricFingerprintConstants;
+import android.hardware.biometrics.BiometricOverlayConstants;
 import android.hardware.biometrics.SensorProperties;
 import android.hardware.display.DisplayManager;
 import android.hardware.fingerprint.FingerprintManager;
@@ -226,6 +228,8 @@ public class UdfpsController implements DozeReceiver, Dumpable {
     private boolean mIsPerfLockAcquired = false;
     private static final int BOOST_DURATION_TIMEOUT = 2000;
 
+    private UdfpsAnimation mUdfpsAnimation;
+
     @VisibleForTesting
     public static final VibrationAttributes UDFPS_VIBRATION_ATTRIBUTES =
             new VibrationAttributes.Builder()
@@ -381,6 +385,10 @@ public class UdfpsController implements DozeReceiver, Dumpable {
         if (mSensorProps.sensorId != sensorProps.sensorId) {
             mSensorProps = sensorProps;
             Log.w(TAG, "updateUdfpsParams | sensorId has changed");
+            // Update animation position on sensor props change.
+            if (mUdfpsAnimation != null) {
+                mUdfpsAnimation.updatePosition(sensorProps);
+            }
         }
 
         if (!mOverlayParams.equals(overlayParams)) {
@@ -553,25 +561,30 @@ public class UdfpsController implements DozeReceiver, Dumpable {
     private boolean newOnTouch(long requestId, @NonNull MotionEvent event, boolean fromUdfpsView) {
         if (!fromUdfpsView) {
             Log.e(TAG, "ignoring the touch injected from outside of UdfpsView");
+            hideUdfpsAnimation();
             return false;
         }
         if (mOverlay == null || mOverlay.getAnimationViewController() == null) {
             Log.w(TAG, "ignoring onTouch with null overlay or animation view controller");
+            hideUdfpsAnimation();
             return false;
         }
         if (mOverlay.getAnimationViewController().shouldPauseAuth()) {
             Log.w(TAG, "ignoring onTouch with shouldPauseAuth = true");
+            hideUdfpsAnimation();
             return false;
         }
         if (!mOverlay.matchesRequestId(requestId)) {
             Log.w(TAG, "ignoring stale touch event: " + requestId + " current: "
                     + mOverlay.getRequestId());
+            hideUdfpsAnimation();
             return false;
         }
 
         if ((mLockscreenShadeTransitionController.getQSDragProgress() != 0f
                 && !mAlternateBouncerInteractor.isVisibleState())
                 || mPrimaryBouncerInteractor.isInTransit()) {
+            hideUdfpsAnimation();
             return false;
         }
         if (event.getAction() == MotionEvent.ACTION_DOWN
@@ -584,6 +597,7 @@ public class UdfpsController implements DozeReceiver, Dumpable {
                 mOverlayParams);
         if (result instanceof TouchProcessorResult.Failure) {
             Log.w(TAG, ((TouchProcessorResult.Failure) result).getReason());
+            hideUdfpsAnimation();
             return false;
         }
 
@@ -937,6 +951,10 @@ public class UdfpsController implements DozeReceiver, Dumpable {
 
         udfpsHapticsSimulator.setUdfpsController(this);
         udfpsShell.setUdfpsOverlayController(mUdfpsOverlayController);
+        if (isAnimationPackageInstalled()) {
+            mUdfpsAnimation = new UdfpsAnimation(mContext, mWindowManager, mSensorProps);
+        }
+
         mPerf = new BoostFramework();
     }
 
@@ -990,6 +1008,12 @@ public class UdfpsController implements DozeReceiver, Dumpable {
 
         mOverlay = overlay;
         final int requestReason = overlay.getRequestReason();
+
+        if (mUdfpsAnimation != null) {
+            mUdfpsAnimation.setIsKeyguard(requestReason ==
+                    BiometricOverlayConstants.REASON_AUTH_KEYGUARD);
+        }
+
         if (requestReason == REASON_AUTH_KEYGUARD
                 && !mKeyguardUpdateMonitor.isFingerprintDetectionRunning()) {
             Log.d(TAG, "Attempting to showUdfpsOverlay when fingerprint detection"
@@ -1259,6 +1283,9 @@ public class UdfpsController implements DozeReceiver, Dumpable {
         for (Callback cb : mCallbacks) {
             cb.onFingerDown();
         }
+        if (mUdfpsAnimation != null) {
+            mUdfpsAnimation.show();
+        }
     }
 
     private void onFingerUp(long requestId, @NonNull UdfpsView view) {
@@ -1313,6 +1340,9 @@ public class UdfpsController implements DozeReceiver, Dumpable {
                 cb.onFingerUp();
             }
         }
+
+        hideUdfpsAnimation();
+
         mOnFingerDown = false;
         if (isOptical()) {
             unconfigureDisplay(view);
@@ -1339,4 +1369,26 @@ public class UdfpsController implements DozeReceiver, Dumpable {
          */
         void onFingerDown();
     }
+
+    private boolean isAnimationPackageInstalled() {
+        String animationPackage = mContext.getString(
+                com.android.internal.R.string.config_udfps_animation_customization_package);
+        try {
+            return mContext.getPackageManager()
+                    .getPackageInfo(animationPackage, 0 /* flags */) != null;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
+    public boolean isAnimationEnabled() {
+        return mUdfpsAnimation != null && mUdfpsAnimation.isAnimationEnabled();
+    }
+
+    private void hideUdfpsAnimation() {
+        if (mUdfpsAnimation != null) {
+            mUdfpsAnimation.hide();
+        }
+    }
+
 }

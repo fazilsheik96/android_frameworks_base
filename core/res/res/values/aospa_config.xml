@@ -194,4 +194,7 @@
     <!-- DT2W Gesture -->
     <bool name="config_dt2sGestureEnabledByDefault">false</bool>
 
+    <!-- Package that contains udfps animation customization or empty to disable -->
+    <string name="config_udfps_animation_customization_package">co.aospa.overlay.udfps.animations</string>
+
 </resources>
