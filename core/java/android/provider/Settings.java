@@ -12245,6 +12245,12 @@ public final class Settings {
         public static final String QS_BRIGHTNESS_SLIDER_POSITION = "qs_brightness_slider_position";
 
         /**
+         * UDFPS animation style
+         * @hide
+         */
+        public static final String UDFPS_ANIM_STYLE = "udfps_anim_style";
+
+        /**
          * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */
