@@ -53,6 +53,11 @@ public class PropImitationHooks {
     private static final String PACKAGE_GBOARD = "com.google.android.inputmethod.latin";
     private static final String PACKAGE_GMS = "com.google.android.gms";
     private static final String PACKAGE_TURBO = "com.google.android.apps.turbo";
+    private static final String PROCESS_GMS_GAPPS = PACKAGE_GMS + ".gapps";
+    private static final String PROCESS_GMS_GSERVICE = PACKAGE_GMS + ".gservice";
+    private static final String PROCESS_GMS_LEARNING = PACKAGE_GMS + ".learning";
+    private static final String PROCESS_GMS_SEARCH = PACKAGE_GMS + ".search";
+    private static final String PROCESS_GMS_UI = PACKAGE_GMS + ".ui";
     private static final String PROCESS_GMS_UNSTABLE = PACKAGE_GMS + ".unstable";
     private static final String PACKAGE_NETFLIX = "com.netflix.mediaclient";
     private static final String PACKAGE_GPHOTOS = "com.google.android.apps.photos";
@@ -148,7 +153,12 @@ public class PropImitationHooks {
                 || packageName.equals(PACKAGE_CHROME)
                 || packageName.equals(PACKAGE_SETUPWIZARD)
                 || (packageName.equals(PACKAGE_GMS)
-		&& processName.equals(PROCESS_GMS_PERSISTENT)))) {
+                && processName.equals(PROCESS_GMS_PERSISTENT)
+                || processName.equals(PROCESS_GMS_UI)
+                || processName.equals(PROCESS_GMS_SEARCH)
+                || processName.equals(PROCESS_GMS_GAPPS)
+                || processName.equals(PROCESS_GMS_GSERVICE)
+                || processName.equals(PROCESS_GMS_LEARNING)))) {
             dlog("Spoofing Pixel 8 Pro for: " + packageName + " process: " + processName);
             sPixelEightProps.forEach((k, v) -> setPropValue(k, v));
         } else if (!sNetflixModel.isEmpty() && packageName.equals(PACKAGE_NETFLIX)) {
