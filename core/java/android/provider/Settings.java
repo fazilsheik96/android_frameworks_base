@@ -6015,12 +6015,6 @@ public final class Settings {
         public static final String TORCH_POWER_BUTTON_GESTURE = "torch_power_button_gesture";
 
         /**
-         * Controls whether double tap to sleep is enabled (on lockscreen/homescreen).
-         * @hide
-         */
-        public static final String GESTURE_DOUBLE_TAP_SLEEP = "gesture_double_tap_sleep";
-
-        /**
          * Whether allowing pocket service to register sensors and dispatch informations.
          *   0 = disabled
          *   1 = enabled
