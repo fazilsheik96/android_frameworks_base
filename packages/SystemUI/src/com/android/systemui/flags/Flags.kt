@@ -635,7 +635,7 @@ object Flags {
     // TODO(b/279405451): Tracking Bug
     @JvmField
     val CLIPBOARD_SHARED_TRANSITIONS =
-            unreleasedFlag("clipboard_shared_transitions", teamfood = true)
+            releasedFlag("clipboard_shared_transitions")
 
     // TODO(b/283300105): Tracking Bug
     @JvmField val SCENE_CONTAINER = unreleasedFlag("scene_container")
@@ -729,7 +729,7 @@ object Flags {
         unreleasedFlag(name = "enable_lockscreen_wallpaper_dream")
 
     // TODO(b/283084712): Tracking Bug
-    @JvmField val IMPROVED_HUN_ANIMATIONS = unreleasedFlag("improved_hun_animations")
+    @JvmField val IMPROVED_HUN_ANIMATIONS = releasedFlag("improved_hun_animations")
 
     // TODO(b/283447257): Tracking bug
     @JvmField
