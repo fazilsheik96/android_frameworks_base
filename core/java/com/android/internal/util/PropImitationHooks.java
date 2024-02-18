@@ -219,18 +219,33 @@ public class PropImitationHooks {
     }
 
     private static void setCertifiedProps() {
-        for (String entry : sCertifiedProps) {
-            // Each entry must be of the format FIELD:value
-            final String[] fieldAndProp = entry.split(":", 2);
-            if (fieldAndProp.length != 2) {
-                Log.e(TAG, "Invalid entry in certified props: " + entry);
-                continue;
+        String allKeys = SystemProperties.get("persist.sys.paranoid.gms.list");
+        if (allKeys != null && !allKeys.isEmpty()) {
+            String[] keys = allKeys.split("\\+");
+            for (String key : keys) {
+                String value = SystemProperties.get("persist.sys.paranoid.gms." + key);
+                if (key.equals("SECURITY_PATCH")) {
+                    setSystemProperty(PROP_SECURITY_PATCH, value);
+                } else if (key.equals("FIRST_API_LEVEL")) {
+                    setSystemProperty(PROP_FIRST_API_LEVEL, value);
+                } else {
+                    setPropValue(key, value);
+                }
             }
-            setPropValue(fieldAndProp[0], fieldAndProp[1]);
+        } else {
+            for (String entry : sCertifiedProps) {
+                // Each entry must be of the format FIELD:value
+                final String[] fieldAndProp = entry.split(":", 2);
+                if (fieldAndProp.length != 2) {
+                    Log.e(TAG, "Invalid entry in certified props: " + entry);
+                    continue;
+                }
+                setPropValue(fieldAndProp[0], fieldAndProp[1]);
+            }
+            setSystemProperty(PROP_SECURITY_PATCH, Build.VERSION.SECURITY_PATCH);
+            setSystemProperty(PROP_FIRST_API_LEVEL,
+                    Integer.toString(Build.VERSION.DEVICE_INITIAL_SDK_INT));
         }
-        setSystemProperty(PROP_SECURITY_PATCH, Build.VERSION.SECURITY_PATCH);
-        setSystemProperty(PROP_FIRST_API_LEVEL,
-                Integer.toString(Build.VERSION.DEVICE_INITIAL_SDK_INT));
     }
 
     private static void setSystemProperty(String name, String value) {
