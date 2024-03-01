@@ -84,6 +84,9 @@ public class PropImitationHooks {
         sPixelXLProps.put("FINGERPRINT", "google/marlin/marlin:10/QP1A.191005.007.A3/5972272:user/release-keys");
     }
 
+    private static final String spoofGPhotos = "persist.sys.paranoid.gphotos";
+    private static final String spoofGApps = "persist.sys.paranoid.gapps";
+
     private static final String PROP_SECURITY_PATCH = "persist.sys.pihooks.security_patch";
     private static final String PROP_FIRST_API_LEVEL = "persist.sys.pihooks.first_api_level";
 
@@ -140,14 +143,16 @@ public class PropImitationHooks {
         } else if (!sStockFp.isEmpty() && packageName.equals(PACKAGE_ARCORE)) {
             dlog("Setting stock fingerprint for: " + packageName);
             setPropValue("FINGERPRINT", sStockFp);
-        } else if ((packageName.equals(PACKAGE_ASSISTANT) || packageName.equals(PACKAGE_GBOARD)
-                || packageName.equals(PACKAGE_SUBSCRIPTION_RED) || packageName.equals(PACKAGE_VELVET))) {
+        } else if ((packageName.equals(PACKAGE_ASSISTANT)
+                || packageName.equals(PACKAGE_GBOARD)
+                || packageName.equals(PACKAGE_SUBSCRIPTION_RED)
+                || packageName.equals(PACKAGE_VELVET)) && SystemProperties.getBoolean(spoofGApps, false)) {
             dlog("Spoofing Pixel 8 Pro for: " + packageName + " process: " + processName);
             sPixelEightProps.forEach((k, v) -> setPropValue(k, v));
         } else if (!sNetflixModel.isEmpty() && packageName.equals(PACKAGE_NETFLIX)) {
             dlog("Setting model to " + sNetflixModel + " for Netflix");
             setPropValue("MODEL", sNetflixModel);
-        } else if (sIsPhotos) {
+        } else if (sIsPhotos && SystemProperties.getBoolean(spoofGPhotos, false)) {
             dlog("Spoofing Pixel XL for Google Photos");
             sPixelXLProps.forEach((k, v) -> setPropValue(k, v));
         }
