@@ -45,11 +45,14 @@ public class PropImitationHooks {
 
     private static final String PACKAGE_ARCORE = "com.google.ar.core";
     private static final String PACKAGE_ASI = "com.google.android.as";
+    private static final String PACKAGE_ASSISTANT = "com.google.android.apps.googleassistant";
     private static final String PACKAGE_FINSKY = "com.android.vending";
+    private static final String PACKAGE_GBOARD = "com.google.android.inputmethod.latin";
     private static final String PACKAGE_GMS = "com.google.android.gms";
     private static final String PACKAGE_GPHOTOS = "com.google.android.apps.photos";
     private static final String PACKAGE_NETFLIX = "com.netflix.mediaclient";
     private static final String PACKAGE_VELVET = "com.google.android.googlequicksearchbox";
+    private static final String PACKAGE_SUBSCRIPTION_RED = "com.google.android.apps.subscriptions.red";
 
     private static final String PROCESS_GMS_PERSISTENT = PACKAGE_GMS + ".persistent";
     private static final String PROCESS_GMS_UNSTABLE = PACKAGE_GMS + ".unstable";
@@ -79,6 +82,15 @@ public class PropImitationHooks {
         "BRAND", "google",
         "MODEL", "Pixel",
         "FINGERPRINT", "google/sailfish/sailfish:10/QP1A.191005.007.A3/5972272:user/release-keys"
+    );
+
+    private static final Map<String, String> sPixelEightProps = Map.of(
+        "PRODUCT", "husky",
+        "DEVICE", "husky",
+        "MANUFACTURER", "Google",
+        "BRAND", "google",
+        "MODEL", "Pixel 8 Pro",
+        "FINGERPRINT", "google/husky/husky:14/UQ1A.240105.004/11206848:user/release-keys"
     );
 
     private static final Set<String> sPixelFeatures = Set.of(
@@ -142,6 +154,10 @@ public class PropImitationHooks {
         } else if (sIsPhotos) {
             dlog("Spoofing Pixel 1 for Google Photos");
             sPixelOneProps.forEach((PropImitationHooks::setPropValue));
+        } else if ((packageName.equals(PACKAGE_ASSISTANT) || packageName.equals(PACKAGE_GBOARD)
+                || packageName.equals(PACKAGE_SUBSCRIPTION_RED) || packageName.equals(PACKAGE_VELVET))) {
+            dlog("Spoofing Pixel 8 Pro for: " + packageName + " process: " + processName);
+            sPixelEightProps.forEach((k, v) -> setPropValue(k, v));
         } else if (!sNetflixModel.isEmpty() && packageName.equals(PACKAGE_NETFLIX)) {
             dlog("Setting model to " + sNetflixModel + " for Netflix");
             setPropValue("MODEL", sNetflixModel);
