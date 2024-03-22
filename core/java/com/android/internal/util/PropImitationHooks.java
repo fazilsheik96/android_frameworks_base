@@ -62,7 +62,7 @@ public class PropImitationHooks {
         "MANUFACTURER", "Google",
         "BRAND", "google",
         "MODEL", "Pixel 8 Pro",
-        "FINGERPRINT", "google/husky/husky:14/UQ1A.240105.004/11206848:user/release-keys"
+        "FINGERPRINT", "google/husky/husky:14/AP1A.240305.019.A1/11445699:user/release-keys"
     );
 
     private static final Map<String, String> sPixelXLProps = new HashMap<>();
