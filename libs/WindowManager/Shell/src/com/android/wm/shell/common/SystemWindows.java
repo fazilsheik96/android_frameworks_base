@@ -39,7 +39,6 @@ import android.view.IWindowSession;
 import android.view.IWindowSessionCallback;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
-import android.view.KeyEvent;
 import android.view.ScrollCaptureResponse;
 import android.view.SurfaceControl;
 import android.view.SurfaceControlViewHost;
@@ -409,9 +408,5 @@ public class SystemWindows {
                 // ignore
             }
         }
-
-        /* Key event */
-        @Override
-        public void dispatchBlackScreenKeyEvent(KeyEvent event) {}
     }
 }

@@ -169,7 +169,6 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
-import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -1125,7 +1124,6 @@ public final class ViewRootImpl implements ViewParent,
 
     boolean mHaveMoveEvent = false;
 
-    private final RemoteTaskWindowInsetHelper mRTWindowInsetHelper;
 
     private static boolean sToolkitSetFrameRateReadOnlyFlagValue;
     private static boolean sToolkitMetricsForFrameRateDecisionFlagValue;
@@ -1229,13 +1227,6 @@ public final class ViewRootImpl implements ViewParent,
             }
         } else {
             mSensitiveContentProtectionService = null;
-        }
-
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-            mRTWindowInsetHelper = new RemoteTaskWindowInsetHelper(context);
-            mInsetsController.getState().setRTWindowInsetHelper(mRTWindowInsetHelper);
-        } else {
-            mRTWindowInsetHelper = null;
         }
     }
 
@@ -2233,11 +2224,6 @@ public final class ViewRootImpl implements ViewParent,
     public void onMovedToDisplay(int displayId, Configuration config) {
         if (mDisplay.getDisplayId() == displayId) {
             return;
-        }
-
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
-            && mRTWindowInsetHelper != null) {
-            mRTWindowInsetHelper.updateDisplayId(displayId);
         }
 
         // Get new instance of display based on current display adjustments. It may be updated later
@@ -11244,16 +11230,6 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
 
-        @Override
-        public void dispatchBlackScreenKeyEvent(KeyEvent event) {
-            final ViewRootImpl viewAncestor = mViewAncestor.get();
-            if (viewAncestor != null) {
-                final View view = viewAncestor.mView;
-                if (view != null) {
-                    view.dispatchKeyEvent(event);
-                }
-            }
-        }
     }
 
     public static final class CalledFromWrongThreadException extends AndroidRuntimeException {
