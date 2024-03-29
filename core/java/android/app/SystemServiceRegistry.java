@@ -32,8 +32,11 @@ import android.app.appsearch.AppSearchManagerFrameworkInitializer;
 import android.app.blob.BlobStoreManagerFrameworkInitializer;
 import android.app.contentsuggestions.ContentSuggestionsManager;
 import android.app.contentsuggestions.IContentSuggestionsManager;
+import android.app.contextualsearch.ContextualSearchManager;
 import android.app.ecm.EnhancedConfirmationFrameworkInitializer;
 import android.app.job.JobSchedulerFrameworkInitializer;
+import android.app.ondeviceintelligence.IOnDeviceIntelligenceManager;
+import android.app.ondeviceintelligence.OnDeviceIntelligenceManager;
 import android.app.people.PeopleManager;
 import android.app.prediction.AppPredictionManager;
 import android.app.role.RoleFrameworkInitializer;
@@ -213,6 +216,7 @@ import android.permission.PermissionManager;
 import android.print.IPrintManager;
 import android.print.PrintManager;
 import android.provider.E2eeContactKeysManager;
+import android.provider.ProviderFrameworkInitializer;
 import android.safetycenter.SafetyCenterFrameworkInitializer;
 import android.scheduling.SchedulingFrameworkInitializer;
 import android.security.FileIntegrityManager;
@@ -446,6 +450,11 @@ public final class SystemServiceRegistry {
                 new CachedServiceFetcher<VcnManager>() {
             @Override
             public VcnManager createService(ContextImpl ctx) throws ServiceNotFoundException {
+                if (!ctx.getPackageManager().hasSystemFeature(
+                        PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)) {
+                    return null;
+                }
+
                 IBinder b = ServiceManager.getService(Context.VCN_MANAGEMENT_SERVICE);
                 IVcnManagementService service = IVcnManagementService.Stub.asInterface(b);
                 return new VcnManager(ctx, service);
@@ -1280,6 +1289,16 @@ public final class SystemServiceRegistry {
                 }
             });
 
+        registerService(Context.CONTEXTUAL_SEARCH_SERVICE, ContextualSearchManager.class,
+                new CachedServiceFetcher<>() {
+                    @Override
+                    public ContextualSearchManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getService(Context.CONTEXTUAL_SEARCH_SERVICE);
+                        return b == null ? null : new ContextualSearchManager();
+                    }
+                });
+
         registerService(Context.APP_PREDICTION_SERVICE, AppPredictionManager.class,
                 new CachedServiceFetcher<AppPredictionManager>() {
             @Override
@@ -1590,6 +1609,19 @@ public final class SystemServiceRegistry {
                         return new WearableSensingManager(ctx.getOuterContext(), manager);
                     }});
 
+        registerService(Context.ON_DEVICE_INTELLIGENCE_SERVICE, OnDeviceIntelligenceManager.class,
+                new CachedServiceFetcher<OnDeviceIntelligenceManager>() {
+                    @Override
+                    public OnDeviceIntelligenceManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder iBinder = ServiceManager.getServiceOrThrow(
+                                Context.ON_DEVICE_INTELLIGENCE_SERVICE);
+                        IOnDeviceIntelligenceManager manager =
+                                IOnDeviceIntelligenceManager.Stub.asInterface(iBinder);
+                        return new OnDeviceIntelligenceManager(ctx.getOuterContext(), manager);
+                    }
+                });
+
         registerService(Context.GRAMMATICAL_INFLECTION_SERVICE, GrammaticalInflectionManager.class,
                 new CachedServiceFetcher<GrammaticalInflectionManager>() {
                     @Override
@@ -1662,6 +1694,9 @@ public final class SystemServiceRegistry {
             OnDevicePersonalizationFrameworkInitializer.registerServiceWrappers();
             DeviceLockFrameworkInitializer.registerServiceWrappers();
             VirtualizationFrameworkInitializer.registerServiceWrappers();
+            if (com.android.server.telecom.flags.Flags.telecomMainlineBlockedNumbersManager()) {
+                ProviderFrameworkInitializer.registerServiceWrappers();
+            }
             // This code is executed on zygote during preload, where only read-only
             // flags can be used. Do not use mutable flags.
             if (android.permission.flags.Flags.enhancedConfirmationModeApisEnabled()) {
@@ -1707,6 +1742,13 @@ public final class SystemServiceRegistry {
         return fetcher;
     }
 
+    private static boolean hasSystemFeatureOpportunistic(@NonNull ContextImpl ctx,
+            @NonNull String featureName) {
+        PackageManager manager = ctx.getPackageManager();
+        if (manager == null) return true;
+        return manager.hasSystemFeature(featureName);
+    }
+
     /**
      * Gets a system service from a given context.
      * @hide
@@ -1729,12 +1771,18 @@ public final class SystemServiceRegistry {
                 case Context.VIRTUALIZATION_SERVICE:
                 case Context.VIRTUAL_DEVICE_SERVICE:
                     return null;
-                case Context.SEARCH_SERVICE:
-                    // Wear device does not support SEARCH_SERVICE so we do not print WTF here
-                    PackageManager manager = ctx.getPackageManager();
-                    if (manager != null && manager.hasSystemFeature(PackageManager.FEATURE_WATCH)) {
+                case Context.VCN_MANAGEMENT_SERVICE:
+                    if (!hasSystemFeatureOpportunistic(ctx,
+                            PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)) {
                         return null;
                     }
+                    break;
+                case Context.SEARCH_SERVICE:
+                    // Wear device does not support SEARCH_SERVICE so we do not print WTF here
+                    if (hasSystemFeatureOpportunistic(ctx, PackageManager.FEATURE_WATCH)) {
+                        return null;
+                    }
+                    break;
             }
             Slog.wtf(TAG, "Manager wrapper not available: " + name);
             return null;

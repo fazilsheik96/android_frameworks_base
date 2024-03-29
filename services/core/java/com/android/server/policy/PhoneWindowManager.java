@@ -530,6 +530,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // TODO(b/178103325): Track sleep/requested sleep for every display.
     volatile boolean mRequestedOrSleepingDefaultDisplay;
 
+    /**
+     * This is used to check whether to invoke {@link #updateScreenOffSleepToken} when screen is
+     * turned off. E.g. if it is false when screen is turned off and the display is swapping, it
+     * is expected that the screen will be on in a short time. Then it is unnecessary to acquire
+     * screen-off-sleep-token, so it can avoid intermediate visibility or lifecycle changes.
+     */
+    volatile boolean mIsGoingToSleepDefaultDisplay;
+
     volatile boolean mRecentsVisible;
     volatile boolean mNavBarVirtualKeyHapticFeedbackEnabled = true;
     volatile boolean mPictureInPictureVisible;
@@ -1522,9 +1530,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void stemPrimaryPress(int count) {
-        if (DEBUG_INPUT) {
-            Slog.d(TAG, "stemPrimaryPress: " + count);
-        }
+        Slog.d(TAG, "stemPrimaryPress: " + count);
         if (count == 3) {
             stemPrimaryTriplePressAction(mTriplePressOnStemPrimaryBehavior);
         } else if (count == 2) {
@@ -1535,22 +1541,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void stemPrimarySinglePressAction(int behavior) {
-        if (DEBUG_INPUT) {
-            Slog.d(TAG, "stemPrimarySinglePressAction: behavior=" + behavior);
-        }
+        Slog.d(TAG, "stemPrimarySinglePressAction: behavior=" + behavior);
         if (behavior == SHORT_PRESS_PRIMARY_NOTHING) return;
 
         final boolean keyguardActive = mKeyguardDelegate != null && mKeyguardDelegate.isShowing();
         if (keyguardActive) {
             // If keyguarded then notify the keyguard.
             mKeyguardDelegate.onSystemKeyPressed(KeyEvent.KEYCODE_STEM_PRIMARY);
+            Slog.d(TAG, "stemPrimarySinglePressAction: skip due to keyguard");
             return;
         }
         switch (behavior) {
             case SHORT_PRESS_PRIMARY_LAUNCH_ALL_APPS:
-                if (DEBUG_INPUT) {
-                    Slog.d(TAG, "Executing stem primary short press action behavior.");
-                }
                 Intent allAppsIntent = new Intent(Intent.ACTION_ALL_APPS);
                 allAppsIntent.addFlags(
                         Intent.FLAG_ACTIVITY_NEW_TASK
@@ -1558,12 +1560,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 startActivityAsUser(allAppsIntent, UserHandle.CURRENT_OR_SELF);
                 break;
             case SHORT_PRESS_PRIMARY_LAUNCH_TARGET_ACTIVITY:
-                if (DEBUG_INPUT) {
-                    Slog.d(
-                            TAG,
-                            "Executing stem primary short press action behavior for launching "
-                                    + "target activity.");
-                }
                 if (mPrimaryShortPressTargetActivity != null) {
                     Intent targetActivityIntent = new Intent();
                     targetActivityIntent.setComponent(mPrimaryShortPressTargetActivity);
@@ -1594,13 +1590,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void stemPrimaryDoublePressAction(int behavior) {
+        Slog.d(TAG, "stemPrimaryDoublePressAction: " + behavior);
         switch (behavior) {
             case DOUBLE_PRESS_PRIMARY_NOTHING:
                 break;
             case DOUBLE_PRESS_PRIMARY_SWITCH_RECENT_APP:
-                if (DEBUG_INPUT) {
-                    Slog.d(TAG, "Executing stem primary double press action behavior.");
-                }
                 final boolean keyguardActive = mKeyguardDelegate == null
                         ? false
                         : mKeyguardDelegate.isShowing();
@@ -1612,13 +1606,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void stemPrimaryTriplePressAction(int behavior) {
+        Slog.d(TAG, "stemPrimaryTriplePressAction: " + behavior);
         switch (behavior) {
             case TRIPLE_PRESS_PRIMARY_NOTHING:
                 break;
             case TRIPLE_PRESS_PRIMARY_TOGGLE_ACCESSIBILITY:
-                if (DEBUG_INPUT) {
-                    Slog.d(TAG, "Executing stem primary triple press action behavior.");
-                }
                 mTalkbackShortcutController.toggleTalkback(mCurrentUserId);
                 if (mTalkbackShortcutController.isTalkBackShortcutGestureEnabled()) {
                     performHapticFeedback(HapticFeedbackConstants.CONFIRM, /* always = */
@@ -1630,9 +1622,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void stemPrimaryLongPress(long eventTime) {
-        if (DEBUG_INPUT) {
-            Slog.d(TAG, "Executing stem primary long press action behavior.");
-        }
+        Slog.d(TAG, "stemPrimaryLongPress: "  + mLongPressOnStemPrimaryBehavior);
 
         switch (mLongPressOnStemPrimaryBehavior) {
             case LONG_PRESS_PRIMARY_NOTHING:
@@ -1712,10 +1702,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return mLongPressOnStemPrimaryBehavior != LONG_PRESS_PRIMARY_NOTHING;
     }
 
+    /** Determine whether the device has any stem primary behaviors. */
     private boolean hasStemPrimaryBehavior() {
+        // Read the default stem behaviors from the XML config to determine whether stem primary
+        // behaviors are supported in this build. If they are supported, then the behaviors may be
+        // overridden at runtime through their respective Settings overrides. If they are not
+        // supported, the Settings overrides will not apply.
+        final int defaultShortPressOnStemPrimaryBehavior = mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_shortPressOnStemPrimaryBehavior);
+        final int defaultLongPressOnStemPrimaryBehavior = mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_longPressOnStemPrimaryBehavior);
         return getMaxMultiPressStemPrimaryCount() > 1
-                || hasLongPressOnStemPrimaryBehavior()
-                || mShortPressOnStemPrimaryBehavior != SHORT_PRESS_PRIMARY_NOTHING;
+                || defaultLongPressOnStemPrimaryBehavior != LONG_PRESS_PRIMARY_NOTHING
+                || defaultShortPressOnStemPrimaryBehavior != SHORT_PRESS_PRIMARY_NOTHING;
     }
 
     private void interceptScreenshotChord(int source, long pressDelay) {
@@ -1930,6 +1929,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             accessibilityManager.performSystemAction(
                     AccessibilityService.GLOBAL_ACTION_ACCESSIBILITY_ALL_APPS);
         }
+        dismissKeyboardShortcutsMenu();
     }
 
     private void toggleNotificationPanel() {
@@ -2811,6 +2811,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             KeyEvent.KEYCODE_STEM_PRIMARY,
                             eventTime,
                             () -> {
+                                Slog.d(TAG, "StemPrimaryKeyRule: executing deferred onKeyUp");
                                 // Save the info of the focused task on screen. This may be used
                                 // later to bring the current focused task back to top. For
                                 // example, stem primary triple press enables the A11y interface
@@ -3510,13 +3511,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     return true;
                 }
                 break;
-            case KeyEvent.KEYCODE_T:
-                if (firstDown && event.isMetaPressed()) {
-                    toggleTaskbar();
-                    logKeyboardSystemsEvent(event, KeyboardLogEvent.TOGGLE_TASKBAR);
-                    return true;
-                }
-                break;
             case KeyEvent.KEYCODE_DEL:
             case KeyEvent.KEYCODE_ESCAPE:
                 if (firstDown && event.isMetaPressed()) {
@@ -3538,7 +3532,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 if (firstDown && event.isMetaPressed() && event.isCtrlPressed()) {
                     StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
                     if (statusbar != null) {
-                        statusbar.enterDesktop(getTargetDisplayIdForKeyEvent(event));
+                        statusbar.moveFocusedTaskToDesktop(getTargetDisplayIdForKeyEvent(event));
                         logKeyboardSystemsEvent(event, KeyboardLogEvent.DESKTOP_MODE);
                         return true;
                     }
@@ -3550,6 +3544,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         moveFocusedTaskToStageSplit(getTargetDisplayIdForKeyEvent(event),
                                 true /* leftOrTop */);
                         logKeyboardSystemsEvent(event, KeyboardLogEvent.SPLIT_SCREEN_NAVIGATION);
+                    } else if (event.isAltPressed()) {
+                        setSplitscreenFocus(true /* leftOrTop */);
+                        logKeyboardSystemsEvent(event, KeyboardLogEvent.CHANGE_SPLITSCREEN_FOCUS);
                     } else {
                         logKeyboardSystemsEvent(event, KeyboardLogEvent.BACK);
                         injectBackGesture(event.getDownTime());
@@ -3558,11 +3555,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 break;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if (firstDown && event.isMetaPressed() && event.isCtrlPressed()) {
-                    moveFocusedTaskToStageSplit(getTargetDisplayIdForKeyEvent(event),
-                            false /* leftOrTop */);
-                    logKeyboardSystemsEvent(event, KeyboardLogEvent.SPLIT_SCREEN_NAVIGATION);
-                    return true;
+                if (firstDown && event.isMetaPressed()) {
+                    if (event.isCtrlPressed()) {
+                        moveFocusedTaskToStageSplit(getTargetDisplayIdForKeyEvent(event),
+                                false /* leftOrTop */);
+                        logKeyboardSystemsEvent(event, KeyboardLogEvent.SPLIT_SCREEN_NAVIGATION);
+                        return true;
+                    } else if (event.isAltPressed()) {
+                        setSplitscreenFocus(false /* leftOrTop */);
+                        logKeyboardSystemsEvent(event, KeyboardLogEvent.CHANGE_SPLITSCREEN_FOCUS);
+                        return true;
+                    }
                 }
                 break;
             case KeyEvent.KEYCODE_SLASH:
@@ -4422,6 +4425,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    private void setSplitscreenFocus(boolean leftOrTop) {
+        StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+        if (statusbar != null) {
+            statusbar.setSplitscreenFocus(leftOrTop);
+        }
+    }
+
     void launchHomeFromHotKey(int displayId) {
         launchHomeFromHotKey(displayId, true /* awakenFromDreams */, true /*respectKeyguard*/);
     }
@@ -4753,7 +4763,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 if (down) {
                     // There may have other embedded activities on the same Task. Try to move the
                     // focus before processing the back event.
-                    mWindowManagerInternal.moveFocusToTopEmbeddedWindowIfNeeded();
+                    mWindowManagerInternal.moveFocusToAdjacentEmbeddedActivityIfNeeded();
                     mBackKeyHandled = false;
                 } else {
                     if (!hasLongPressOnBackBehavior()) {
@@ -5494,6 +5504,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         mRequestedOrSleepingDefaultDisplay = true;
+        mIsGoingToSleepDefaultDisplay = true;
+
+        // In case startedGoingToSleep is called after screenTurnedOff (the source caller is in
+        // order but the methods run on different threads) and updateScreenOffSleepToken was
+        // skipped. Then acquire sleep token if screen was off.
+        if (!mDefaultDisplayPolicy.isScreenOnFully() && !mDefaultDisplayPolicy.isScreenOnEarly()
+                && com.android.window.flags.Flags.skipSleepingWhenSwitchingDisplay()) {
+            updateScreenOffSleepToken(true /* acquire */, false /* isSwappingDisplay */);
+        }
 
         if (mKeyguardDelegate != null) {
             mKeyguardDelegate.onStartedGoingToSleep(pmSleepReason);
@@ -5517,6 +5536,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         MetricsLogger.histogram(mContext, "screen_timeout", mLockScreenTimeout / 1000);
 
         mRequestedOrSleepingDefaultDisplay = false;
+        mIsGoingToSleepDefaultDisplay = false;
         mDefaultDisplayPolicy.setAwake(false);
 
         // We must get this work done here because the power manager will drop
@@ -5552,7 +5572,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         EventLogTags.writeScreenToggled(1);
 
-
+        mIsGoingToSleepDefaultDisplay = false;
         mDefaultDisplayPolicy.setAwake(true);
 
         // Since goToSleep performs these functions synchronously, we must
@@ -5654,7 +5674,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (DEBUG_WAKEUP) Slog.i(TAG, "Display" + displayId + " turned off...");
 
         if (displayId == DEFAULT_DISPLAY) {
-            updateScreenOffSleepToken(true, isSwappingDisplay);
+            if (!isSwappingDisplay || mIsGoingToSleepDefaultDisplay
+                    || !com.android.window.flags.Flags.skipSleepingWhenSwitchingDisplay()) {
+                updateScreenOffSleepToken(true /* acquire */, isSwappingDisplay);
+            }
             mRequestedOrSleepingDefaultDisplay = false;
             mDefaultDisplayPolicy.screenTurnedOff();
             synchronized (mLock) {

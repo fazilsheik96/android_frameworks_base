@@ -366,11 +366,6 @@ class RecentTasks {
                     com.android.internal.R.integer.config_minNumVisibleRecentTasks_lowRam);
             mMaxNumVisibleTasks = res.getInteger(
                     com.android.internal.R.integer.config_maxNumVisibleRecentTasks_lowRam);
-        } else if (SystemProperties.getBoolean("ro.recents.grid", false)) {
-            mMinNumVisibleTasks = res.getInteger(
-                    com.android.internal.R.integer.config_minNumVisibleRecentTasks_grid);
-            mMaxNumVisibleTasks = res.getInteger(
-                    com.android.internal.R.integer.config_maxNumVisibleRecentTasks_grid);
         } else {
             mMinNumVisibleTasks = res.getInteger(
                     com.android.internal.R.integer.config_minNumVisibleRecentTasks);
@@ -1257,6 +1252,11 @@ class RecentTasks {
 
             if (otherTask.inPinnedWindowingMode()) {
                 // Skip pip task without increasing index since pip is always on screen.
+                continue;
+            }
+
+            if (otherTask.topRunningActivity() == null) {
+                // Skip if there's no running activity in the Task.
                 continue;
             }
 

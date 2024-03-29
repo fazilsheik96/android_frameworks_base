@@ -1281,7 +1281,8 @@ class Task extends TaskFragment {
         if (!isLeafTaskFragment()) {
             final ActivityRecord top = topRunningActivity();
             final ActivityRecord resumedActivity = getResumedActivity();
-            if (resumedActivity != null && top.getTaskFragment() != this) {
+            if (resumedActivity != null
+                    && (top.getTaskFragment() != this || !canBeResumed(resuming))) {
                 // Pausing the resumed activity because it is occluded by other task fragment.
                 if (startPausing(false /* uiSleeping*/, resuming, reason)) {
                     someActivityPaused[0]++;
@@ -3748,7 +3749,9 @@ class Task extends TaskFragment {
             wc.assignChildLayers(t);
             if (!wc.needsZBoost()) {
                 // Place the decor surface under any untrusted content.
-                if (mDecorSurfaceContainer != null && !decorSurfacePlaced
+                if (mDecorSurfaceContainer != null
+                        && !mDecorSurfaceContainer.mIsBoosted
+                        && !decorSurfacePlaced
                         && shouldPlaceDecorSurfaceBelowContainer(wc)) {
                     mDecorSurfaceContainer.assignLayer(t, layer++);
                     decorSurfacePlaced = true;
@@ -3758,16 +3761,16 @@ class Task extends TaskFragment {
                 // Boost the adjacent TaskFragment for dimmer if needed.
                 final TaskFragment taskFragment = wc.asTaskFragment();
                 if (taskFragment != null && taskFragment.isEmbedded()) {
-                    taskFragment.mDimmerSurfaceBoosted = false;
                     final TaskFragment adjacentTf = taskFragment.getAdjacentTaskFragment();
                     if (adjacentTf != null && adjacentTf.shouldBoostDimmer()) {
                         adjacentTf.assignLayer(t, layer++);
-                        adjacentTf.mDimmerSurfaceBoosted = true;
                     }
                 }
 
                 // Place the decor surface just above the owner TaskFragment.
-                if (mDecorSurfaceContainer != null && !decorSurfacePlaced
+                if (mDecorSurfaceContainer != null
+                        && !mDecorSurfaceContainer.mIsBoosted
+                        && !decorSurfacePlaced
                         && wc == mDecorSurfaceContainer.mOwnerTaskFragment) {
                     mDecorSurfaceContainer.assignLayer(t, layer++);
                     decorSurfacePlaced = true;
@@ -3775,10 +3778,10 @@ class Task extends TaskFragment {
             }
         }
 
-        // If not placed yet, the decor surface should be on top of all non-boosted children.
-        if (mDecorSurfaceContainer != null && !decorSurfacePlaced) {
+        // Boost the decor surface above other non-boosted windows if requested. The cover surface
+        // will ensure that the content of the windows below are invisible.
+        if (mDecorSurfaceContainer != null && mDecorSurfaceContainer.mIsBoosted) {
             mDecorSurfaceContainer.assignLayer(t, layer++);
-            decorSurfacePlaced = true;
         }
 
         for (int j = 0; j < mChildren.size(); ++j) {
@@ -3801,6 +3804,24 @@ class Task extends TaskFragment {
                         && wc.asTaskFragment().isEmbedded()
                         && wc.asTaskFragment().isAllowedToBeEmbeddedInTrustedMode();
         return !isOwnActivity && !isTrustedTaskFragment;
+    }
+
+    void setDecorSurfaceBoosted(
+            @NonNull TaskFragment ownerTaskFragment,
+            boolean isBoosted,
+            @Nullable SurfaceControl.Transaction clientTransaction) {
+        if (mDecorSurfaceContainer == null
+                || mDecorSurfaceContainer.mOwnerTaskFragment != ownerTaskFragment) {
+            return;
+        }
+        mDecorSurfaceContainer.setBoosted(isBoosted, clientTransaction);
+        // scheduleAnimation() is called inside assignChildLayers(), which ensures that child
+        // surface visibility is updated with prepareSurfaces()
+        assignChildLayers();
+    }
+
+    boolean isDecorSurfaceBoosted() {
+        return mDecorSurfaceContainer != null && mDecorSurfaceContainer.mIsBoosted;
     }
 
     boolean isTaskId(int taskId) {
@@ -6812,14 +6833,35 @@ class Task extends TaskFragment {
     }
 
     /**
-     * A decor surface that is requested by a {@code TaskFragmentOrganizer} which will be placed
-     * below children windows except for own Activities and TaskFragment in fully trusted mode.
+     * A class managing the decor surface.
+     *
+     * A decor surface is requested by a {@link TaskFragmentOrganizer} and is placed below children
+     * windows in the Task except for own Activities and TaskFragments in fully trusted mode. The
+     * decor surface is created and shared with the client app with
+     * {@link android.window.TaskFragmentOperation#OP_TYPE_CREATE_OR_MOVE_TASK_FRAGMENT_DECOR_SURFACE}
+     * and be removed with
+     * {@link android.window.TaskFragmentOperation#OP_TYPE_REMOVE_TASK_FRAGMENT_DECOR_SURFACE}.
+     *
+     * When boosted with
+     * {@link android.window.TaskFragmentOperation#OP_TYPE_SET_DECOR_SURFACE_BOOSTED}, the decor
+     * surface is placed above all non-boosted windows in the Task, but all the content below it
+     * will be hidden to prevent UI redressing attacks. This can be used by the draggable
+     * divider between {@link TaskFragment}s where veils are drawn on the decor surface while
+     * dragging to indicate new bounds.
      */
     @VisibleForTesting
     class DecorSurfaceContainer {
+
+        // The container surface is the parent of the decor surface. The container surface
+        // should NEVER be shared with the client. It is used to ensure that the decor surface has
+        // a z-order in the Task that is managed by WM core and cannot be updated by the client
+        // process.
         @VisibleForTesting
         @NonNull final SurfaceControl mContainerSurface;
 
+        // The decor surface is shared with the client process owning the
+        // {@link TaskFragmentOrganizer}. It can be used to draw the divider between TaskFragments
+        // or other decorations.
         @VisibleForTesting
         @NonNull final SurfaceControl mDecorSurface;
 
@@ -6828,12 +6870,18 @@ class Task extends TaskFragment {
         @VisibleForTesting
         @NonNull TaskFragment mOwnerTaskFragment;
 
+        private boolean mIsBoosted;
+
+        // The surface transactions that will be applied when the layer is reassigned.
+        @NonNull private final List<SurfaceControl.Transaction> mPendingClientTransactions =
+                new ArrayList<>();
+
         private DecorSurfaceContainer(@NonNull TaskFragment initialOwner) {
             mOwnerTaskFragment = initialOwner;
             mContainerSurface = makeSurface().setContainerLayer()
                     .setParent(mSurfaceControl)
                     .setName(mSurfaceControl + " - decor surface container")
-                    .setEffectLayer()
+                    .setContainerLayer()
                     .setHidden(false)
                     .setCallsite("Task.DecorSurfaceContainer")
                     .build();
@@ -6846,14 +6894,28 @@ class Task extends TaskFragment {
                     .build();
         }
 
+        private void setBoosted(
+                boolean isBoosted, @Nullable SurfaceControl.Transaction clientTransaction) {
+            mIsBoosted = isBoosted;
+            // The client transaction will be applied together with the next assignLayer.
+            if (clientTransaction != null) {
+                mDecorSurfaceContainer.mPendingClientTransactions.add(clientTransaction);
+            }
+        }
+
         private void assignLayer(@NonNull SurfaceControl.Transaction t, int layer) {
             t.setLayer(mContainerSurface, layer);
             t.setVisibility(mContainerSurface, mOwnerTaskFragment.isVisible());
+            for (int i = 0; i < mPendingClientTransactions.size(); i++) {
+                t.merge(mPendingClientTransactions.get(i));
+            }
+            mPendingClientTransactions.clear();
         }
 
         private void release() {
-            mDecorSurface.release();
-            mContainerSurface.release();
+            getSyncTransaction()
+                    .remove(mDecorSurface)
+                    .remove(mContainerSurface);
         }
     }
 }

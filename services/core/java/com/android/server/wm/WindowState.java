@@ -240,6 +240,7 @@ import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 import android.view.inputmethod.ImeTracker;
+import android.window.ActivityWindowInfo;
 import android.window.ClientWindowFrames;
 import android.window.OnBackInvokedCallbackInfo;
 
@@ -364,6 +365,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private boolean mDragResizing;
     private boolean mDragResizingChangeReported = true;
     private boolean mRedrawForSyncReported = true;
+    private long mCreateTime = System.currentTimeMillis();
 
     /**
      * Used to assosciate a given set of state changes sent from MSG_RESIZED
@@ -1714,6 +1716,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 : DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
     }
 
+    long getCreateTime() {
+        return mCreateTime;
+    }
+
     /**
      * Returns true if, at any point, the application token associated with this window has actually
      * displayed any windows. This is most useful with the "starting up" window to determine if any
@@ -1893,6 +1899,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     boolean isSecureLocked() {
+        if (mWmService.getDisableSecureWindows()) {
+            return false;
+        }
+
         if ((mAttrs.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
             return true;
         }
@@ -3687,19 +3697,32 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         markRedrawForSyncReported();
 
+        // App window resize may trigger Activity#onConfigurationChanged, so we need to update
+        // ActivityWindowInfo as well.
+        final IBinder activityToken;
+        final ActivityWindowInfo activityWindowInfo;
+        if (Flags.activityWindowInfoFlag() && mActivityRecord != null) {
+            activityToken = mActivityRecord.token;
+            activityWindowInfo = mActivityRecord.getActivityWindowInfo();
+        } else {
+            activityToken = null;
+            activityWindowInfo = null;
+        }
+
         if (Flags.bundleClientTransactionFlag()) {
             getProcess().scheduleClientTransactionItem(
                     WindowStateResizeItem.obtain(mClient, mClientWindowFrames, reportDraw,
                             mLastReportedConfiguration, getCompatInsetsState(), forceRelayout,
                             alwaysConsumeSystemBars, displayId,
-                            syncWithBuffers ? mSyncSeqId : -1, isDragResizing));
+                            syncWithBuffers ? mSyncSeqId : -1, isDragResizing,
+                            activityToken, activityWindowInfo));
             onResizePostDispatched(drawPending, prevRotation, displayId);
         } else {
             // TODO(b/301870955): cleanup after launch
             try {
                 mClient.resized(mClientWindowFrames, reportDraw, mLastReportedConfiguration,
                         getCompatInsetsState(), forceRelayout, alwaysConsumeSystemBars, displayId,
-                        syncWithBuffers ? mSyncSeqId : -1, isDragResizing);
+                        syncWithBuffers ? mSyncSeqId : -1, isDragResizing, activityWindowInfo);
                 onResizePostDispatched(drawPending, prevRotation, displayId);
             } catch (RemoteException e) {
                 // Cancel orientation change of this window to avoid blocking unfreeze display.
@@ -5700,7 +5723,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // window becomes visible while the sync group is still active.
             return true;
         }
-        if (mSyncState == SYNC_STATE_WAITING_FOR_DRAW && mLastConfigReportedToClient && isDrawn()) {
+        if (mSyncState == SYNC_STATE_WAITING_FOR_DRAW && mLastConfigReportedToClient && isDrawn()
+                && mPrepareSyncSeqId <= 0) {
             // Complete the sync state immediately for a drawn window that doesn't need to redraw.
             onSyncFinishedDrawing();
         }
