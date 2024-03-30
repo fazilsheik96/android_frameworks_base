@@ -322,7 +322,6 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
-import android.os.DeviceIntegrationUtils;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.PersistableBundle;
@@ -10038,7 +10037,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         final int newDisplayId = getDisplayId();
         final boolean displayChanged = mLastReportedDisplayId != newDisplayId;
-        final int lastReportDisplayID = mLastReportedDisplayId;
         if (displayChanged) {
             mLastReportedDisplayId = newDisplayId;
         }
@@ -10124,12 +10122,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 Integer.toHexString(changes), Integer.toHexString(info.getRealConfigChanged()),
                 mLastReportedConfiguration);
 
-        boolean shouldRelaunchLocked = shouldRelaunchLocked(changes, mTmpConfig);
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-            shouldRelaunchLocked &= !mAtmService.mRemoteTaskManager.shouldIgnoreRelaunch(task, displayChanged,
-                    lastReportDisplayID, newDisplayId, changes);
-        }
-        if (shouldRelaunchLocked) {
+        if (shouldRelaunchLocked(changes, mTmpConfig)) {
             // Aha, the activity isn't handling the change, so DIE DIE DIE.
             if (mVisible && mAtmService.mTmpUpdateConfigurationResult.mIsUpdating
                     && !mTransitionController.isShellTransitionsEnabled()) {
