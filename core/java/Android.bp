@@ -126,6 +126,7 @@ filegroup {
     srcs: [
         "android/os/IExternalVibrationController.aidl",
         "android/os/IExternalVibratorService.aidl",
+        "android/os/ExternalVibrationScale.aidl",
     ],
 }
 
@@ -134,13 +135,35 @@ filegroup {
     srcs: [
         "android/os/Temperature.aidl",
         "android/os/CoolingDevice.aidl",
-        "android/os/IHintManager.aidl",
-        "android/os/IHintSession.aidl",
         "android/os/IThermalEventListener.aidl",
         "android/os/IThermalStatusListener.aidl",
         "android/os/IThermalService.aidl",
         "android/os/IPowerManager.aidl",
         "android/os/IWakeLockCallback.aidl",
+    ],
+}
+
+aidl_interface {
+    name: "android.os.hintmanager_aidl",
+    srcs: [
+        "android/os/IHintManager.aidl",
+        "android/os/IHintSession.aidl",
+    ],
+    unstable: true,
+    backend: {
+        java: {
+            sdk_version: "module_current",
+            enabled: true,
+        },
+        cpp: {
+            enabled: false,
+        },
+        ndk: {
+            enabled: true,
+        },
+    },
+    imports: [
+        "android.hardware.power-V5",
     ],
 }
 
@@ -165,6 +188,9 @@ java_library {
     srcs: [
         "com/android/internal/logging/UiEventLoggerImpl.java",
         ":statslog-framework-java-gen",
+    ],
+    libs: [
+        "androidx.annotation_annotation",
     ],
     static_libs: ["modules-utils-uieventlogger-interface"],
 }
@@ -527,14 +553,10 @@ filegroup {
     ],
 }
 
-// common protolog sources without classes that rely on Android SDK
-filegroup {
-    name: "protolog-common-no-android-src",
+java_library {
+    name: "protolog-group",
     srcs: [
-        ":protolog-common-src",
-    ],
-    exclude_srcs: [
-        "com/android/internal/protolog/common/ProtoLog.java",
+        "com/android/internal/protolog/common/IProtoLogGroup.java",
     ],
 }
 
@@ -547,13 +569,20 @@ filegroup {
     ],
 }
 
+filegroup {
+    name: "protolog-impl",
+    srcs: [
+        "com/android/internal/protolog/ProtoLogImpl.java",
+    ],
+}
+
 java_library {
     name: "protolog-lib",
     platform_apis: true,
     srcs: [
         "com/android/internal/protolog/ProtoLogImpl.java",
         "com/android/internal/protolog/ProtoLogViewerConfigReader.java",
-        ":protolog-common-src",
+        ":perfetto_trace_javastream_protos",
     ],
 }
 

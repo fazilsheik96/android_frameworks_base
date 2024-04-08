@@ -16,12 +16,18 @@
 
 package com.android.systemui.statusbar.notification.dagger;
 
+import android.app.NotificationManager;
 import android.content.Context;
 import android.service.notification.NotificationListenerService;
 
 import com.android.internal.jank.InteractionJankMonitor;
+import com.android.settingslib.statusbar.notification.data.repository.NotificationsSoundPolicyRepository;
+import com.android.settingslib.statusbar.notification.data.repository.NotificationsSoundPolicyRepositoryImpl;
+import com.android.settingslib.statusbar.notification.domain.interactor.NotificationsSoundPolicyInteractor;
 import com.android.systemui.CoreStartable;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.qualifiers.Application;
+import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.res.R;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
@@ -68,6 +74,8 @@ import com.android.systemui.statusbar.notification.interruption.VisualInterrupti
 import com.android.systemui.statusbar.notification.interruption.VisualInterruptionRefactor;
 import com.android.systemui.statusbar.notification.logging.NotificationPanelLogger;
 import com.android.systemui.statusbar.notification.logging.NotificationPanelLoggerImpl;
+import com.android.systemui.statusbar.notification.row.NotificationEntryProcessorFactory;
+import com.android.systemui.statusbar.notification.row.NotificationEntryProcessorFactoryLooperImpl;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.row.OnUserInteractionCallback;
 import com.android.systemui.statusbar.notification.row.ui.viewmodel.ActivatableNotificationViewModelModule;
@@ -79,13 +87,15 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.StatusBarNotificationActivityStarter;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 
+import javax.inject.Provider;
+
 import dagger.Binds;
 import dagger.Module;
 import dagger.Provides;
 import dagger.multibindings.ClassKey;
 import dagger.multibindings.IntoMap;
-
-import javax.inject.Provider;
+import kotlin.coroutines.CoroutineContext;
+import kotlinx.coroutines.CoroutineScope;
 
 /**
  * Dagger Module for classes found within the com.android.systemui.statusbar.notification package.
@@ -226,6 +236,11 @@ public interface NotificationsModule {
 
     /** */
     @Binds
+    NotificationEntryProcessorFactory bindNotificationEntryProcessorFactory(
+            NotificationEntryProcessorFactoryLooperImpl factoryImpl);
+
+    /** */
+    @Binds
     ConversationIconManager bindConversationIconManager(IconManager iconManager);
 
     /** */
@@ -259,4 +274,22 @@ public interface NotificationsModule {
     @ClassKey(VisualInterruptionDecisionProvider.class)
     CoreStartable startVisualInterruptionDecisionProvider(
             VisualInterruptionDecisionProvider provider);
+
+    @Provides
+    @SysUISingleton
+    public static NotificationsSoundPolicyRepository provideNotificationsSoundPolicyRepository(
+            Context context,
+            NotificationManager notificationManager,
+            @Application CoroutineScope coroutineScope,
+            @Background CoroutineContext coroutineContext) {
+        return new NotificationsSoundPolicyRepositoryImpl(context, notificationManager,
+                coroutineScope, coroutineContext);
+    }
+
+    @Provides
+    @SysUISingleton
+    public static NotificationsSoundPolicyInteractor provideNotificationsSoundPolicyInteractror(
+            NotificationsSoundPolicyRepository repository) {
+        return new NotificationsSoundPolicyInteractor(repository);
+    }
 }

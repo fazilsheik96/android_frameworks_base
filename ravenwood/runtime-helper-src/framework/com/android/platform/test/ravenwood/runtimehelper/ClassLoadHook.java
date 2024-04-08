@@ -15,8 +15,9 @@
  */
 package com.android.platform.test.ravenwood.runtimehelper;
 
+import android.platform.test.ravenwood.RavenwoodUtils;
+
 import java.io.File;
-import java.io.PrintStream;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 
@@ -27,8 +28,6 @@ import java.util.ArrayList;
  * load other JNI or do other set up here.
  */
 public class ClassLoadHook {
-    private static PrintStream sOut = System.out;
-
     /**
      * If true, we won't load `libandroid_runtime`
      *
@@ -36,15 +35,14 @@ public class ClassLoadHook {
      * so we need a way to remove the dependency.
      */
     private static final boolean SKIP_LOADING_LIBANDROID = "1".equals(System.getenv(
-            "HOSTTEST_SKIP_LOADING_LIBANDROID"));
+            "RAVENWOOD_SKIP_LOADING_LIBANDROID"));
 
     public static final String CORE_NATIVE_CLASSES = "core_native_classes";
     public static final String ICU_DATA_PATH = "icu.data.path";
     public static final String KEYBOARD_PATHS = "keyboard_paths";
     public static final String GRAPHICS_NATIVE_CLASSES = "graphics_native_classes";
 
-    public static final String VALUE_N_A = "**n/a**";
-    public static final String LIBANDROID_RUNTIME_NAME = "libandroid_runtime";
+    public static final String LIBANDROID_RUNTIME_NAME = "android_runtime";
 
     private static String sInitialDir = new File("").getAbsolutePath();
 
@@ -68,7 +66,7 @@ public class ClassLoadHook {
     }
 
     private static void log(String message) {
-        sOut.println("ClassLoadHook: " + message);
+        System.out.println("ClassLoadHook: " + message);
     }
 
     private static void log(String fmt, Object... args) {
@@ -92,13 +90,6 @@ public class ClassLoadHook {
         }
     }
 
-    private static void loadJniLibrary(String name) {
-        final String path = sInitialDir + "/lib64/" + name + ".so";
-        System.out.println("Loading " + path + " ...");
-        System.load(path);
-        System.out.println("Done loading " + path);
-    }
-
     private static boolean sLoadFrameworkNativeCodeCalled = false;
 
     /**
@@ -115,7 +106,7 @@ public class ClassLoadHook {
         // libandroid_runtime uses Java's system properties to decide what JNI methods to set up.
         // Set up these properties for host-side tests.
 
-        if ("1".equals(System.getenv("HOSTTEST_DUMP_PROPERTIES"))) {
+        if ("1".equals(System.getenv("RAVENWOOD_DUMP_PROPERTIES"))) {
             log("Java system properties:");
             dumpSystemProperties();
         }
@@ -138,10 +129,8 @@ public class ClassLoadHook {
         }
         setProperty(CORE_NATIVE_CLASSES, jniClasses);
         setProperty(GRAPHICS_NATIVE_CLASSES, "");
-        setProperty(ICU_DATA_PATH, VALUE_N_A);
-        setProperty(KEYBOARD_PATHS, VALUE_N_A);
 
-        loadJniLibrary(LIBANDROID_RUNTIME_NAME);
+        RavenwoodUtils.loadJniLibrary(LIBANDROID_RUNTIME_NAME);
     }
 
     /**
@@ -156,7 +145,7 @@ public class ClassLoadHook {
     };
 
     /**
-     * @return if a given method is a native method or not.
+     * @return if a given class has any native method or not.
      */
     private static boolean hasNativeMethod(Class<?> clazz) {
         for (var method : clazz.getDeclaredMethods()) {

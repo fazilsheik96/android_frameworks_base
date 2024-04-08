@@ -21,8 +21,8 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import androidx.test.filters.SmallTest
-import com.android.systemui.SysuiTestCase
 import com.android.systemui.Flags as AConfigFlags
+import com.android.systemui.SysuiTestCase
 import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.flags.Flags
 import com.android.systemui.keyguard.data.repository.FakeKeyguardRepository
@@ -319,7 +319,10 @@ class ClockEventControllerTest : SysuiTestCase() {
     fun listenForDozeAmountTransition_updatesClockDozeAmount() =
         runBlocking(IMMEDIATE) {
             val transitionStep = MutableStateFlow(TransitionStep())
-            whenever(keyguardTransitionInteractor.dozeAmountTransition).thenReturn(transitionStep)
+            whenever(keyguardTransitionInteractor.lockscreenToAodTransition)
+                .thenReturn(transitionStep)
+            whenever(keyguardTransitionInteractor.aodToLockscreenTransition)
+                .thenReturn(transitionStep)
 
             val job = underTest.listenForDozeAmountTransition(this)
             transitionStep.value =

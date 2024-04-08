@@ -19,11 +19,14 @@ package android.view;
 import static android.view.accessibility.Flags.FLAG_FORCE_INVERT_COLOR;
 import static android.view.flags.Flags.FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY;
 import static android.view.flags.Flags.FLAG_TOOLKIT_FRAME_RATE_BY_SIZE_READ_ONLY;
+import static android.view.flags.Flags.FLAG_VIEW_VELOCITY_API;
 import static android.view.Surface.FRAME_RATE_CATEGORY_HIGH;
 import static android.view.Surface.FRAME_RATE_CATEGORY_HIGH_HINT;
 import static android.view.Surface.FRAME_RATE_CATEGORY_LOW;
 import static android.view.Surface.FRAME_RATE_CATEGORY_NORMAL;
 import static android.view.Surface.FRAME_RATE_CATEGORY_NO_PREFERENCE;
+import static android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE;
+import static android.view.Surface.FRAME_RATE_COMPATIBILITY_GTE;
 import static android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
 import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
 import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
@@ -78,6 +81,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -449,7 +453,7 @@ public class ViewRootImplTest {
         ViewRootImpl viewRootImpl = new ViewRootImpl(sContext, display);
 
         boolean result = viewRootImpl.performHapticFeedback(
-                HapticFeedbackConstants.CONTEXT_CLICK, true);
+                HapticFeedbackConstants.CONTEXT_CLICK, true, false /* fromIme */);
 
         assertThat(result).isFalse();
     }
@@ -459,6 +463,7 @@ public class ViewRootImplTest {
      */
     @UiThreadTest
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_getDefaultValues() {
         ViewRootImpl viewRootImpl = new ViewRootImpl(sContext,
@@ -475,6 +480,7 @@ public class ViewRootImplTest {
      * Also, mIsFrameRateBoosting should be true when the visibility becomes visible
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled({FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY,
             FLAG_TOOLKIT_FRAME_RATE_BY_SIZE_READ_ONLY})
     public void votePreferredFrameRate_voteFrameRateCategory_visibility_bySize() {
@@ -508,6 +514,7 @@ public class ViewRootImplTest {
      * <7%: FRAME_RATE_CATEGORY_LOW
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled({FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY,
             FLAG_TOOLKIT_FRAME_RATE_BY_SIZE_READ_ONLY})
     public void votePreferredFrameRate_voteFrameRateCategory_smallSize_bySize() {
@@ -536,6 +543,7 @@ public class ViewRootImplTest {
      * >=7% : FRAME_RATE_CATEGORY_NORMAL
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled({FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY,
             FLAG_TOOLKIT_FRAME_RATE_BY_SIZE_READ_ONLY})
     public void votePreferredFrameRate_voteFrameRateCategory_normalSize_bySize() {
@@ -568,6 +576,7 @@ public class ViewRootImplTest {
      * Also, mIsFrameRateBoosting should be true when the visibility becomes visible
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_voteFrameRateCategory_visibility_defaultHigh() {
         View view = new View(sContext);
@@ -600,6 +609,7 @@ public class ViewRootImplTest {
      * <7%: FRAME_RATE_CATEGORY_NORMAL
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_voteFrameRateCategory_smallSize_defaultHigh() {
         View view = new View(sContext);
@@ -627,6 +637,7 @@ public class ViewRootImplTest {
      * >=7% : FRAME_RATE_CATEGORY_HIGH
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_voteFrameRateCategory_normalSize_defaultHigh() {
         View view = new View(sContext);
@@ -656,6 +667,7 @@ public class ViewRootImplTest {
      * It should take the max value among all of the voted categories per frame.
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_voteFrameRateCategory_aggregate() {
         View view = new View(sContext);
@@ -676,20 +688,20 @@ public class ViewRootImplTest {
         }
 
         sInstrumentation.runOnMainSync(() -> {
-            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_LOW);
+            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_LOW, 0, null);
             assertEquals(viewRootImpl.getPreferredFrameRateCategory(), FRAME_RATE_CATEGORY_LOW);
-            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_NORMAL);
+            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_NORMAL, 0, null);
             assertEquals(viewRootImpl.getPreferredFrameRateCategory(), FRAME_RATE_CATEGORY_NORMAL);
-            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_HIGH_HINT);
+            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_HIGH_HINT, 0, null);
             assertEquals(viewRootImpl.getPreferredFrameRateCategory(),
                     FRAME_RATE_CATEGORY_HIGH_HINT);
-            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_HIGH);
+            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_HIGH, 0, null);
             assertEquals(viewRootImpl.getPreferredFrameRateCategory(), FRAME_RATE_CATEGORY_HIGH);
-            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_HIGH_HINT);
+            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_HIGH_HINT, 0, null);
             assertEquals(viewRootImpl.getPreferredFrameRateCategory(), FRAME_RATE_CATEGORY_HIGH);
-            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_NORMAL);
+            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_NORMAL, 0, null);
             assertEquals(viewRootImpl.getPreferredFrameRateCategory(), FRAME_RATE_CATEGORY_HIGH);
-            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_LOW);
+            viewRootImpl.votePreferredFrameRateCategory(FRAME_RATE_CATEGORY_LOW, 0, null);
             assertEquals(viewRootImpl.getPreferredFrameRateCategory(), FRAME_RATE_CATEGORY_HIGH);
         });
     }
@@ -701,21 +713,56 @@ public class ViewRootImplTest {
      * prioritize 60Hz..
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_voteFrameRate_aggregate() {
         View view = new View(sContext);
         attachViewToWindow(view);
+        ViewRootImpl viewRootImpl = view.getViewRootImpl();
         sInstrumentation.runOnMainSync(() -> {
-            ViewRootImpl viewRootImpl = view.getViewRootImpl();
             assertEquals(viewRootImpl.getPreferredFrameRate(), 0, 0.1);
-            viewRootImpl.votePreferredFrameRate(24);
+            assertEquals(viewRootImpl.getFrameRateCompatibility(),
+                    FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+            assertEquals(viewRootImpl.isFrameRateConflicted(), false);
+            viewRootImpl.votePreferredFrameRate(24, FRAME_RATE_COMPATIBILITY_GTE);
             assertEquals(viewRootImpl.getPreferredFrameRate(), 24, 0.1);
-            viewRootImpl.votePreferredFrameRate(30);
+            assertEquals(viewRootImpl.getFrameRateCompatibility(),
+                    FRAME_RATE_COMPATIBILITY_GTE);
+            assertEquals(viewRootImpl.isFrameRateConflicted(), false);
+            viewRootImpl.votePreferredFrameRate(30, FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
             assertEquals(viewRootImpl.getPreferredFrameRate(), 30, 0.1);
-            viewRootImpl.votePreferredFrameRate(60);
+            // If there is a conflict, then set compatibility to
+            // FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
+            assertEquals(viewRootImpl.getFrameRateCompatibility(),
+                    FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+            // Should be true since there is a conflict between 24 and 30.
+            assertEquals(viewRootImpl.isFrameRateConflicted(), true);
+            view.invalidate();
+        });
+        sInstrumentation.waitForIdleSync();
+
+        sInstrumentation.runOnMainSync(() -> {
+            assertEquals(viewRootImpl.isFrameRateConflicted(), false);
+            viewRootImpl.votePreferredFrameRate(60, FRAME_RATE_COMPATIBILITY_GTE);
             assertEquals(viewRootImpl.getPreferredFrameRate(), 60, 0.1);
-            viewRootImpl.votePreferredFrameRate(120);
+            assertEquals(viewRootImpl.getFrameRateCompatibility(),
+                    FRAME_RATE_COMPATIBILITY_GTE);
+            assertEquals(viewRootImpl.isFrameRateConflicted(), false);
+            viewRootImpl.votePreferredFrameRate(120, FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
             assertEquals(viewRootImpl.getPreferredFrameRate(), 120, 0.1);
+            assertEquals(viewRootImpl.getFrameRateCompatibility(),
+                    FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+            // Should be false since 60 is a divisor of 120.
+            assertEquals(viewRootImpl.isFrameRateConflicted(), false);
+            viewRootImpl.votePreferredFrameRate(60, FRAME_RATE_COMPATIBILITY_GTE);
+            assertEquals(viewRootImpl.getPreferredFrameRate(), 120, 0.1);
+            // compatibility should be remained the same (FRAME_RATE_COMPATIBILITY_FIXED_SOURCE)
+            // since the frame rate 60 is smaller than 120.
+            assertEquals(viewRootImpl.getFrameRateCompatibility(),
+                    FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+            // Should be false since 60 is a divisor of 120.
+            assertEquals(viewRootImpl.isFrameRateConflicted(), false);
+
         });
     }
 
@@ -725,6 +772,7 @@ public class ViewRootImplTest {
      * submit your preferred choice to the ViewRootImpl.
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_voteFrameRate_category() {
         View view = new View(sContext);
@@ -760,9 +808,43 @@ public class ViewRootImplTest {
     }
 
     /**
+     * When velocity of a View is not equal to 0, we call setFrameRateCategory with HIGH.
+     * Also, we shouldn't call setFrameRate.
+     */
+    @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
+    @RequiresFlagsEnabled({FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY, FLAG_VIEW_VELOCITY_API})
+    public void votePreferredFrameRate_voteFrameRateCategory_velocityToHigh() {
+        View view = new View(sContext);
+        WindowManager.LayoutParams wmlp = new WindowManager.LayoutParams(TYPE_APPLICATION_OVERLAY);
+        wmlp.token = new Binder(); // Set a fake token to bypass 'is your activity running' check
+        wmlp.width = 1;
+        wmlp.height = 1;
+
+        sInstrumentation.runOnMainSync(() -> {
+            WindowManager wm = sContext.getSystemService(WindowManager.class);
+            wm.addView(view, wmlp);
+        });
+        sInstrumentation.waitForIdleSync();
+
+        ViewRootImpl viewRootImpl = view.getViewRootImpl();
+
+        sInstrumentation.runOnMainSync(() -> {
+            assertEquals(viewRootImpl.getPreferredFrameRate(), 0, 0.1);
+            view.setFrameContentVelocity(100);
+            view.invalidate();
+            assertTrue(viewRootImpl.getPreferredFrameRate() > 0);
+        });
+        sInstrumentation.waitForIdleSync();
+        assertEquals(viewRootImpl.getLastPreferredFrameRateCategory(), FRAME_RATE_CATEGORY_HIGH);
+        assertEquals(viewRootImpl.getLastPreferredFrameRate(), 0 , 0.1);
+    }
+
+    /**
      * We should boost the frame rate if the value of mInsetsAnimationRunning is true.
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_insetsAnimation() {
         View view = new View(sContext);
@@ -799,6 +881,7 @@ public class ViewRootImplTest {
      * Test FrameRateBoostOnTouchEnabled API
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_frameRateBoostOnTouch() {
         View view = new View(sContext);
@@ -831,6 +914,7 @@ public class ViewRootImplTest {
      * mPreferredFrameRate should be set to 0.
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_voteFrameRateTimeOut() throws InterruptedException {
         final long delay = 200L;
@@ -842,20 +926,33 @@ public class ViewRootImplTest {
 
         sInstrumentation.runOnMainSync(() -> {
             assertEquals(viewRootImpl.getPreferredFrameRate(), 0, 0.1);
-            viewRootImpl.votePreferredFrameRate(24);
+            assertEquals(viewRootImpl.getFrameRateCompatibility(),
+                    FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+            assertEquals(viewRootImpl.isFrameRateConflicted(), false);
+            viewRootImpl.votePreferredFrameRate(24, FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
             assertEquals(viewRootImpl.getPreferredFrameRate(), 24, 0.1);
+            assertEquals(viewRootImpl.getFrameRateCompatibility(),
+                    FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+            assertEquals(viewRootImpl.isFrameRateConflicted(), false);
             view.invalidate();
             assertEquals(viewRootImpl.getPreferredFrameRate(), 24, 0.1);
+            assertEquals(viewRootImpl.getFrameRateCompatibility(),
+                    FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+            assertEquals(viewRootImpl.isFrameRateConflicted(), false);
         });
 
         Thread.sleep(delay);
         assertEquals(viewRootImpl.getPreferredFrameRate(), 0, 0.1);
+        assertEquals(viewRootImpl.getFrameRateCompatibility(),
+                FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+        assertEquals(viewRootImpl.isFrameRateConflicted(), false);
     }
 
     /**
      * A View should either vote a frame rate or a frame rate category instead of both.
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_voteFrameRateOnly() {
         View view = new View(sContext);
@@ -898,6 +995,7 @@ public class ViewRootImplTest {
      * - otherwise, use the previous category value.
      */
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_infrequentLayer_defaultHigh() throws InterruptedException {
         final long delay = 200L;
@@ -943,6 +1041,13 @@ public class ViewRootImplTest {
             assertEquals(viewRootImpl.getPreferredFrameRateCategory(),
                     FRAME_RATE_CATEGORY_NO_PREFERENCE);
         });
+        Thread.sleep(delay);
+        sInstrumentation.runOnMainSync(() -> {
+            view.setRequestedFrameRate(view.REQUESTED_FRAME_RATE_CATEGORY_DEFAULT);
+            view.invalidate();
+            assertEquals(viewRootImpl.getPreferredFrameRateCategory(),
+                    FRAME_RATE_CATEGORY_NO_PREFERENCE);
+        });
 
         // Infrequent update
         Thread.sleep(delay);
@@ -958,6 +1063,7 @@ public class ViewRootImplTest {
      */
     @UiThreadTest
     @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
     @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
     public void votePreferredFrameRate_isFrameRatePowerSavingsBalanced() {
         ViewRootImpl viewRootImpl = new ViewRootImpl(sContext,
@@ -967,6 +1073,61 @@ public class ViewRootImplTest {
         assertEquals(viewRootImpl.isFrameRatePowerSavingsBalanced(), false);
         viewRootImpl.setFrameRatePowerSavingsBalanced(true);
         assertEquals(viewRootImpl.isFrameRatePowerSavingsBalanced(), true);
+    }
+
+    /**
+     * Test the TextureView heuristic:
+     * 1. Store the last 3 invalidates time - FT1, FT2, FT3.
+     * 2. If FT2-FT1 > 15ms && FT3-FT2 > 15ms -> vote for NORMAL category
+     */
+    @Test
+    @Ignore("Can be enabled only after b/330596920 is ready")
+    @RequiresFlagsEnabled(FLAG_TOOLKIT_SET_FRAME_RATE_READ_ONLY)
+    public void votePreferredFrameRate_applyTextureViewHeuristic() throws InterruptedException {
+        final long delay = 30L;
+
+        TextureView view = new TextureView(sContext);
+        WindowManager.LayoutParams wmlp = new WindowManager.LayoutParams(TYPE_APPLICATION_OVERLAY);
+        wmlp.token = new Binder(); // Set a fake token to bypass 'is your activity running' check
+
+        sInstrumentation.runOnMainSync(() -> {
+            WindowManager wm = sContext.getSystemService(WindowManager.class);
+            Display display = wm.getDefaultDisplay();
+            DisplayMetrics metrics = new DisplayMetrics();
+            display.getMetrics(metrics);
+            wmlp.width = (int) (metrics.widthPixels * 0.9);
+            wmlp.height = (int) (metrics.heightPixels * 0.9);
+            wm.addView(view, wmlp);
+        });
+        sInstrumentation.waitForIdleSync();
+
+        ViewRootImpl viewRootImpl = view.getViewRootImpl();
+
+        sInstrumentation.runOnMainSync(() -> {
+            assertEquals(viewRootImpl.getPreferredFrameRateCategory(),
+                    FRAME_RATE_CATEGORY_NO_PREFERENCE);
+            view.invalidate();
+            assertEquals(viewRootImpl.getPreferredFrameRateCategory(),
+                    FRAME_RATE_CATEGORY_HIGH);
+        });
+
+         // reset the frame rate category counts
+        for (int i = 0; i < 5; i++) {
+            Thread.sleep(delay);
+            sInstrumentation.runOnMainSync(() -> {
+                view.setRequestedFrameRate(view.REQUESTED_FRAME_RATE_CATEGORY_NO_PREFERENCE);
+                view.invalidate();
+            });
+            sInstrumentation.waitForIdleSync();
+        }
+
+        Thread.sleep(delay);
+        sInstrumentation.runOnMainSync(() -> {
+            view.setRequestedFrameRate(view.REQUESTED_FRAME_RATE_CATEGORY_DEFAULT);
+            view.invalidate();
+            assertEquals(viewRootImpl.getPreferredFrameRateCategory(),
+                    FRAME_RATE_CATEGORY_NORMAL);
+        });
     }
 
     @Test

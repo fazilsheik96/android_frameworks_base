@@ -31,7 +31,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.Flags;
 import android.content.pm.InstallSourceInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
@@ -51,6 +50,7 @@ import android.provider.Settings;
 import android.text.Html;
 import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -86,6 +86,7 @@ public class PackageInstallerActivity extends Activity {
     static final String EXTRA_APP_SNIPPET = "EXTRA_APP_SNIPPET";
     static final String EXTRA_ORIGINATING_UID_FROM_SESSION_INFO =
         "EXTRA_ORIGINATING_UID_FROM_SESSION_INFO";
+    static final String EXTRA_IS_TRUSTED_SOURCE = "EXTRA_IS_TRUSTED_SOURCE";
     private static final String ALLOW_UNKNOWN_SOURCES_KEY =
             PackageInstallerActivity.class.getName() + "ALLOW_UNKNOWN_SOURCES_KEY";
 
@@ -174,6 +175,7 @@ public class PackageInstallerActivity extends Activity {
         }
 
         viewToEnable.setVisibility(View.VISIBLE);
+        viewToEnable.setMovementMethod(new ScrollingMovementMethod());
 
         mEnableOk = true;
         mOk.setEnabled(true);
@@ -303,21 +305,6 @@ public class PackageInstallerActivity extends Activity {
         return packagesForUid[0];
     }
 
-    private boolean isInstallRequestFromUnknownSource(Intent intent) {
-        if (mCallingPackage != null && intent.getBooleanExtra(
-                Intent.EXTRA_NOT_UNKNOWN_SOURCE, false)) {
-            if (mSourceInfo != null && mSourceInfo.isPrivilegedApp()) {
-                // Privileged apps can bypass unknown sources check if they want.
-                return false;
-            }
-        }
-        if (mSourceInfo != null && checkPermission(Manifest.permission.INSTALL_PACKAGES,
-                -1 /* pid */, mSourceInfo.uid) == PackageManager.PERMISSION_GRANTED) {
-            return false;
-        }
-        return true;
-    }
-
     private void initiateInstall() {
         String pkgName = mPkgInfo.packageName;
         // Check if there is already a package on the device with this name
@@ -398,12 +385,9 @@ public class PackageInstallerActivity extends Activity {
             final int sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID,
                     -1 /* defaultValue */);
             final SessionInfo info = mInstaller.getSessionInfo(sessionId);
-            String resolvedPath = null;
-            if (info != null && Flags.getResolvedApkPath()) {
-                resolvedPath = info.getResolvedBaseApkPath();
-            }
+            String resolvedPath = info != null ? info.getResolvedBaseApkPath() : null;
             if (info == null || !info.isSealed() || resolvedPath == null) {
-                Log.w(TAG, "Session " + mSessionId + " in funky state; ignoring");
+                Log.w(TAG, "Session " + sessionId + " in funky state; ignoring");
                 finish();
                 return;
             }
@@ -418,7 +402,7 @@ public class PackageInstallerActivity extends Activity {
                     -1 /* defaultValue */);
             final SessionInfo info = mInstaller.getSessionInfo(sessionId);
             if (info == null || !info.isPreApprovalRequested()) {
-                Log.w(TAG, "Session " + mSessionId + " in funky state; ignoring");
+                Log.w(TAG, "Session " + sessionId + " in funky state; ignoring");
                 finish();
                 return;
             }
@@ -559,7 +543,7 @@ public class PackageInstallerActivity extends Activity {
      * Check if it is allowed to install the package and initiate install if allowed.
      */
     private void checkIfAllowedAndInitiateInstall() {
-        if (mAllowUnknownSources || !isInstallRequestFromUnknownSource(getIntent())) {
+        if (mAllowUnknownSources || getIntent().getBooleanExtra(EXTRA_IS_TRUSTED_SOURCE, false)) {
             if (mLocalLOGV) Log.i(TAG, "install allowed");
             initiateInstall();
         } else {
@@ -839,7 +823,9 @@ public class PackageInstallerActivity extends Activity {
                     // work for the multiple user case, i.e. the caller task user and started
                     // Activity user are not the same. To avoid having multiple PIAs in the task,
                     // finish the current PackageInstallerActivity
-                    finish();
+                    // Because finish() is overridden to set the installation result, we must use
+                    // the original finish() method, or the confirmation dialog fails to appear.
+                    PackageInstallerActivity.super.finish();
                 }
             }, 500);
 

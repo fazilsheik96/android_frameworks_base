@@ -45,7 +45,6 @@ import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.os.Binder;
 import android.os.Bundle;
-import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
@@ -94,15 +93,30 @@ public class ActivityOptions extends ComponentOptions {
      */
     public static final String EXTRA_USAGE_TIME_REPORT_PACKAGES = "android.usage_time_packages";
 
-    /** No explicit value chosen. The system will decide whether to grant privileges. */
-    public static final int MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED =
-            ComponentOptions.MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED;
-    /** Allow the {@link PendingIntent} to use the background activity start privileges. */
-    public static final int MODE_BACKGROUND_ACTIVITY_START_ALLOWED =
-            ComponentOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED;
-    /** Deny the {@link PendingIntent} to use the background activity start privileges. */
-    public static final int MODE_BACKGROUND_ACTIVITY_START_DENIED =
-            ComponentOptions.MODE_BACKGROUND_ACTIVITY_START_DENIED;
+    /** Enumeration of background activity start modes.
+     *
+     * These define if an app wants to grant it's background activity start privileges to a
+     * {@link PendingIntent}.
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"MODE_BACKGROUND_ACTIVITY_START_"}, value = {
+            MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED,
+            MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
+            MODE_BACKGROUND_ACTIVITY_START_DENIED})
+    public @interface BackgroundActivityStartMode {}
+    /**
+     * No explicit value chosen. The system will decide whether to grant privileges.
+     */
+    public static final int MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED = 0;
+    /**
+     * Allow the {@link PendingIntent} to use the background activity start privileges.
+     */
+    public static final int MODE_BACKGROUND_ACTIVITY_START_ALLOWED = 1;
+    /**
+     * Deny the {@link PendingIntent} to use the background activity start privileges.
+     */
+    public static final int MODE_BACKGROUND_ACTIVITY_START_DENIED = 2;
 
     /**
      * The package name that created the options.
@@ -516,11 +530,6 @@ public class ActivityOptions extends ComponentOptions {
     private int mPendingIntentCreatorBackgroundActivityStartMode =
             MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED;
     private boolean mDisableStartingWindow;
-
-    private int mRemoteTaskFlag;
-    private String mRemoteTaskUUID;
-    private String mRemoteTaskSecurityToken;
-    private int mRemoteTaskLaunchScenario;
 
     /**
      * Create an ActivityOptions specifying a custom animation to run when
@@ -1385,12 +1394,6 @@ public class ActivityOptions extends ComponentOptions {
         mDisableStartingWindow = opts.getBoolean(KEY_DISABLE_STARTING_WINDOW);
         mAnimationAbortListener = IRemoteCallback.Stub.asInterface(
                 opts.getBinder(KEY_ANIM_ABORT_LISTENER));
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-            mRemoteTaskFlag = opts.getInt(RemoteTaskConstants.KEY_REMOTE_TASK_LAUNCH_OPTION, RemoteTaskConstants.REMOTE_TASK_FLAG_DEFAULT);
-            mRemoteTaskUUID = opts.getString(RemoteTaskConstants.KEY_REMOTE_TASK_UUID, null);
-            mRemoteTaskSecurityToken = opts.getString(RemoteTaskConstants.KEY_REMOTE_TASK_SECURITY_TOKEN, null);
-            mRemoteTaskLaunchScenario = RemoteTaskConstants.FLAG_TASK_LAUNCH_SCENARIO_COMMON;
-        }
     }
 
     /**
@@ -1847,61 +1850,6 @@ public class ActivityOptions extends ComponentOptions {
         return mDisableStartingWindow;
     }
 
-    /**
-     * @hide
-     */
-    public int getRemoteTaskFlag() {
-        return mRemoteTaskFlag;
-    }
-
-    /**
-     * @hide
-     */
-    public void setRemoteTaskFlag(int remoteTaskFlag) {
-        this.mRemoteTaskFlag = remoteTaskFlag;
-    }
-
-    /**
-     * @hide
-     */
-    public String getRemoteUuid() {
-        return mRemoteTaskUUID;
-    }
-
-    /**
-     * @hide
-     */
-    public void setRemoteUuid(String remoteUUID) {
-        this.mRemoteTaskUUID = remoteUUID;
-    }
-
-    /**
-     * @hide
-     */
-    public String getRemoteSecurityToken() {
-        return mRemoteTaskSecurityToken;
-    }
-
-    /**
-     * @hide
-     */
-    public void setRemoteSecurityToken(String remoteSecurityToken) {
-        this.mRemoteTaskSecurityToken = remoteSecurityToken;
-    }
-
-    /**
-     * @hide
-     */
-    public int getRemoteTaskLaunchScenario() {
-        return mRemoteTaskLaunchScenario;
-    }
-
-    /**
-     * @hide
-     */
-    public void setRemoteTaskLaunchScenario(int remoteTaskLaunchScenario) {
-        this.mRemoteTaskLaunchScenario = remoteTaskLaunchScenario;
-    }
 
     /**
      * Specifies intent flags to be applied for any activity started from a PendingIntent.
@@ -2554,17 +2502,6 @@ public class ActivityOptions extends ComponentOptions {
         }
         b.putBinder(KEY_ANIM_ABORT_LISTENER,
                 mAnimationAbortListener != null ? mAnimationAbortListener.asBinder() : null);
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-            if (mRemoteTaskFlag != RemoteTaskConstants.REMOTE_TASK_FLAG_DEFAULT) {
-                b.putInt(RemoteTaskConstants.KEY_REMOTE_TASK_LAUNCH_OPTION, mRemoteTaskFlag);
-            }
-            if (mRemoteTaskUUID != null) {
-                b.putString(RemoteTaskConstants.KEY_REMOTE_TASK_UUID, mRemoteTaskUUID);
-            }
-            if (mRemoteTaskSecurityToken != null) {
-                b.putString(RemoteTaskConstants.KEY_REMOTE_TASK_SECURITY_TOKEN, mRemoteTaskSecurityToken);
-            }
-        }
         return b;
     }
 

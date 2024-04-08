@@ -666,24 +666,18 @@
     <string name="fingerprint_authenticated" msgid="2024862866860283100">"Fingerprint authenticated"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="8867889115112348167">"Face authenticated"</string>
     <string name="face_authenticated_confirmation_required" msgid="6872632732508013755">"Face authenticated. Please press confirm"</string>
-    <!-- no translation found for fingerprint_error_hw_not_available (7755729484334001137) -->
-    <skip />
+    <string name="fingerprint_error_hw_not_available" msgid="7755729484334001137">"Fingerprint hardware not available"</string>
     <string name="fingerprint_error_no_space" msgid="7285481581905967580">"Can’t set up fingerprint"</string>
     <string name="fingerprint_error_timeout" msgid="7361192266621252164">"Fingerprint setup timed out. Try again."</string>
-    <!-- no translation found for fingerprint_error_canceled (5541771463159727513) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_user_canceled (2017941773466506863) -->
-    <skip />
+    <string name="fingerprint_error_canceled" msgid="5541771463159727513">"Fingerprint operation cancelled"</string>
+    <string name="fingerprint_error_user_canceled" msgid="2017941773466506863">"Fingerprint operation cancelled by user"</string>
     <string name="fingerprint_error_lockout" msgid="6626753679019351368">"Too many attempts. Use screen lock instead."</string>
     <string name="fingerprint_error_lockout_permanent" msgid="9060651300306264843">"Too many attempts. Use screen lock instead."</string>
     <string name="fingerprint_error_unable_to_process" msgid="2446280592818621224">"Can’t process fingerprint. Try again."</string>
-    <!-- no translation found for fingerprint_error_no_fingerprints (3144806556204061862) -->
-    <skip />
+    <string name="fingerprint_error_no_fingerprints" msgid="3144806556204061862">"No fingerprints enrolled"</string>
     <string name="fingerprint_error_hw_not_present" msgid="5898827259419366359">"This device does not have a fingerprint sensor"</string>
-    <!-- no translation found for fingerprint_error_security_update_required (8440349108169661934) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_bad_calibration (6770614925736183528) -->
-    <skip />
+    <string name="fingerprint_error_security_update_required" msgid="8440349108169661934">"Sensor temporarily disabled"</string>
+    <string name="fingerprint_error_bad_calibration" msgid="6770614925736183528">"Can\'t use fingerprint sensor. Visit a repair provider."</string>
     <string name="fingerprint_error_power_pressed" msgid="5479524500542129414">"Power button pressed"</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"Finger <xliff:g id="FINGERID">%d</xliff:g>"</string>
     <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"Use fingerprint"</string>
@@ -1992,6 +1986,9 @@
     <string name="work_mode_off_title" msgid="6367463960165135829">"Unpause work apps?"</string>
     <string name="work_mode_turn_on" msgid="5316648862401307800">"Unpause"</string>
     <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"Emergency"</string>
+    <string name="set_up_screen_lock_title" msgid="8346083801616474030">"Set a screen lock"</string>
+    <string name="set_up_screen_lock_action_label" msgid="2687634803649209367">"Set screen lock"</string>
+    <string name="private_space_set_up_screen_lock_message" msgid="1109956797005149814">"To use your private space, set a screen lock on this device"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"App is not available"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> is not available right now."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> unavailable"</string>
@@ -2396,4 +2393,5 @@
     <string name="satellite_notification_summary" msgid="5207364139430767162">"You can send and receive messages without a mobile or Wi-Fi network"</string>
     <string name="satellite_notification_open_message" msgid="4149234979688273729">"Open Messages"</string>
     <string name="satellite_notification_how_it_works" msgid="3132069321977520519">"How it works"</string>
+    <string name="unarchival_session_app_label" msgid="6811856981546348205">"Pending…"</string>
 </resources>

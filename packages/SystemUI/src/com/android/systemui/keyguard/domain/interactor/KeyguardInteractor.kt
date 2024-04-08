@@ -27,7 +27,6 @@ import com.android.systemui.bouncer.data.repository.KeyguardBouncerRepository
 import com.android.systemui.common.coroutine.ChannelExt.trySendWithFailureLogging
 import com.android.systemui.common.coroutine.ConflatedCallbackFlow.conflatedCallbackFlow
 import com.android.systemui.common.shared.model.NotificationContainerBounds
-import com.android.systemui.common.shared.model.Position
 import com.android.systemui.common.ui.domain.interactor.ConfigurationInteractor
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.keyguard.data.repository.KeyguardRepository
@@ -37,13 +36,14 @@ import com.android.systemui.keyguard.shared.model.CameraLaunchSourceModel
 import com.android.systemui.keyguard.shared.model.DozeStateModel
 import com.android.systemui.keyguard.shared.model.DozeStateModel.Companion.isDozeOff
 import com.android.systemui.keyguard.shared.model.DozeTransitionModel
+import com.android.systemui.keyguard.shared.model.KeyguardState.GONE
 import com.android.systemui.keyguard.shared.model.KeyguardState.LOCKSCREEN
 import com.android.systemui.keyguard.shared.model.StatusBarState
 import com.android.systemui.power.domain.interactor.PowerInteractor
 import com.android.systemui.res.R
 import com.android.systemui.scene.domain.interactor.SceneInteractor
 import com.android.systemui.scene.shared.flag.SceneContainerFlags
-import com.android.systemui.scene.shared.model.SceneKey
+import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.shade.data.repository.ShadeRepository
 import com.android.systemui.statusbar.CommandQueue
 import com.android.systemui.util.kotlin.sample
@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.combineTransform
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
@@ -82,6 +83,7 @@ constructor(
     shadeRepository: ShadeRepository,
     keyguardTransitionInteractor: KeyguardTransitionInteractor,
     sceneInteractorProvider: Provider<SceneInteractor>,
+    private val fromGoneTransitionInteractor: Provider<FromGoneTransitionInteractor>,
 ) {
     // TODO(b/296118689): move to a repository
     private val _sharedNotificationContainerBounds = MutableStateFlow(NotificationContainerBounds())
@@ -163,24 +165,35 @@ constructor(
             .distinctUntilChanged()
 
     /** Whether the keyguard is showing or not. */
+    @Deprecated("Use KeyguardTransitionInteractor + KeyguardState")
     val isKeyguardShowing: Flow<Boolean> = repository.isKeyguardShowing
 
     /** Whether the keyguard is dismissible or not. */
     val isKeyguardDismissible: Flow<Boolean> = repository.isKeyguardDismissible
 
     /** Whether the keyguard is occluded (covered by an activity). */
+    @Deprecated("Use KeyguardTransitionInteractor + KeyguardState.OCCLUDED")
     val isKeyguardOccluded: Flow<Boolean> = repository.isKeyguardOccluded
 
     /** Whether the keyguard is going away. */
+    @Deprecated("Use KeyguardTransitionInteractor + KeyguardState.GONE")
     val isKeyguardGoingAway: Flow<Boolean> = repository.isKeyguardGoingAway
 
     /** Keyguard can be clipped at the top as the shade is dragged */
     val topClippingBounds: Flow<Int?> =
-        combine(configurationInteractor.onAnyConfigurationChange, repository.topClippingBounds) {
-            _,
-            topClippingBounds ->
-            topClippingBounds
-        }
+        combineTransform(
+                configurationInteractor.onAnyConfigurationChange,
+                keyguardTransitionInteractor
+                    .transitionValue(GONE)
+                    .map { it == 1f }
+                    .onStart { emit(false) },
+                repository.topClippingBounds
+            ) { _, isGone, topClippingBounds ->
+                if (!isGone) {
+                    emit(topClippingBounds)
+                }
+            }
+            .distinctUntilChanged()
 
     /** Last point that [KeyguardRootView] view was tapped */
     val lastRootViewTapPosition: Flow<Point?> = repository.lastRootViewTapPosition.asStateFlow()
@@ -232,9 +245,6 @@ constructor(
     /** The approximate location on the screen of the face unlock sensor, if one is available. */
     val faceSensorLocation: Flow<Point?> = repository.faceSensorLocation
 
-    /** The position of the keyguard clock. */
-    val clockPosition: Flow<Position> = repository.clockPosition
-
     @Deprecated("Use the relevant TransitionViewModel")
     val keyguardAlpha: Flow<Float> = repository.keyguardAlpha
 
@@ -269,8 +279,11 @@ constructor(
         configurationInteractor
             .dimensionPixelSize(R.dimen.keyguard_translate_distance_on_swipe_up)
             .flatMapLatest { translationDistance ->
-                shadeRepository.legacyShadeExpansion.map {
-                    if (it == 0f) {
+                combine(
+                    shadeRepository.legacyShadeExpansion.onStart { emit(0f) },
+                    keyguardTransitionInteractor.transitionValue(GONE).onStart { emit(0f) },
+                ) { legacyShadeExpansion, goneValue ->
+                    if (goneValue == 1f || legacyShadeExpansion == 0f) {
                         // Reset the translation value
                         0f
                     } else {
@@ -278,11 +291,12 @@ constructor(
                         MathUtils.lerp(
                             translationDistance,
                             0,
-                            Interpolators.FAST_OUT_LINEAR_IN.getInterpolation(it)
+                            Interpolators.FAST_OUT_LINEAR_IN.getInterpolation(legacyShadeExpansion)
                         )
                     }
                 }
             }
+            .distinctUntilChanged()
 
     val clockShouldBeCentered: Flow<Boolean> = repository.clockShouldBeCentered
 
@@ -292,7 +306,7 @@ constructor(
             sceneInteractorProvider
                 .get()
                 .transitioningTo
-                .map { it == SceneKey.Lockscreen }
+                .map { it == Scenes.Lockscreen }
                 .distinctUntilChanged()
                 .flatMapLatest { isTransitioningToLockscreenScene ->
                     if (isTransitioningToLockscreenScene) {
@@ -342,10 +356,6 @@ constructor(
         repository.setQuickSettingsVisible(isVisible)
     }
 
-    fun setClockPosition(x: Int, y: Int) {
-        repository.setClockPosition(x, y)
-    }
-
     fun setAlpha(alpha: Float) {
         repository.setKeyguardAlpha(alpha)
     }
@@ -372,6 +382,11 @@ constructor(
 
     fun setTopClippingBounds(top: Int?) {
         repository.topClippingBounds.value = top
+    }
+
+    /** Temporary shim, until [KeyguardWmStateRefactor] is enabled */
+    fun showKeyguard() {
+        fromGoneTransitionInteractor.get().showKeyguard()
     }
 
     companion object {

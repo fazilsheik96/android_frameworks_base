@@ -18,7 +18,6 @@ package com.android.systemui.keyguard.data.repository
 
 import android.os.UserHandle
 import android.provider.Settings
-import androidx.annotation.VisibleForTesting
 import com.android.keyguard.ClockEventController
 import com.android.keyguard.KeyguardClockSwitch.ClockSize
 import com.android.keyguard.KeyguardClockSwitch.LARGE
@@ -41,7 +40,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onStart
@@ -53,14 +51,14 @@ interface KeyguardClockRepository {
     val clockSize: StateFlow<Int>
 
     /** clock size selected in picker, DYNAMIC or SMALL */
-    val selectedClockSize: Flow<SettingsClockSize>
+    val selectedClockSize: StateFlow<SettingsClockSize>
 
     /** clock id, selected from clock carousel in wallpaper picker */
     val currentClockId: Flow<ClockId>
 
     val currentClock: StateFlow<ClockController?>
 
-    val previewClock: StateFlow<ClockController>
+    val previewClock: Flow<ClockController>
 
     val clockEventController: ClockEventController
     fun setClockSize(@ClockSize size: Int)
@@ -85,14 +83,19 @@ constructor(
         _clockSize.value = size
     }
 
-    override val selectedClockSize: Flow<SettingsClockSize> =
+    override val selectedClockSize: StateFlow<SettingsClockSize> =
         secureSettings
             .observerFlow(
                 names = arrayOf(Settings.Secure.LOCKSCREEN_USE_DOUBLE_LINE_CLOCK),
                 userId = UserHandle.USER_SYSTEM,
             )
             .onStart { emit(Unit) } // Forces an initial update.
-            .map { getClockSize() }
+            .map { withContext(backgroundDispatcher) { getClockSize() } }
+            .stateIn(
+                scope = applicationScope,
+                started = SharingStarted.WhileSubscribed(),
+                initialValue = getClockSize()
+            )
 
     override val currentClockId: Flow<ClockId> =
         callbackFlow {
@@ -111,40 +114,38 @@ constructor(
                 awaitClose { clockRegistry.unregisterClockChangeListener(listener) }
             }
             .mapNotNull { it }
-            .distinctUntilChanged()
 
     override val currentClock: StateFlow<ClockController?> =
         currentClockId
-            .map { clockRegistry.createCurrentClock() }
-            .stateIn(
-                scope = applicationScope,
-                started = SharingStarted.WhileSubscribed(),
-                initialValue = clockRegistry.createCurrentClock()
-            )
-
-    override val previewClock: StateFlow<ClockController> =
-        currentClockId
-            .map { clockRegistry.createCurrentClock() }
-            .stateIn(
-                scope = applicationScope,
-                started = SharingStarted.WhileSubscribed(),
-                initialValue = clockRegistry.createCurrentClock()
-            )
-
-    @VisibleForTesting
-    suspend fun getClockSize(): SettingsClockSize {
-        return withContext(backgroundDispatcher) {
-            if (
-                secureSettings.getIntForUser(
-                    Settings.Secure.LOCKSCREEN_USE_DOUBLE_LINE_CLOCK,
-                    1,
-                    UserHandle.USER_CURRENT
-                ) == 1
-            ) {
-                SettingsClockSize.DYNAMIC
-            } else {
-                SettingsClockSize.SMALL
+            .map {
+                clockEventController.clock = clockRegistry.createCurrentClock()
+                clockEventController.clock
             }
+            .stateIn(
+                scope = applicationScope,
+                started = SharingStarted.WhileSubscribed(),
+                initialValue = clockRegistry.createCurrentClock()
+            )
+
+    override val previewClock: Flow<ClockController> =
+        currentClockId.map {
+            // We should create a new instance for each collect call
+            // cause in preview, the same clock will be attached to different view
+            // at the same time
+            clockRegistry.createCurrentClock()
+        }
+
+    private fun getClockSize(): SettingsClockSize {
+        return if (
+            secureSettings.getIntForUser(
+                Settings.Secure.LOCKSCREEN_USE_DOUBLE_LINE_CLOCK,
+                1,
+                UserHandle.USER_CURRENT
+            ) == 1
+        ) {
+            SettingsClockSize.DYNAMIC
+        } else {
+            SettingsClockSize.SMALL
         }
     }
 }

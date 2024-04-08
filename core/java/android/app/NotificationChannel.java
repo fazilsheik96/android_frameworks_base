@@ -562,6 +562,12 @@ public final class NotificationChannel implements Parcelable {
      * audio attributes. Notification channels with an {@link #getImportance() importance} of at
      * least {@link NotificationManager#IMPORTANCE_DEFAULT} should have a sound.
      *
+     * Note: An app-specific sound can be provided in the Uri parameter, but because channels are
+     * persistent for the duration of the app install, and are backed up and restored, the Uri
+     * should be stable. For this reason it is not recommended to use a
+     * {@link ContentResolver#SCHEME_ANDROID_RESOURCE} uri, as resource ids can change on app
+     * upgrade.
+     *
      * Only modifiable before the channel is submitted to
      * {@link NotificationManager#createNotificationChannel(NotificationChannel)}.
      */
@@ -770,7 +776,8 @@ public final class NotificationChannel implements Parcelable {
 
     /**
      * Whether or not notifications posted to this channel can bypass the Do Not Disturb
-     * {@link NotificationManager#INTERRUPTION_FILTER_PRIORITY} mode.
+     * {@link NotificationManager#INTERRUPTION_FILTER_PRIORITY} mode when the active policy allows
+     * priority channels to bypass notification filtering.
      */
     public boolean canBypassDnd() {
         return mBypassDnd;

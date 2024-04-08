@@ -22,8 +22,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 
-import static com.android.wm.shell.desktopmode.EnterDesktopTaskTransitionHandler.FINAL_FREEFORM_SCALE;
-
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.RectEvaluator;
@@ -100,6 +98,7 @@ public class DesktopModeVisualIndicator {
      * Based on the coordinates of the current drag event, determine which indicator type we should
      * display, including no visible indicator.
      */
+    @NonNull
     IndicatorType updateIndicatorType(PointF inputCoordinates, int windowingMode) {
         final DisplayLayout layout = mDisplayController.getDisplayLayout(mTaskInfo.displayId);
         // If we are in freeform, we don't want a visible indicator in the "freeform" drag zone.
@@ -138,18 +137,18 @@ public class DesktopModeVisualIndicator {
     Region calculateFullscreenRegion(DisplayLayout layout,
             @WindowConfiguration.WindowingMode int windowingMode, int captionHeight) {
         final Region region = new Region();
-        int edgeTransitionHeight = mContext.getResources().getDimensionPixelSize(
-                com.android.wm.shell.R.dimen.desktop_mode_transition_area_height);
+        int transitionHeight = windowingMode == WINDOWING_MODE_FREEFORM
+                ? mContext.getResources().getDimensionPixelSize(
+                com.android.wm.shell.R.dimen.desktop_mode_fullscreen_from_desktop_height)
+                : 2 * layout.stableInsets().top;
         // A thin, short Rect at the top of the screen.
         if (windowingMode == WINDOWING_MODE_FREEFORM) {
             int fromFreeformWidth = mContext.getResources().getDimensionPixelSize(
                     com.android.wm.shell.R.dimen.desktop_mode_fullscreen_from_desktop_width);
-            int fromFreeformHeight = mContext.getResources().getDimensionPixelSize(
-                    com.android.wm.shell.R.dimen.desktop_mode_fullscreen_from_desktop_height);
             region.union(new Rect((layout.width() / 2) - (fromFreeformWidth / 2),
                     -captionHeight,
                     (layout.width() / 2) + (fromFreeformWidth / 2),
-                    fromFreeformHeight));
+                    transitionHeight));
         }
         // A screen-wide, shorter Rect if the task is in fullscreen or split.
         if (windowingMode == WINDOWING_MODE_FULLSCREEN
@@ -157,7 +156,7 @@ public class DesktopModeVisualIndicator {
             region.union(new Rect(0,
                     -captionHeight,
                     layout.width(),
-                    edgeTransitionHeight));
+                    transitionHeight));
         }
         return region;
     }
@@ -389,7 +388,8 @@ public class DesktopModeVisualIndicator {
                             layout.width() - padding,
                             layout.height() - padding);
                 case TO_DESKTOP_INDICATOR:
-                    final float adjustmentPercentage = 1f - FINAL_FREEFORM_SCALE;
+                    final float adjustmentPercentage = 1f
+                            - DesktopTasksController.DESKTOP_MODE_INITIAL_BOUNDS_SCALE;
                     return new Rect((int) (adjustmentPercentage * layout.width() / 2),
                             (int) (adjustmentPercentage * layout.height() / 2),
                             (int) (layout.width() - (adjustmentPercentage * layout.width() / 2)),

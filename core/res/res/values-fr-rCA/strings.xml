@@ -667,24 +667,18 @@
     <string name="fingerprint_authenticated" msgid="2024862866860283100">"Empreinte digitale authentifiée"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="8867889115112348167">"Visage authentifié"</string>
     <string name="face_authenticated_confirmation_required" msgid="6872632732508013755">"Visage authentifié, veuillez appuyer sur le bouton Confirmer"</string>
-    <!-- no translation found for fingerprint_error_hw_not_available (7755729484334001137) -->
-    <skip />
+    <string name="fingerprint_error_hw_not_available" msgid="7755729484334001137">"Lecteur d\'empreintes digitales non accessible"</string>
     <string name="fingerprint_error_no_space" msgid="7285481581905967580">"Impossible de configurer l\'empreinte digitale"</string>
     <string name="fingerprint_error_timeout" msgid="7361192266621252164">"Délai dépassé pour configurer l\'empreinte digitale. Réessayez."</string>
-    <!-- no translation found for fingerprint_error_canceled (5541771463159727513) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_user_canceled (2017941773466506863) -->
-    <skip />
+    <string name="fingerprint_error_canceled" msgid="5541771463159727513">"Opération d\'empreinte digitale annulée"</string>
+    <string name="fingerprint_error_user_canceled" msgid="2017941773466506863">"Opération d\'authentification par empreinte digitale annulée par l\'utilisateur"</string>
     <string name="fingerprint_error_lockout" msgid="6626753679019351368">"Trop de tentatives. Utilisez plutôt le verrouillage de l\'écran."</string>
     <string name="fingerprint_error_lockout_permanent" msgid="9060651300306264843">"Trop de tentatives. Utilisez plutôt le verrouillage de l\'écran."</string>
     <string name="fingerprint_error_unable_to_process" msgid="2446280592818621224">"Empreinte digitale non traitable. Réessayez."</string>
-    <!-- no translation found for fingerprint_error_no_fingerprints (3144806556204061862) -->
-    <skip />
+    <string name="fingerprint_error_no_fingerprints" msgid="3144806556204061862">"Aucune empreinte digitale enregistrée"</string>
     <string name="fingerprint_error_hw_not_present" msgid="5898827259419366359">"Cet appareil ne possède pas de capteur d\'empreintes digitales"</string>
-    <!-- no translation found for fingerprint_error_security_update_required (8440349108169661934) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_bad_calibration (6770614925736183528) -->
-    <skip />
+    <string name="fingerprint_error_security_update_required" msgid="8440349108169661934">"Capteur désactivé temporairement"</string>
+    <string name="fingerprint_error_bad_calibration" msgid="6770614925736183528">"Impossible d\'utiliser le capteur d\'empreintes digitales. Visitez un fournisseur de services de réparation."</string>
     <string name="fingerprint_error_power_pressed" msgid="5479524500542129414">"Vous avez appuyé sur l\'interrupteur"</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"Doigt <xliff:g id="FINGERID">%d</xliff:g>"</string>
     <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"Utiliser l\'empreinte digitale"</string>
@@ -1993,6 +1987,9 @@
     <string name="work_mode_off_title" msgid="6367463960165135829">"Réactiver les applis pros?"</string>
     <string name="work_mode_turn_on" msgid="5316648862401307800">"Réactiver"</string>
     <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"Urgence"</string>
+    <string name="set_up_screen_lock_title" msgid="8346083801616474030">"Config. Verrouillage d\'écran"</string>
+    <string name="set_up_screen_lock_action_label" msgid="2687634803649209367">"Config. Verrouillage d\'écran"</string>
+    <string name="private_space_set_up_screen_lock_message" msgid="1109956797005149814">"Config. VÉ pour util. Esp. pr."</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"L\'application n\'est pas accessible"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> n\'est pas accessible pour le moment."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> non accessible"</string>
@@ -2397,4 +2394,5 @@
     <string name="satellite_notification_summary" msgid="5207364139430767162">"Vous pouvez envoyer et recevoir des messages sans avoir recours à un appareil mobile ou à un réseau Wi-Fi"</string>
     <string name="satellite_notification_open_message" msgid="4149234979688273729">"Ouvrir Messages"</string>
     <string name="satellite_notification_how_it_works" msgid="3132069321977520519">"Fonctionnement"</string>
+    <string name="unarchival_session_app_label" msgid="6811856981546348205">"En attente…"</string>
 </resources>

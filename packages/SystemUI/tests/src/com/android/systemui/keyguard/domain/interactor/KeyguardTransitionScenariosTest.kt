@@ -18,15 +18,15 @@ package com.android.systemui.keyguard.domain.interactor
 
 import android.app.StatusBarManager
 import androidx.test.filters.SmallTest
+import com.android.compose.animation.scene.ObservableTransitionState
 import com.android.keyguard.KeyguardSecurityModel
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode.PIN
+import com.android.systemui.Flags
 import com.android.systemui.Flags.FLAG_COMMUNAL_HUB
-import com.android.systemui.Flags.FLAG_KEYGUARD_WM_STATE_REFACTOR
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.bouncer.data.repository.fakeKeyguardBouncerRepository
 import com.android.systemui.communal.domain.interactor.communalInteractor
-import com.android.systemui.communal.shared.model.CommunalSceneKey
-import com.android.systemui.communal.shared.model.ObservableCommunalTransitionState
+import com.android.systemui.communal.shared.model.CommunalScenes
 import com.android.systemui.flags.FakeFeatureFlags
 import com.android.systemui.keyguard.data.repository.FakeKeyguardTransitionRepository
 import com.android.systemui.keyguard.data.repository.fakeCommandQueue
@@ -40,7 +40,6 @@ import com.android.systemui.keyguard.shared.model.StatusBarState
 import com.android.systemui.keyguard.shared.model.TransitionState
 import com.android.systemui.keyguard.shared.model.TransitionStep
 import com.android.systemui.keyguard.util.KeyguardTransitionRepositorySpySubject.Companion.assertThat
-import com.android.systemui.kosmos.testDispatcher
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.power.domain.interactor.PowerInteractor.Companion.setAsleepForTest
 import com.android.systemui.power.domain.interactor.PowerInteractor.Companion.setAwakeForTest
@@ -48,7 +47,6 @@ import com.android.systemui.power.domain.interactor.powerInteractor
 import com.android.systemui.shade.data.repository.fakeShadeRepository
 import com.android.systemui.statusbar.commandQueue
 import com.android.systemui.testKosmos
-import com.android.systemui.user.domain.interactor.SelectedUserInteractor
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.whenever
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -92,30 +90,26 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
     private var commandQueue = kosmos.fakeCommandQueue
     private val shadeRepository = kosmos.fakeShadeRepository
     private val transitionRepository = kosmos.fakeKeyguardTransitionRepository
-    private val transitionInteractor = kosmos.keyguardTransitionInteractor
     private lateinit var featureFlags: FakeFeatureFlags
 
     // Used to verify transition requests for test output
     @Mock private lateinit var keyguardSecurityModel: KeyguardSecurityModel
-    @Mock private lateinit var mSelectedUserInteractor: SelectedUserInteractor
 
     private val fromLockscreenTransitionInteractor = kosmos.fromLockscreenTransitionInteractor
-    private lateinit var fromDreamingTransitionInteractor: FromDreamingTransitionInteractor
-    private lateinit var fromDozingTransitionInteractor: FromDozingTransitionInteractor
-    private lateinit var fromOccludedTransitionInteractor: FromOccludedTransitionInteractor
-    private lateinit var fromGoneTransitionInteractor: FromGoneTransitionInteractor
-    private lateinit var fromAodTransitionInteractor: FromAodTransitionInteractor
-    private lateinit var fromAlternateBouncerTransitionInteractor:
-        FromAlternateBouncerTransitionInteractor
+    private val fromDreamingTransitionInteractor = kosmos.fromDreamingTransitionInteractor
+    private val fromDozingTransitionInteractor = kosmos.fromDozingTransitionInteractor
+    private val fromOccludedTransitionInteractor = kosmos.fromOccludedTransitionInteractor
+    private val fromGoneTransitionInteractor = kosmos.fromGoneTransitionInteractor
+    private val fromAodTransitionInteractor = kosmos.fromAodTransitionInteractor
+    private val fromAlternateBouncerTransitionInteractor =
+        kosmos.fromAlternateBouncerTransitionInteractor
     private val fromPrimaryBouncerTransitionInteractor =
         kosmos.fromPrimaryBouncerTransitionInteractor
-    private lateinit var fromDreamingLockscreenHostedTransitionInteractor:
-        FromDreamingLockscreenHostedTransitionInteractor
-    private lateinit var fromGlanceableHubTransitionInteractor:
-        FromGlanceableHubTransitionInteractor
+    private val fromDreamingLockscreenHostedTransitionInteractor =
+        kosmos.fromDreamingLockscreenHostedTransitionInteractor
+    private val fromGlanceableHubTransitionInteractor = kosmos.fromGlanceableHubTransitionInteractor
 
     private val powerInteractor = kosmos.powerInteractor
-    private val keyguardInteractor = kosmos.keyguardInteractor
     private val communalInteractor = kosmos.communalInteractor
 
     @Before
@@ -125,122 +119,21 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
         whenever(keyguardSecurityModel.getSecurityMode(anyInt())).thenReturn(PIN)
 
         mSetFlagsRule.enableFlags(FLAG_COMMUNAL_HUB)
+        mSetFlagsRule.disableFlags(
+            Flags.FLAG_KEYGUARD_WM_STATE_REFACTOR,
+        )
         featureFlags = FakeFeatureFlags()
-
-        val glanceableHubTransitions =
-            GlanceableHubTransitions(
-                scope = testScope,
-                bgDispatcher = kosmos.testDispatcher,
-                transitionInteractor = transitionInteractor,
-                transitionRepository = transitionRepository,
-                communalInteractor = communalInteractor
-            )
 
         fromLockscreenTransitionInteractor.start()
         fromPrimaryBouncerTransitionInteractor.start()
-
-        fromDreamingTransitionInteractor =
-            FromDreamingTransitionInteractor(
-                    scope = testScope,
-                    bgDispatcher = kosmos.testDispatcher,
-                    mainDispatcher = kosmos.testDispatcher,
-                    keyguardInteractor = keyguardInteractor,
-                    transitionRepository = transitionRepository,
-                    transitionInteractor = transitionInteractor,
-                    glanceableHubTransitions = glanceableHubTransitions,
-                )
-                .apply { start() }
-
-        fromDreamingLockscreenHostedTransitionInteractor =
-            FromDreamingLockscreenHostedTransitionInteractor(
-                    scope = testScope,
-                    bgDispatcher = kosmos.testDispatcher,
-                    mainDispatcher = kosmos.testDispatcher,
-                    keyguardInteractor = keyguardInteractor,
-                    transitionRepository = transitionRepository,
-                    transitionInteractor = transitionInteractor,
-                )
-                .apply { start() }
-
-        fromAodTransitionInteractor =
-            FromAodTransitionInteractor(
-                    scope = testScope,
-                    bgDispatcher = kosmos.testDispatcher,
-                    mainDispatcher = kosmos.testDispatcher,
-                    keyguardInteractor = keyguardInteractor,
-                    transitionRepository = transitionRepository,
-                    transitionInteractor = transitionInteractor,
-                )
-                .apply { start() }
-
-        fromGoneTransitionInteractor =
-            FromGoneTransitionInteractor(
-                    scope = testScope,
-                    bgDispatcher = kosmos.testDispatcher,
-                    mainDispatcher = kosmos.testDispatcher,
-                    keyguardInteractor = keyguardInteractor,
-                    transitionRepository = transitionRepository,
-                    transitionInteractor = transitionInteractor,
-                    powerInteractor = powerInteractor,
-                    communalInteractor = communalInteractor,
-                )
-                .apply { start() }
-
-        fromDozingTransitionInteractor =
-            FromDozingTransitionInteractor(
-                    scope = testScope,
-                    bgDispatcher = kosmos.testDispatcher,
-                    mainDispatcher = kosmos.testDispatcher,
-                    keyguardInteractor = keyguardInteractor,
-                    transitionRepository = transitionRepository,
-                    transitionInteractor = transitionInteractor,
-                    powerInteractor = powerInteractor,
-                    communalInteractor = communalInteractor,
-                )
-                .apply { start() }
-
-        fromOccludedTransitionInteractor =
-            FromOccludedTransitionInteractor(
-                    scope = testScope,
-                    bgDispatcher = kosmos.testDispatcher,
-                    mainDispatcher = kosmos.testDispatcher,
-                    keyguardInteractor = keyguardInteractor,
-                    transitionRepository = transitionRepository,
-                    transitionInteractor = transitionInteractor,
-                    powerInteractor = powerInteractor,
-                    communalInteractor = communalInteractor,
-                )
-                .apply { start() }
-
-        fromAlternateBouncerTransitionInteractor =
-            FromAlternateBouncerTransitionInteractor(
-                    scope = testScope,
-                    bgDispatcher = kosmos.testDispatcher,
-                    mainDispatcher = kosmos.testDispatcher,
-                    keyguardInteractor = keyguardInteractor,
-                    transitionRepository = transitionRepository,
-                    transitionInteractor = transitionInteractor,
-                    communalInteractor = communalInteractor,
-                    powerInteractor = powerInteractor,
-                )
-                .apply { start() }
-
-        fromGlanceableHubTransitionInteractor =
-            FromGlanceableHubTransitionInteractor(
-                    scope = testScope,
-                    bgDispatcher = kosmos.testDispatcher,
-                    mainDispatcher = kosmos.testDispatcher,
-                    glanceableHubTransitions = glanceableHubTransitions,
-                    keyguardInteractor = keyguardInteractor,
-                    transitionRepository = transitionRepository,
-                    transitionInteractor = transitionInteractor,
-                    powerInteractor = powerInteractor,
-                )
-                .apply { start() }
-
-        mSetFlagsRule.disableFlags(
-            FLAG_KEYGUARD_WM_STATE_REFACTOR,
-        )
+        fromDreamingTransitionInteractor.start()
+        fromDreamingLockscreenHostedTransitionInteractor.start()
+        fromAodTransitionInteractor.start()
+        fromGoneTransitionInteractor.start()
+        fromDozingTransitionInteractor.start()
+        fromOccludedTransitionInteractor.start()
+        fromAlternateBouncerTransitionInteractor.start()
+        fromGlanceableHubTransitionInteractor.start()
     }
 
     @Test
@@ -257,7 +150,9 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
                 .startedTransition(
                     to = KeyguardState.PRIMARY_BOUNCER,
                     from = KeyguardState.LOCKSCREEN,
-                    ownerName = "FromLockscreenTransitionInteractor",
+                    ownerName =
+                        "FromLockscreenTransitionInteractor" +
+                            "(#listenForLockscreenToPrimaryBouncer)",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -282,7 +177,7 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
                 .startedTransition(
                     to = KeyguardState.DOZING,
                     from = KeyguardState.OCCLUDED,
-                    ownerName = "FromOccludedTransitionInteractor",
+                    ownerName = "FromOccludedTransitionInteractor(Sleep transition triggered)",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -307,7 +202,7 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
                 .startedTransition(
                     to = KeyguardState.AOD,
                     from = KeyguardState.OCCLUDED,
-                    ownerName = "FromOccludedTransitionInteractor",
+                    ownerName = "FromOccludedTransitionInteractor(Sleep transition triggered)",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -389,7 +284,7 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
                 .startedTransition(
                     to = KeyguardState.DOZING,
                     from = KeyguardState.LOCKSCREEN,
-                    ownerName = "FromLockscreenTransitionInteractor",
+                    ownerName = "FromLockscreenTransitionInteractor(Sleep transition triggered)",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -414,7 +309,7 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
                 .startedTransition(
                     to = KeyguardState.AOD,
                     from = KeyguardState.LOCKSCREEN,
-                    ownerName = "FromLockscreenTransitionInteractor",
+                    ownerName = "FromLockscreenTransitionInteractor(Sleep transition triggered)",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -575,8 +470,9 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
             runCurrent()
 
             // WHEN the device begins to wake
+            keyguardRepository.setKeyguardShowing(true)
             powerInteractor.setAwakeForTest()
-            runCurrent()
+            advanceTimeBy(60L)
 
             assertThat(transitionRepository)
                 .startedTransition(
@@ -631,20 +527,97 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
         }
 
     @Test
-    fun dozingToGone() =
+    fun dozingToGoneWithUnlock() =
         testScope.runTest {
             // GIVEN a prior transition has run to DOZING
             runTransitionAndSetWakefulness(KeyguardState.LOCKSCREEN, KeyguardState.DOZING)
+            runCurrent()
 
             // WHEN biometrics succeeds with wake and unlock mode
+            powerInteractor.setAwakeForTest()
             keyguardRepository.setBiometricUnlockState(BiometricUnlockModel.WAKE_AND_UNLOCK)
-            runCurrent()
+            advanceTimeBy(60L)
 
             assertThat(transitionRepository)
                 .startedTransition(
                     to = KeyguardState.GONE,
                     from = KeyguardState.DOZING,
                     ownerName = "FromDozingTransitionInteractor",
+                    animatorAssertion = { it.isNotNull() }
+                )
+
+            coroutineContext.cancelChildren()
+        }
+
+    @Test
+    fun dozingToPrimaryBouncer() =
+        testScope.runTest {
+            // GIVEN a prior transition has run to DOZING
+            runTransitionAndSetWakefulness(KeyguardState.LOCKSCREEN, KeyguardState.DOZING)
+            runCurrent()
+
+            // WHEN awaked by a request to show the primary bouncer, as can happen if SPFS is
+            // touched after boot
+            powerInteractor.setAwakeForTest()
+            bouncerRepository.setPrimaryShow(true)
+            advanceTimeBy(60L)
+
+            assertThat(transitionRepository)
+                .startedTransition(
+                    to = KeyguardState.PRIMARY_BOUNCER,
+                    from = KeyguardState.DOZING,
+                    ownerName = "FromDozingTransitionInteractor",
+                    animatorAssertion = { it.isNotNull() }
+                )
+
+            coroutineContext.cancelChildren()
+        }
+
+    /** This handles security method NONE and screen off with lock timeout */
+    @Test
+    fun dozingToGoneWithKeyguardNotShowing() =
+        testScope.runTest {
+            // GIVEN a prior transition has run to DOZING
+            runTransitionAndSetWakefulness(KeyguardState.LOCKSCREEN, KeyguardState.DOZING)
+            runCurrent()
+
+            // WHEN the device wakes up without a keyguard
+            keyguardRepository.setKeyguardShowing(false)
+            keyguardRepository.setKeyguardDismissible(true)
+            powerInteractor.setAwakeForTest()
+            advanceTimeBy(60L)
+
+            assertThat(transitionRepository)
+                .startedTransition(
+                    to = KeyguardState.GONE,
+                    from = KeyguardState.DOZING,
+                    ownerName = "FromDozingTransitionInteractor",
+                    animatorAssertion = { it.isNotNull() }
+                )
+
+            coroutineContext.cancelChildren()
+        }
+
+    /** This handles security method NONE and screen off with lock timeout */
+    @Test
+    fun dreamingToGoneWithKeyguardNotShowing() =
+        testScope.runTest {
+            // GIVEN a prior transition has run to DREAMING
+            keyguardRepository.setDreamingWithOverlay(true)
+            runTransitionAndSetWakefulness(KeyguardState.LOCKSCREEN, KeyguardState.DREAMING)
+            runCurrent()
+
+            // WHEN the device wakes up without a keyguard
+            keyguardRepository.setKeyguardShowing(false)
+            keyguardRepository.setKeyguardDismissible(true)
+            keyguardRepository.setDreamingWithOverlay(false)
+            advanceTimeBy(60L)
+
+            assertThat(transitionRepository)
+                .startedTransition(
+                    to = KeyguardState.GONE,
+                    from = KeyguardState.DREAMING,
+                    ownerName = "FromDreamingTransitionInteractor",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -660,15 +633,16 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
 
             // GIVEN the device is idle on the glanceable hub
             val idleTransitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Idle(CommunalSceneKey.Communal)
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Idle(CommunalScenes.Communal)
                 )
             communalInteractor.setTransitionState(idleTransitionState)
             runCurrent()
 
             // WHEN the device begins to wake
+            keyguardRepository.setKeyguardShowing(true)
             powerInteractor.setAwakeForTest()
-            runCurrent()
+            advanceTimeBy(60L)
 
             assertThat(transitionRepository)
                 .startedTransition(
@@ -699,7 +673,7 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
                 .startedTransition(
                     to = KeyguardState.DOZING,
                     from = KeyguardState.GONE,
-                    ownerName = "FromGoneTransitionInteractor",
+                    ownerName = "FromGoneTransitionInteractor(Sleep transition triggered)",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -724,7 +698,7 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
                 .startedTransition(
                     to = KeyguardState.AOD,
                     from = KeyguardState.GONE,
-                    ownerName = "FromGoneTransitionInteractor",
+                    ownerName = "FromGoneTransitionInteractor(Sleep transition triggered)",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -817,8 +791,8 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
 
             // GIVEN the device is idle on the glanceable hub
             val idleTransitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Idle(CommunalSceneKey.Communal)
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Idle(CommunalScenes.Communal)
                 )
             communalInteractor.setTransitionState(idleTransitionState)
             runCurrent()
@@ -966,8 +940,8 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
 
             // GIVEN the device is idle on the glanceable hub
             val idleTransitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Idle(CommunalSceneKey.Communal)
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Idle(CommunalScenes.Communal)
                 )
             communalInteractor.setTransitionState(idleTransitionState)
             runCurrent()
@@ -991,12 +965,14 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
     @Test
     fun primaryBouncerToAod() =
         testScope.runTest {
+            // GIVEN aod available
+            keyguardRepository.setAodAvailable(true)
+            runCurrent()
+
             // GIVEN a prior transition has run to PRIMARY_BOUNCER
             bouncerRepository.setPrimaryShow(true)
             runTransitionAndSetWakefulness(KeyguardState.LOCKSCREEN, KeyguardState.PRIMARY_BOUNCER)
 
-            // GIVEN aod available and starting to sleep
-            keyguardRepository.setAodAvailable(true)
             powerInteractor.setAsleepForTest()
 
             // WHEN the primaryBouncer stops showing
@@ -1006,7 +982,8 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
             // THEN a transition to AOD should occur
             assertThat(transitionRepository)
                 .startedTransition(
-                    ownerName = "FromPrimaryBouncerTransitionInteractor",
+                    ownerName =
+                        "FromPrimaryBouncerTransitionInteractor" + "(Sleep transition triggered)",
                     from = KeyguardState.PRIMARY_BOUNCER,
                     to = KeyguardState.AOD,
                     animatorAssertion = { it.isNotNull() },
@@ -1033,7 +1010,8 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
             // THEN a transition to DOZING should occur
             assertThat(transitionRepository)
                 .startedTransition(
-                    ownerName = "FromPrimaryBouncerTransitionInteractor",
+                    ownerName =
+                        "FromPrimaryBouncerTransitionInteractor" + "(Sleep transition triggered)",
                     from = KeyguardState.PRIMARY_BOUNCER,
                     to = KeyguardState.DOZING,
                     animatorAssertion = { it.isNotNull() },
@@ -1074,8 +1052,8 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
 
             // GIVEN the device is idle on the glanceable hub
             val idleTransitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Idle(CommunalSceneKey.Communal)
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Idle(CommunalScenes.Communal)
                 )
             communalInteractor.setTransitionState(idleTransitionState)
             runCurrent()
@@ -1109,8 +1087,8 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
 
             // GIVEN the device is idle on the glanceable hub
             val idleTransitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Idle(CommunalSceneKey.Communal)
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Idle(CommunalScenes.Communal)
                 )
             communalInteractor.setTransitionState(idleTransitionState)
             runCurrent()
@@ -1227,8 +1205,8 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
 
             // GIVEN the device is idle on the glanceable hub
             val idleTransitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Idle(CommunalSceneKey.Communal)
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Idle(CommunalScenes.Communal)
                 )
             communalInteractor.setTransitionState(idleTransitionState)
             runCurrent()
@@ -1336,8 +1314,9 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
 
             // WHEN the keyguard is occluded and device wakes up
             keyguardRepository.setKeyguardOccluded(true)
+            keyguardRepository.setKeyguardShowing(true)
             powerInteractor.setAwakeForTest()
-            runCurrent()
+            advanceTimeBy(60L)
 
             // THEN a transition to OCCLUDED should occur
             assertThat(transitionRepository)
@@ -1415,13 +1394,13 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
             runCurrent()
 
             // WHEN a transition to the glanceable hub starts
-            val currentScene = CommunalSceneKey.Blank
-            val targetScene = CommunalSceneKey.Communal
+            val currentScene = CommunalScenes.Blank
+            val targetScene = CommunalScenes.Communal
 
             val progress = MutableStateFlow(0f)
             val transitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Transition(
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Transition(
                         fromScene = currentScene,
                         toScene = targetScene,
                         progress = progress,
@@ -1562,7 +1541,9 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
             // THEN a transition from LOCKSCREEN => PRIMARY_BOUNCER should occur
             assertThat(transitionRepository)
                 .startedTransition(
-                    ownerName = "FromLockscreenTransitionInteractor",
+                    ownerName =
+                        "FromLockscreenTransitionInteractor" +
+                            "(#listenForLockscreenToPrimaryBouncerDragging)",
                     from = KeyguardState.LOCKSCREEN,
                     to = KeyguardState.PRIMARY_BOUNCER,
                     animatorAssertion = { it.isNull() }, // dragging should be manually animated
@@ -1594,13 +1575,13 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
             runCurrent()
 
             // WHEN a glanceable hub transition starts
-            val currentScene = CommunalSceneKey.Blank
-            val targetScene = CommunalSceneKey.Communal
+            val currentScene = CommunalScenes.Blank
+            val targetScene = CommunalScenes.Communal
 
             val progress = MutableStateFlow(0f)
             val transitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Transition(
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Transition(
                         fromScene = currentScene,
                         toScene = targetScene,
                         progress = progress,
@@ -1625,8 +1606,8 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
             clearInvocations(transitionRepository)
             runTransitionAndSetWakefulness(KeyguardState.LOCKSCREEN, KeyguardState.GLANCEABLE_HUB)
             val idleTransitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Idle(currentScene)
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Idle(currentScene)
                 )
             communalInteractor.setTransitionState(idleTransitionState)
             runCurrent()
@@ -1650,13 +1631,13 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
             runCurrent()
 
             // WHEN a transition away from glanceable hub starts
-            val currentScene = CommunalSceneKey.Communal
-            val targetScene = CommunalSceneKey.Blank
+            val currentScene = CommunalScenes.Communal
+            val targetScene = CommunalScenes.Blank
 
             val progress = MutableStateFlow(0f)
             val transitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Transition(
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Transition(
                         fromScene = currentScene,
                         toScene = targetScene,
                         progress = progress,
@@ -1680,8 +1661,8 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
             clearInvocations(transitionRepository)
             runTransitionAndSetWakefulness(KeyguardState.GLANCEABLE_HUB, KeyguardState.LOCKSCREEN)
             val idleTransitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Idle(currentScene)
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Idle(currentScene)
                 )
             communalInteractor.setTransitionState(idleTransitionState)
             runCurrent()
@@ -1767,8 +1748,8 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
 
             // GIVEN the device is idle on the glanceable hub
             val idleTransitionState =
-                MutableStateFlow<ObservableCommunalTransitionState>(
-                    ObservableCommunalTransitionState.Idle(CommunalSceneKey.Communal)
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Idle(CommunalScenes.Communal)
                 )
             communalInteractor.setTransitionState(idleTransitionState)
             runCurrent()
@@ -1812,26 +1793,40 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
     @Test
     fun glanceableHubToDreaming() =
         testScope.runTest {
-            // GIVEN a device that is not dreaming or dozing
-            keyguardRepository.setDreamingWithOverlay(false)
+            // GIVEN that we are dreaming and not dozing
+            keyguardRepository.setDreaming(true)
             keyguardRepository.setDozeTransitionModel(
                 DozeTransitionModel(from = DozeStateModel.DOZE, to = DozeStateModel.FINISH)
             )
             runCurrent()
 
             // GIVEN a prior transition has run to GLANCEABLE_HUB
-            runTransitionAndSetWakefulness(KeyguardState.LOCKSCREEN, KeyguardState.GLANCEABLE_HUB)
+            runTransitionAndSetWakefulness(KeyguardState.DREAMING, KeyguardState.GLANCEABLE_HUB)
+            runCurrent()
 
-            // WHEN the device begins to dream
-            keyguardRepository.setDreamingWithOverlay(true)
-            advanceTimeBy(100L)
+            // WHEN a transition away from glanceable hub starts
+            val currentScene = CommunalScenes.Communal
+            val targetScene = CommunalScenes.Blank
+
+            val transitionState =
+                MutableStateFlow<ObservableTransitionState>(
+                    ObservableTransitionState.Transition(
+                        fromScene = currentScene,
+                        toScene = targetScene,
+                        progress = flowOf(0f, 0.1f),
+                        isInitiatedByUserInput = false,
+                        isUserInputOngoing = flowOf(false),
+                    )
+                )
+            communalInteractor.setTransitionState(transitionState)
+            runCurrent()
 
             assertThat(transitionRepository)
                 .startedTransition(
                     ownerName = FromGlanceableHubTransitionInteractor::class.simpleName,
                     from = KeyguardState.GLANCEABLE_HUB,
                     to = KeyguardState.DREAMING,
-                    animatorAssertion = { it.isNotNull() },
+                    animatorAssertion = { it.isNull() }, // transition should be manually animated
                 )
 
             coroutineContext.cancelChildren()

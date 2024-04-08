@@ -18,20 +18,17 @@
 
 package com.android.systemui.keyguard.ui.viewmodel
 
+import android.util.Log
 import android.util.MathUtils
 import com.android.app.animation.Interpolators
 import com.android.keyguard.KeyguardClockSwitch
-import com.android.systemui.Flags
 import com.android.systemui.common.ui.domain.interactor.ConfigurationInteractor
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.keyguard.MigrateClocksToBlueprint
 import com.android.systemui.keyguard.domain.interactor.BurnInInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
 import com.android.systemui.keyguard.shared.model.BurnInModel
-import com.android.systemui.keyguard.shared.model.KeyguardState.ALTERNATE_BOUNCER
-import com.android.systemui.keyguard.shared.model.KeyguardState.AOD
-import com.android.systemui.keyguard.shared.model.KeyguardState.GONE
-import com.android.systemui.keyguard.shared.model.KeyguardState.PRIMARY_BOUNCER
 import com.android.systemui.keyguard.shared.model.TransitionState
 import com.android.systemui.keyguard.shared.model.TransitionState.RUNNING
 import com.android.systemui.keyguard.shared.model.TransitionState.STARTED
@@ -47,7 +44,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 
 /**
@@ -67,23 +63,26 @@ constructor(
     private val occludedToLockscreenTransitionViewModel: OccludedToLockscreenTransitionViewModel,
     private val keyguardClockViewModel: KeyguardClockViewModel,
 ) {
-    /** Horizontal translation for elements that need to apply anti-burn-in tactics. */
-    fun translationX(
-        params: BurnInParameters,
-    ): Flow<Float> {
-        return burnIn(params).map { it.translationX.toFloat() }
-    }
+    private val TAG = "AodBurnInViewModel"
 
-    /** Vertical translation for elements that need to apply anti-burn-in tactics. */
-    fun translationY(
-        params: BurnInParameters,
-    ): Flow<Float> {
+    /** All burn-in movement: x,y,scale, to shift items and prevent burn-in */
+    fun movement(
+        burnInParams: BurnInParameters,
+    ): Flow<BurnInModel> {
+        val params =
+            if (burnInParams.minViewY < burnInParams.topInset) {
+                // minViewY should never be below the inset. Correct it if needed
+                Log.w(TAG, "minViewY is below topInset: $burnInParams")
+                burnInParams.copy(minViewY = burnInParams.topInset)
+            } else {
+                burnInParams
+            }
         return configurationInteractor
             .dimensionPixelSize(R.dimen.keyguard_enter_from_top_translation_y)
             .flatMapLatest { enterFromTopAmount ->
                 combine(
                     keyguardInteractor.keyguardTranslationY.onStart { emit(0f) },
-                    burnIn(params).map { it.translationY.toFloat() }.onStart { emit(0f) },
+                    burnIn(params).onStart { emit(BurnInModel()) },
                     goneToAodTransitionViewModel
                         .enterFromTopTranslationY(enterFromTopAmount)
                         .onStart { emit(StateToValue()) },
@@ -93,30 +92,24 @@ constructor(
                     aodToLockscreenTransitionViewModel.translationY(params.translationY).onStart {
                         emit(StateToValue())
                     },
-                ) { keyguardTranslationY, burnInY, goneToAod, occludedToLockscreen, aodToLockscreen
-                    ->
-                    if (isInTransition(aodToLockscreen.transitionState)) {
-                        aodToLockscreen.value ?: 0f
-                    } else if (isInTransition(goneToAod.transitionState)) {
-                        (goneToAod.value ?: 0f) + burnInY
-                    } else {
-                        burnInY + occludedToLockscreen + keyguardTranslationY
-                    }
+                ) {
+                    keyguardTranslationY,
+                    burnInModel,
+                    goneToAod,
+                    occludedToLockscreen,
+                    aodToLockscreen ->
+                    val translationY =
+                        if (isInTransition(aodToLockscreen.transitionState)) {
+                            aodToLockscreen.value ?: 0f
+                        } else if (isInTransition(goneToAod.transitionState)) {
+                            (goneToAod.value ?: 0f) + burnInModel.translationY
+                        } else {
+                            burnInModel.translationY + occludedToLockscreen + keyguardTranslationY
+                        }
+                    burnInModel.copy(translationY = translationY.toInt())
                 }
             }
             .distinctUntilChanged()
-    }
-
-    /** Scale for elements that need to apply anti-burn-in tactics. */
-    fun scale(
-        params: BurnInParameters,
-    ): Flow<BurnInScaleViewModel> {
-        return burnIn(params).map {
-            BurnInScaleViewModel(
-                scale = it.scale,
-                scaleClockOnly = it.scaleClockOnly,
-            )
-        }
     }
 
     private fun isInTransition(state: TransitionState): Boolean {
@@ -127,18 +120,13 @@ constructor(
         params: BurnInParameters,
     ): Flow<BurnInModel> {
         return combine(
-            merge(
-                    keyguardTransitionInteractor.transition(GONE, AOD).map { it.value },
-                    keyguardTransitionInteractor.transition(AOD, PRIMARY_BOUNCER).map {
-                        1f - it.value
-                    },
-                    keyguardTransitionInteractor.transition(ALTERNATE_BOUNCER, AOD).map {
-                        it.value
-                    },
-                    keyguardTransitionInteractor.dozeAmountTransition.map { it.value },
-                )
-                .map { dozeAmount -> Interpolators.FAST_OUT_SLOW_IN.getInterpolation(dozeAmount) },
-            burnInInteractor.keyguardBurnIn,
+            keyguardTransitionInteractor.dozeAmountTransition.map {
+                Interpolators.FAST_OUT_SLOW_IN.getInterpolation(it.value)
+            },
+            burnInInteractor.burnIn(
+                xDimenResourceId = R.dimen.burn_in_prevention_offset_x,
+                yDimenResourceId = R.dimen.burn_in_prevention_offset_y
+            ),
         ) { interpolated, burnIn ->
             val useScaleOnly =
                 (clockController(params.clockControllerProvider)
@@ -157,12 +145,11 @@ constructor(
                 // Ensure the desired translation doesn't encroach on the top inset
                 val burnInY = MathUtils.lerp(0, burnIn.translationY, interpolated).toInt()
                 val translationY =
-                    if (Flags.migrateClocksToBlueprint()) {
+                    if (MigrateClocksToBlueprint.isEnabled) {
                         max(params.topInset - params.minViewY, burnInY)
                     } else {
                         max(params.topInset, params.minViewY + burnInY) - params.minViewY
                     }
-
                 BurnInModel(
                     translationX = MathUtils.lerp(0, burnIn.translationX, interpolated).toInt(),
                     translationY = translationY,
@@ -181,8 +168,8 @@ constructor(
     private fun clockController(
         provider: Provider<ClockController>?,
     ): Provider<ClockController>? {
-        return if (Flags.migrateClocksToBlueprint()) {
-            Provider { keyguardClockViewModel.clock }
+        return if (MigrateClocksToBlueprint.isEnabled) {
+            Provider { keyguardClockViewModel.currentClock.value }
         } else {
             provider
         }

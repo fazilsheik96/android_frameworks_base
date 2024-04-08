@@ -81,6 +81,8 @@ public interface NotificationRowContentBinder {
                     FLAG_CONTENT_VIEW_HEADS_UP,
                     FLAG_CONTENT_VIEW_PUBLIC,
                     FLAG_CONTENT_VIEW_SINGLE_LINE,
+                    FLAG_GROUP_SUMMARY_HEADER,
+                    FLAG_LOW_PRIORITY_GROUP_SUMMARY_HEADER,
                     FLAG_CONTENT_VIEW_ALL})
     @interface InflationFlag {}
     /**
@@ -108,7 +110,17 @@ public interface NotificationRowContentBinder {
      */
     int FLAG_CONTENT_VIEW_SINGLE_LINE = 1 << 4;
 
-    int FLAG_CONTENT_VIEW_ALL = (1 << 5) - 1;
+    /**
+     * The notification group summary header view
+     */
+    int FLAG_GROUP_SUMMARY_HEADER = 1 << 5;
+
+    /**
+     * The notification low-priority group summary header view
+     */
+    int FLAG_LOW_PRIORITY_GROUP_SUMMARY_HEADER = 1 << 6;
+
+    int FLAG_CONTENT_VIEW_ALL = (1 << 7) - 1;
 
     /**
      * Parameters for content view binding
@@ -116,9 +128,9 @@ public interface NotificationRowContentBinder {
     class BindParams {
 
         /**
-         * Bind a low priority version of the content views.
+         * Bind a minimized version of the content views.
          */
-        public boolean isLowPriority;
+        public boolean isMinimized;
 
         /**
          * Use increased height when binding contracted view.
@@ -129,6 +141,11 @@ public interface NotificationRowContentBinder {
          * Use increased height when binding heads up views.
          */
         public boolean usesIncreasedHeadsUpHeight;
+
+        /**
+         * Is group summary notification
+         */
+        public boolean mIsGroupSummary;
     }
 
     /**

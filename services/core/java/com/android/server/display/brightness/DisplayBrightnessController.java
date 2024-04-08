@@ -26,6 +26,7 @@ import android.view.Display;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.display.BrightnessSynchronizer;
 import com.android.server.display.AutomaticBrightnessController;
 import com.android.server.display.BrightnessMappingStrategy;
 import com.android.server.display.BrightnessSetting;
@@ -141,7 +142,7 @@ public final class DisplayBrightnessController {
         DisplayBrightnessState state;
         synchronized (mLock) {
             mDisplayBrightnessStrategy = mDisplayBrightnessStrategySelector.selectStrategy(
-                    displayPowerRequest, targetDisplayState);
+                    constructStrategySelectionRequest(displayPowerRequest, targetDisplayState));
             state = mDisplayBrightnessStrategy.updateBrightness(displayPowerRequest);
         }
 
@@ -175,14 +176,19 @@ public final class DisplayBrightnessController {
 
     /**
      * Sets the brightness from the offload session.
+     * @return Whether the offload brightness has changed
      */
-    public void setBrightnessFromOffload(float brightness) {
+    public boolean setBrightnessFromOffload(float brightness) {
         synchronized (mLock) {
-            if (mDisplayBrightnessStrategySelector.getOffloadBrightnessStrategy() != null) {
+            if (mDisplayBrightnessStrategySelector.getOffloadBrightnessStrategy() != null
+                    && !BrightnessSynchronizer.floatEquals(mDisplayBrightnessStrategySelector
+                    .getOffloadBrightnessStrategy().getOffloadScreenBrightness(), brightness)) {
                 mDisplayBrightnessStrategySelector.getOffloadBrightnessStrategy()
                         .setOffloadScreenBrightness(brightness);
+                return true;
             }
         }
+        return false;
     }
 
     /**
@@ -515,5 +521,11 @@ public final class DisplayBrightnessController {
         synchronized (mLock) {
             mCurrentScreenBrightness = currentBrightnessSetting;
         }
+    }
+
+    private StrategySelectionRequest constructStrategySelectionRequest(
+            DisplayManagerInternal.DisplayPowerRequest displayPowerRequest,
+            int targetDisplayState) {
+        return new StrategySelectionRequest(displayPowerRequest, targetDisplayState);
     }
 }

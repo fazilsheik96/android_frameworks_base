@@ -15,27 +15,27 @@
  */
 
 #define LOG_TAG "InputEventReceiver"
+#define ATRACE_TAG ATRACE_TAG_INPUT
 
 //#define LOG_NDEBUG 0
 
-#include <inttypes.h>
-
-#include <nativehelper/JNIHelp.h>
-
 #include <android-base/stringprintf.h>
 #include <android_runtime/AndroidRuntime.h>
+#include <input/InputConsumer.h>
 #include <input/InputTransport.h>
+#include <inttypes.h>
 #include <log/log.h>
+#include <nativehelper/JNIHelp.h>
+#include <nativehelper/ScopedLocalRef.h>
 #include <utils/Looper.h>
+
 #include <variant>
 #include <vector>
+
 #include "android_os_MessageQueue.h"
 #include "android_view_InputChannel.h"
 #include "android_view_KeyEvent.h"
 #include "android_view_MotionEvent.h"
-
-#include <nativehelper/ScopedLocalRef.h>
-
 #include "core_jni_helpers.h"
 
 namespace android {
@@ -44,6 +44,16 @@ static const bool kDebugDispatchCycle = false;
 
 static const char* toString(bool value) {
     return value ? "true" : "false";
+}
+
+/**
+ * Trace a bool variable, writing "1" if the value is "true" and "0" otherwise.
+ * TODO(b/311142655): delete this tracing. It's only useful for debugging very specific issues.
+ * @param var the name of the variable
+ * @param value the value of the variable
+ */
+static void traceBoolVariable(const char* var, bool value) {
+    ATRACE_INT(var, value ? 1 : 0);
 }
 
 static struct {
@@ -130,6 +140,7 @@ NativeInputEventReceiver::NativeInputEventReceiver(
         mMessageQueue(messageQueue),
         mBatchedInputEventPending(false),
         mFdEvents(0) {
+    traceBoolVariable("mBatchedInputEventPending", mBatchedInputEventPending);
     if (kDebugDispatchCycle) {
         ALOGD("channel '%s' ~ Initializing input event receiver.", getInputChannelName().c_str());
     }
@@ -311,6 +322,7 @@ status_t NativeInputEventReceiver::consumeEvents(JNIEnv* env,
 
     if (consumeBatches) {
         mBatchedInputEventPending = false;
+        traceBoolVariable("mBatchedInputEventPending", mBatchedInputEventPending);
     }
     if (outConsumedBatch) {
         *outConsumedBatch = false;
@@ -344,6 +356,7 @@ status_t NativeInputEventReceiver::consumeEvents(JNIEnv* env,
                 }
 
                 mBatchedInputEventPending = true;
+                traceBoolVariable("mBatchedInputEventPending", mBatchedInputEventPending);
                 if (kDebugDispatchCycle) {
                     ALOGD("channel '%s' ~ Dispatching batched input event pending notification.",
                           getInputChannelName().c_str());
@@ -355,6 +368,7 @@ status_t NativeInputEventReceiver::consumeEvents(JNIEnv* env,
                 if (env->ExceptionCheck()) {
                     ALOGE("Exception dispatching batched input events.");
                     mBatchedInputEventPending = false; // try again later
+                    traceBoolVariable("mBatchedInputEventPending", mBatchedInputEventPending);
                 }
             }
             return OK;

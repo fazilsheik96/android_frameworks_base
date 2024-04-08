@@ -338,6 +338,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.util.function.TriPredicate;
@@ -740,7 +741,7 @@ public class NotificationManagerService extends SystemService {
 
     private static final int MY_UID = Process.myUid();
     private static final int MY_PID = Process.myPid();
-    static final IBinder ALLOWLIST_TOKEN = new Binder();
+    private static final IBinder ALLOWLIST_TOKEN = new Binder();
     protected RankingHandler mRankingHandler;
     private long mLastOverRateLogTime;
     private float mMaxPackageEnqueueRate = DEFAULT_MAX_NOTIFICATION_ENQUEUE_RATE;
@@ -1204,6 +1205,10 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
+    private static boolean privateSpaceFlagsEnabled() {
+        return allowPrivateProfile() && android.multiuser.Flags.enablePrivateSpaceFeatures();
+    }
+
     private final class SavePolicyFileRunnable implements Runnable {
         @Override
         public void run() {
@@ -1355,7 +1360,8 @@ public class NotificationManagerService extends SystemService {
                 nv.recycle();
                 reportUserInteraction(r);
                 mAssistants.notifyAssistantActionClicked(r, action, generatedByAssistant);
-                // Notifications that have been interacted with don't need to be lifetime extended.
+                // Notifications that have been interacted with should no longer be lifetime
+                // extended.
                 if (lifetimeExtensionRefactor()) {
                     r.getSbn().getNotification().flags &= ~FLAG_LIFETIME_EXTENDED_BY_DIRECT_REPLY;
                 }
@@ -1524,9 +1530,32 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void onNotificationDirectReplied(String key) {
             exitIdle();
+            String packageName = null;
+            final int packageImportance;
             synchronized (mNotificationLock) {
                 NotificationRecord r = mNotificationsByKey.get(key);
                 if (r != null) {
+                    packageName = r.getSbn().getPackageName();
+                }
+            }
+            if (lifetimeExtensionRefactor() && packageName != null) {
+                packageImportance = getPackageImportanceWithIdentity(packageName);
+            } else {
+                packageImportance = IMPORTANCE_NONE;
+            }
+            synchronized (mNotificationLock) {
+                NotificationRecord r = mNotificationsByKey.get(key);
+                if (r != null) {
+                    // If the notification is already marked as lifetime extended before we record
+                    // the new direct reply, there must have been a previous lifetime extension
+                    // event, and the app has already cancelled the notification, or does not
+                    // respond to direct replies with updates. So we need to update System UI
+                    // immediately.
+                    if (lifetimeExtensionRefactor()) {
+                        maybeNotifySystemUiListenerLifetimeExtendedLocked(r,
+                                r.getSbn().getPackageName(), packageImportance);
+                    }
+
                     r.recordDirectReplied();
                     mMetricsLogger.write(r.getLogMaker()
                             .setCategory(MetricsEvent.NOTIFICATION_DIRECT_REPLY_ACTION)
@@ -1557,10 +1586,31 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void onNotificationSmartReplySent(String key, int replyIndex, CharSequence reply,
                 int notificationLocation, boolean modifiedBeforeSending) {
-
+            String packageName = null;
+            final int packageImportance;
             synchronized (mNotificationLock) {
                 NotificationRecord r = mNotificationsByKey.get(key);
                 if (r != null) {
+                    packageName = r.getSbn().getPackageName();
+                }
+            }
+            if (lifetimeExtensionRefactor() && packageName != null) {
+                packageImportance = getPackageImportanceWithIdentity(packageName);
+            } else {
+                packageImportance = IMPORTANCE_NONE;
+            }
+            synchronized (mNotificationLock) {
+                NotificationRecord r = mNotificationsByKey.get(key);
+                if (r != null) {
+                    // If the notification is already marked as lifetime extended before we record
+                    // the new direct reply, there must have been a previous lifetime extension
+                    // event, and the app has already cancelled the notification, or does not
+                    // respond to direct replies with updates. So we need to update System UI
+                    // immediately.
+                    if (lifetimeExtensionRefactor()) {
+                        maybeNotifySystemUiListenerLifetimeExtendedLocked(r,
+                                r.getSbn().getPackageName(), packageImportance);
+                    }
                     r.recordSmartReplied();
                     LogMaker logMaker = r.getLogMaker()
                             .setCategory(MetricsEvent.SMART_REPLY_ACTION)
@@ -1774,6 +1824,12 @@ public class NotificationManagerService extends SystemService {
                     NotificationRecordLogger.NotificationEvent.NOTIFICATION_SMART_REPLY_VISIBLE,
                     r);
         }
+    }
+
+    protected void logSensitiveAdjustmentReceived(boolean hasPosted,
+            boolean hasSensitiveContent, int lifespanMs) {
+        FrameworkStatsLog.write(FrameworkStatsLog.SENSITIVE_NOTIFICATION_REDACTION, hasPosted,
+                hasSensitiveContent, lifespanMs);
     }
 
     @GuardedBy("mNotificationLock")
@@ -2097,7 +2153,7 @@ public class NotificationManagerService extends SystemService {
         }
 
         private boolean isProfileUnavailable(String action) {
-            return allowPrivateProfile() ?
+            return privateSpaceFlagsEnabled() ?
                     action.equals(Intent.ACTION_PROFILE_UNAVAILABLE) :
                     action.equals(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
         }
@@ -2699,7 +2755,7 @@ public class NotificationManagerService extends SystemService {
         filter.addAction(Intent.ACTION_USER_REMOVED);
         filter.addAction(Intent.ACTION_USER_UNLOCKED);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
-        if (allowPrivateProfile()){
+        if (privateSpaceFlagsEnabled()){
             filter.addAction(Intent.ACTION_PROFILE_UNAVAILABLE);
         }
         getContext().registerReceiverAsUser(mIntentReceiver, UserHandle.ALL, filter, null, null);
@@ -4819,7 +4875,7 @@ public class NotificationManagerService extends SystemService {
                     // Remove background token before returning notification to untrusted app, this
                     // ensures the app isn't able to perform background operations that are
                     // associated with notification interactions.
-                    notification.overrideAllowlistToken(null);
+                    notification.clearAllowlistToken();
                     return new StatusBarNotification(
                             sbn.getPackageName(),
                             sbn.getOpPkg(),
@@ -6335,7 +6391,7 @@ public class NotificationManagerService extends SystemService {
                         if (Objects.equals(adjustment.getKey(), r.getKey())
                                 && Objects.equals(adjustment.getUser(), r.getUserId())
                                 && mAssistants.isSameUser(token, r.getUserId())) {
-                            applyAdjustment(r, adjustment);
+                            applyAdjustmentLocked(r, adjustment, false);
                             r.applyAdjustments();
                             // importance is checked at the beginning of the
                             // PostNotificationRunnable, before the signal extractors are run, so
@@ -6345,7 +6401,7 @@ public class NotificationManagerService extends SystemService {
                         }
                     }
                     if (!foundEnqueued) {
-                        applyAdjustmentFromAssistant(token, adjustment);
+                        applyAdjustmentsFromAssistant(token, List.of(adjustment));
                     }
                 }
             } finally {
@@ -6373,7 +6429,7 @@ public class NotificationManagerService extends SystemService {
                     for (Adjustment adjustment : adjustments) {
                         NotificationRecord r = mNotificationsByKey.get(adjustment.getKey());
                         if (r != null && mAssistants.isSameUser(token, r.getUserId())) {
-                            applyAdjustment(r, adjustment);
+                            applyAdjustmentLocked(r, adjustment, true);
                             // If the assistant has blocked the notification, cancel it
                             // This will trigger a sort, so we don't have to explicitly ask for
                             // one here.
@@ -6657,7 +6713,9 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
-    private void applyAdjustment(NotificationRecord r, Adjustment adjustment) {
+    @GuardedBy("mNotificationLock")
+    private void applyAdjustmentLocked(NotificationRecord r, Adjustment adjustment,
+            boolean isPosted) {
         if (r == null) {
             return;
         }
@@ -6674,6 +6732,11 @@ public class NotificationManagerService extends SystemService {
                 adjustments.remove(removeKey);
             }
             r.addAdjustment(adjustment);
+            if (adjustment.getSignals().containsKey(Adjustment.KEY_SENSITIVE_CONTENT)) {
+                logSensitiveAdjustmentReceived(isPosted,
+                        adjustment.getSignals().getBoolean(Adjustment.KEY_SENSITIVE_CONTENT),
+                        r.getLifespanMs(System.currentTimeMillis()));
+            }
         }
     }
 
@@ -7735,7 +7798,7 @@ public class NotificationManagerService extends SystemService {
 
         notification.flags &= ~FLAG_FSI_REQUESTED_BUT_DENIED;
 
-        // Apps should not create notifications that are lifetime extended.
+        // Apps cannot post notifications that are lifetime extended.
         if (lifetimeExtensionRefactor()) {
             notification.flags &= ~FLAG_LIFETIME_EXTENDED_BY_DIRECT_REPLY;
         }
@@ -7820,8 +7883,6 @@ public class NotificationManagerService extends SystemService {
                 }
             }
         }
-
-        notification.overrideAllowlistToken(ALLOWLIST_TOKEN);
 
         // Remote views? Are they too big?
         checkRemoteViews(pkg, tag, id, notification);
@@ -8161,7 +8222,7 @@ public class NotificationManagerService extends SystemService {
                 try {
                     return mTelecomManager.isInManagedCall()
                             || mTelecomManager.isInSelfManagedCall(pkg,
-                            UserHandle.getUserHandleForUid(uid), /* hasCrossUserAccess */ true);
+                            UserHandle.ALL);
                 } catch (IllegalStateException ise) {
                     // Telecom is not ready (this is likely early boot), so there are no calls.
                     return false;
@@ -12005,9 +12066,19 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void onServiceAdded(ManagedServiceInfo info) {
             if (lifetimeExtensionRefactor()) {
-                // Only System or System UI can call registerSystemService, so if the caller is not
-                // system, we know it's system UI.
-                info.isSystemUi = !isCallerSystemOrPhone();
+                // Generally, only System or System UI should have the permissions to call
+                // registerSystemService.
+                // isCallerSystemOrPhone tells us whether the caller is System. We negate this,
+                // to eliminate cases where the service was added by the system. This leaves
+                // services registered by system server.
+                // To identify system UI, we explicitly check the status bar permission for the
+                // uid in the info object.
+                // We can't use the calling uid here because it belongs to system server.
+                // Note that this will also return true for the shell, but we deem this
+                // acceptable, for the purposes of testing.
+                info.isSystemUi = !isCallerSystemOrPhone() && getContext().checkPermission(
+                        android.Manifest.permission.STATUS_BAR_SERVICE, -1, info.uid)
+                        == PERMISSION_GRANTED;
             }
             final INotificationListener listener = (INotificationListener) info.service;
             final NotificationRankingUpdate update;

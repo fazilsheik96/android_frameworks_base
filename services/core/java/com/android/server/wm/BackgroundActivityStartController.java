@@ -18,28 +18,30 @@ package com.android.server.wm;
 
 import static android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
+import static android.app.ActivityOptions.BackgroundActivityStartMode;
 import static android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED;
 import static android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_DENIED;
 import static android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED;
-import static android.app.ComponentOptions.BackgroundActivityStartMode;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE;
+import static android.os.Process.INVALID_PID;
+import static android.os.Process.INVALID_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.provider.DeviceConfig.NAMESPACE_WINDOW_MANAGER;
 
+import static com.android.server.wm.ActivityStarter.ASM_RESTRICTIONS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ACTIVITY_STARTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.ActivityTaskManagerService.APP_SWITCH_ALLOW;
 import static com.android.server.wm.ActivityTaskManagerService.APP_SWITCH_FG_ONLY;
 import static com.android.server.wm.ActivityTaskSupervisor.getApplicationLabel;
+import static com.android.server.wm.PendingRemoteAnimationRegistry.TIMEOUT_MS;
 import static com.android.window.flags.Flags.balImproveRealCallerVisibilityCheck;
 import static com.android.window.flags.Flags.balRequireOptInByPendingIntentCreator;
 import static com.android.window.flags.Flags.balRequireOptInSameUid;
-import static com.android.window.flags.Flags.balShowToasts;
 import static com.android.window.flags.Flags.balShowToastsBlocked;
-import static com.android.server.wm.PendingRemoteAnimationRegistry.TIMEOUT_MS;
 
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 import static java.util.Objects.requireNonNull;
@@ -58,7 +60,6 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.os.DeviceIntegrationUtils;
 import android.os.Process;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -68,6 +69,7 @@ import android.util.DebugUtils;
 import android.util.Slog;
 import android.widget.Toast;
 
+import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.FrameworkStatsLog;
@@ -76,6 +78,7 @@ import com.android.server.UiThread;
 import com.android.server.am.PendingIntentRecord;
 
 import java.lang.annotation.Retention;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.StringJoiner;
 import java.util.function.Consumer;
@@ -446,7 +449,48 @@ public class BackgroundActivityStartController {
             this.mResultForRealCaller = resultForRealCaller;
         }
 
-        private String dump() {
+        public boolean isPendingIntentBalAllowedByPermission() {
+            return PendingIntentRecord.isPendingIntentBalAllowedByPermission(mCheckedOptions);
+        }
+
+        public boolean callerExplicitOptInOrAutoOptIn() {
+            if (mAutoOptInCaller) {
+                return !callerExplicitOptOut();
+            }
+            return mCheckedOptions.getPendingIntentCreatorBackgroundActivityStartMode()
+                    == MODE_BACKGROUND_ACTIVITY_START_ALLOWED;
+        }
+
+        public boolean realCallerExplicitOptInOrAutoOptIn() {
+            if (mAutoOptInReason != null) {
+                return !realCallerExplicitOptOut();
+            }
+            return mCheckedOptions.getPendingIntentBackgroundActivityStartMode()
+                    == MODE_BACKGROUND_ACTIVITY_START_ALLOWED;
+        }
+
+        public boolean callerExplicitOptOut() {
+            return mCheckedOptions.getPendingIntentCreatorBackgroundActivityStartMode()
+                    == MODE_BACKGROUND_ACTIVITY_START_DENIED;
+        }
+
+        public boolean realCallerExplicitOptOut() {
+            return mCheckedOptions.getPendingIntentBackgroundActivityStartMode()
+                    == MODE_BACKGROUND_ACTIVITY_START_DENIED;
+        }
+
+        public boolean callerExplicitOptInOrOut() {
+            return mCheckedOptions.getPendingIntentCreatorBackgroundActivityStartMode()
+                    != MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED;
+        }
+
+        public boolean realCallerExplicitOptInOrOut() {
+            return mCheckedOptions.getPendingIntentBackgroundActivityStartMode()
+                    != MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED;
+        }
+
+        @Override
+        public String toString() {
             StringBuilder sb = new StringBuilder(2048);
             sb.append("[callingPackage: ")
                     .append(getDebugPackageName(mCallingPackage, mCallingUid));
@@ -497,51 +541,6 @@ public class BackgroundActivityStartController {
             }
             sb.append("]");
             return sb.toString();
-        }
-
-        public boolean isPendingIntentBalAllowedByPermission() {
-            return PendingIntentRecord.isPendingIntentBalAllowedByPermission(mCheckedOptions);
-        }
-
-        public boolean callerExplicitOptInOrAutoOptIn() {
-            if (mAutoOptInCaller) {
-                return !callerExplicitOptOut();
-            }
-            return mCheckedOptions.getPendingIntentCreatorBackgroundActivityStartMode()
-                    == MODE_BACKGROUND_ACTIVITY_START_ALLOWED;
-        }
-
-        public boolean realCallerExplicitOptInOrAutoOptIn() {
-            if (mAutoOptInReason != null) {
-                return !realCallerExplicitOptOut();
-            }
-            return mCheckedOptions.getPendingIntentBackgroundActivityStartMode()
-                    == MODE_BACKGROUND_ACTIVITY_START_ALLOWED;
-        }
-
-        public boolean callerExplicitOptOut() {
-            return mCheckedOptions.getPendingIntentCreatorBackgroundActivityStartMode()
-                    == MODE_BACKGROUND_ACTIVITY_START_DENIED;
-        }
-
-        public boolean realCallerExplicitOptOut() {
-            return mCheckedOptions.getPendingIntentBackgroundActivityStartMode()
-                    == MODE_BACKGROUND_ACTIVITY_START_DENIED;
-        }
-
-        public boolean callerExplicitOptInOrOut() {
-            return mCheckedOptions.getPendingIntentCreatorBackgroundActivityStartMode()
-                    != MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED;
-        }
-
-        public boolean realCallerExplicitOptInOrOut() {
-            return mCheckedOptions.getPendingIntentBackgroundActivityStartMode()
-                    != MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED;
-        }
-
-        @Override
-        public String toString() {
-            return dump();
         }
     }
 
@@ -697,8 +696,7 @@ public class BackgroundActivityStartController {
         if (!state.hasRealCaller()) {
             if (resultForCaller.allows()) {
                 if (DEBUG_ACTIVITY_STARTS) {
-                    Slog.d(TAG, "Background activity start allowed. "
-                            + state.dump());
+                    Slog.d(TAG, "Background activity start allowed. " + state);
                 }
                 return allowBasedOnCaller(state);
             }
@@ -726,15 +724,13 @@ public class BackgroundActivityStartController {
         // Handle cases with explicit opt-in
         if (resultForCaller.allows() && state.callerExplicitOptInOrAutoOptIn()) {
             if (DEBUG_ACTIVITY_STARTS) {
-                Slog.d(TAG, "Activity start explicitly allowed by caller. "
-                        + state.dump());
+                Slog.d(TAG, "Activity start explicitly allowed by caller. " + state);
             }
             return allowBasedOnCaller(state);
         }
         if (resultForRealCaller.allows() && state.realCallerExplicitOptInOrAutoOptIn()) {
             if (DEBUG_ACTIVITY_STARTS) {
-                Slog.d(TAG, "Activity start explicitly allowed by real caller. "
-                        + state.dump());
+                Slog.d(TAG, "Activity start explicitly allowed by real caller. " + state);
             }
             return allowBasedOnRealCaller(state);
         }
@@ -747,8 +743,7 @@ public class BackgroundActivityStartController {
             if (state.mBalAllowedByPiCreator.allowsBackgroundActivityStarts()) {
                 Slog.wtf(TAG, "With Android 15 BAL hardening this activity start may be blocked"
                         + " if the PI creator upgrades target_sdk to 35+! "
-                        + " (missing opt in by PI creator)!" + state.dump());
-                showBalRiskToast();
+                        + " (missing opt in by PI creator)!" + state);
                 return allowBasedOnCaller(state);
             }
         }
@@ -757,8 +752,7 @@ public class BackgroundActivityStartController {
             if (state.mBalAllowedByPiSender.allowsBackgroundActivityStarts()) {
                 Slog.wtf(TAG, "With Android 14 BAL hardening this activity start will be blocked"
                         + " if the PI sender upgrades target_sdk to 34+! "
-                        + " (missing opt in by PI sender)!" + state.dump());
-                showBalRiskToast();
+                        + " (missing opt in by PI sender)!" + state);
                 return allowBasedOnRealCaller(state);
             }
         }
@@ -772,24 +766,25 @@ public class BackgroundActivityStartController {
 
     private BalVerdict allowBasedOnCaller(BalState state) {
         if (DEBUG_ACTIVITY_STARTS) {
-            Slog.d(TAG, "Background activity launch allowed based on caller. "
-                    + state.dump());
+            Slog.d(TAG, "Background activity launch allowed based on caller. " + state);
         }
         return statsLog(state.mResultForCaller, state);
     }
 
     private BalVerdict allowBasedOnRealCaller(BalState state) {
         if (DEBUG_ACTIVITY_STARTS) {
-            Slog.d(TAG, "Background activity launch allowed based on real caller. "
-                    + state.dump());
+            Slog.d(TAG, "Background activity launch allowed based on real caller. " + state);
         }
         return statsLog(state.mResultForRealCaller, state);
     }
 
     private BalVerdict abortLaunch(BalState state) {
-        Slog.wtf(TAG, "Background activity launch blocked! "
-                + state.dump());
-        showBalBlockedToast();
+        Slog.wtf(TAG, "Background activity launch blocked! " + state);
+        if (balShowToastsBlocked()
+                && (state.mResultForCaller.allows() || state.mResultForRealCaller.allows())) {
+            // only show a toast if either caller or real caller could launch if they opted in
+            showToast("BAL blocked. go/debug-bal");
+        }
         return statsLog(BalVerdict.BLOCK, state);
     }
 
@@ -834,12 +829,6 @@ public class BackgroundActivityStartController {
         // visible to user after user clicking home button.
         final int appSwitchState = mService.getBalAppSwitchesState();
 
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
-            && mService.getRemoteTaskManager().isFromBackgroundWhiteList(realCallingUid)) {
-            return new BalVerdict(BAL_ALLOW_DEFAULT,
-                    /*background*/ false,
-                    "backgroundWhiteList=" + realCallingUid);
-        }
         // don't abort if the callingUid has a visible window or is a persistent system process
         final int callingUidProcState = mService.mActiveUids.getUidState(callingUid);
         final boolean callingUidHasAnyVisibleWindow = mService.hasActiveVisibleWindow(callingUid);
@@ -1030,7 +1019,7 @@ public class BackgroundActivityStartController {
     }
 
     /**
-     * Log activity starts which violate one of the following rules of the
+     * Check activity starts which violate one of the following rules of the
      * activity security model (ASM):
      * See go/activity-security for rationale behind the rules.
      * 1. Within a task, only an activity matching a top UID of the task can start activities
@@ -1040,7 +1029,7 @@ public class BackgroundActivityStartController {
     boolean checkActivityAllowedToStart(@Nullable ActivityRecord sourceRecord,
             @NonNull ActivityRecord targetRecord, boolean newTask, boolean avoidMoveTaskToFront,
             @Nullable Task targetTask, int launchFlags, int balCode, int callingUid,
-            int realCallingUid) {
+            int realCallingUid, TaskDisplayArea preferredTaskDisplayArea) {
         // BAL Exception allowed in all cases
         if (balCode == BAL_ALLOW_ALLOWLISTED_UID) {
             return true;
@@ -1063,68 +1052,46 @@ public class BackgroundActivityStartController {
             }
         }
 
-        if (balCode == BAL_ALLOW_GRACE_PERIOD) {
-            // Allow if launching into new task, and caller matches most recently finished activity
-            if (taskToFront && mTopFinishedActivity != null
-                    && mTopFinishedActivity.mUid == callingUid) {
-                return true;
-            }
-
-            // Launching into existing task - allow if matches most recently finished activity
-            // within the task.
-            // We can reach here multiple ways:
-            // 1. activity in fg fires intent (taskToFront = false, sourceRecord is available)
-            // 2. activity in bg fires intent (taskToFront = false, sourceRecord is available)
-            // 3. activity in bg fires intent with NEW_FLAG (taskToFront = true,
-            //         avoidMoveTaskToFront = true, sourceRecord is available)
-            // 4. activity in bg fires PI (taskToFront = true, avoidMoveTaskToFront = true,
-            //         sourceRecord is not available, targetTask may be available)
-            if (!taskToFront || avoidMoveTaskToFront) {
-                if (targetTask != null) {
-                    FinishedActivityEntry finishedEntry =
-                            mTaskIdToFinishedActivity.get(targetTask.mTaskId);
-                    if (finishedEntry != null && finishedEntry.mUid == callingUid) {
-                        return true;
-                    }
-                }
-
-                if (sourceRecord != null) {
-                    FinishedActivityEntry finishedEntry =
-                            mTaskIdToFinishedActivity.get(sourceRecord.getTask().mTaskId);
-                    if (finishedEntry != null && finishedEntry.mUid == callingUid) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        BlockActivityStart bas = null;
+        BlockActivityStart bas = new BlockActivityStart();
         if (sourceRecord != null) {
-            boolean passesAsmChecks = true;
             Task sourceTask = sourceRecord.getTask();
+
+            Task taskToCheck = taskToFront ? sourceTask : targetTask;
+            bas = checkTopActivityForAsm(taskToCheck, sourceRecord.getUid(),
+                    sourceRecord, bas);
 
             // Allow launching into a new task (or a task matching the launched activity's
             // affinity) only if the current task is foreground or mutating its own task.
             // The latter can happen eg. if caller uses NEW_TASK flag and the activity being
             // launched matches affinity of source task.
-            if (taskToFront) {
-                passesAsmChecks = sourceTask != null
-                        && (sourceTask.isVisible() || sourceTask == targetTask);
-            }
-
-            if (passesAsmChecks) {
-                Task taskToCheck = taskToFront ? sourceTask : targetTask;
-                bas = isTopActivityMatchingUidAbsentForAsm(taskToCheck, sourceRecord.getUid(),
-                        sourceRecord);
+            if (taskToFront && bas.mTopActivityMatchesSource) {
+                bas.mTopActivityMatchesSource = (sourceTask != null
+                        && (sourceTask.isVisible() || sourceTask == targetTask));
             }
         } else if (targetTask != null && (!taskToFront || avoidMoveTaskToFront)) {
             // We don't have a sourceRecord, and we're launching into an existing task.
             // Allow if callingUid is top of stack.
-            bas = isTopActivityMatchingUidAbsentForAsm(targetTask, callingUid,
-                    /*sourceRecord*/null);
+            bas = checkTopActivityForAsm(targetTask, callingUid,
+                    /*sourceRecord*/null, bas);
+        } else {
+            // We're launching from a non-visible activity. Has any visible app opted in?
+            TaskDisplayArea displayArea = targetTask != null && targetTask.getDisplayArea() != null
+                    ? targetTask.getDisplayArea()
+                    : preferredTaskDisplayArea;
+            if (displayArea != null) {
+                ArrayList<Task> visibleTasks = displayArea.getVisibleTasks();
+                for (int i = 0; i < visibleTasks.size(); i++) {
+                    Task task = visibleTasks.get(i);
+                    if (visibleTasks.size() == 1 && task.isActivityTypeHomeOrRecents()) {
+                        bas.optedIn(task.getTopMostActivity());
+                    } else {
+                        bas = checkTopActivityForAsm(task, callingUid, /*sourceRecord*/null, bas);
+                    }
+                }
+            }
         }
 
-        if (bas != null && !bas.mWouldBlockActivityStartIgnoringFlag) {
+        if (bas.mTopActivityMatchesSource) {
             return true;
         }
 
@@ -1148,13 +1115,16 @@ public class BackgroundActivityStartController {
                 ? FrameworkStatsLog.ACTIVITY_ACTION_BLOCKED__ACTION__ACTIVITY_START_SAME_TASK
                 : FrameworkStatsLog.ACTIVITY_ACTION_BLOCKED__ACTION__ACTIVITY_START_DIFFERENT_TASK);
 
-        boolean blockActivityStartAndFeatureEnabled = ActivitySecurityModelFeatureFlags
-                .shouldRestrictActivitySwitch(callingUid)
-                && (bas == null || bas.mBlockActivityStartIfFlagEnabled);
+        boolean enforceBlock = bas.mTopActivityOptedIn
+                && ActivitySecurityModelFeatureFlags.shouldRestrictActivitySwitch(callingUid);
+
+        boolean allowedByGracePeriod = allowedByAsmGracePeriod(callingUid, sourceRecord, targetTask,
+                balCode, taskToFront, avoidMoveTaskToFront);
 
         String asmDebugInfo = getDebugInfoForActivitySecurity("Launch", sourceRecord,
                 targetRecord, targetTask, targetTopActivity, realCallingUid, balCode,
-                blockActivityStartAndFeatureEnabled, taskToFront, avoidMoveTaskToFront);
+                enforceBlock, taskToFront, avoidMoveTaskToFront, allowedByGracePeriod,
+                bas.mActivityOptedIn);
 
         FrameworkStatsLog.write(FrameworkStatsLog.ACTIVITY_ACTION_BLOCKED,
                 /* caller_uid */
@@ -1192,7 +1162,7 @@ public class BackgroundActivityStartController {
         String launchedFromPackageName = targetRecord.launchedFromPackage;
         if (ActivitySecurityModelFeatureFlags.shouldShowToast(callingUid)) {
             String toastText = ActivitySecurityModelFeatureFlags.DOC_LINK
-                    + (blockActivityStartAndFeatureEnabled ? " blocked " : " would block ")
+                    + (enforceBlock ? " blocked " : " would block ")
                     + getApplicationLabel(mService.mContext.getPackageManager(),
                     launchedFromPackageName);
             showToast(toastText);
@@ -1200,7 +1170,7 @@ public class BackgroundActivityStartController {
             Slog.i(TAG, asmDebugInfo);
         }
 
-        if (blockActivityStartAndFeatureEnabled) {
+        if (enforceBlock) {
             Slog.e(TAG, "[ASM] Abort Launching r: " + targetRecord
                     + " as source: "
                     + (sourceRecord != null ? sourceRecord : launchedFromPackageName)
@@ -1212,18 +1182,6 @@ public class BackgroundActivityStartController {
         }
 
         return true;
-    }
-
-    private void showBalBlockedToast() {
-        if (balShowToastsBlocked()) {
-            showToast("BAL blocked. go/debug-bal");
-        }
-    }
-
-    private void showBalRiskToast() {
-        if (balShowToasts()) {
-            showToast("BAL allowed in compat mode. go/debug-bal");
-        }
     }
 
     @VisibleForTesting void showToast(String toastText) {
@@ -1259,18 +1217,18 @@ public class BackgroundActivityStartController {
 
         // Find the first activity which matches a safe UID and is not finishing. Clear everything
         // above it
+        int[] finishCount = new int[1];
         boolean shouldBlockActivityStart = ActivitySecurityModelFeatureFlags
                 .shouldRestrictActivitySwitch(callingUid);
-        int[] finishCount = new int[0];
-        if (shouldBlockActivityStart
-                && blockCrossUidActivitySwitchFromBelowForActivity(targetTaskTop)) {
+        BlockActivityStart bas = checkCrossUidActivitySwitchFromBelow(
+                targetTaskTop, callingUid, new BlockActivityStart());
+        if (shouldBlockActivityStart && bas.mTopActivityOptedIn) {
             ActivityRecord activity = targetTask.getActivity(isLaunchingOrLaunched);
             if (activity == null) {
                 // mStartActivity is not in task, so clear everything
                 activity = targetRecord;
             }
 
-            finishCount = new int[1];
             targetTask.performClearTop(activity, launchFlags, finishCount);
             if (finishCount[0] > 0) {
                 Slog.w(TAG, "Cleared top n: " + finishCount[0] + " activities from task t: "
@@ -1287,7 +1245,8 @@ public class BackgroundActivityStartController {
 
             Slog.i(TAG, getDebugInfoForActivitySecurity("Clear Top", sourceRecord, targetRecord,
                     targetTask, targetTaskTop, realCallingUid, balCode, shouldBlockActivityStart,
-                    /* taskToFront */ true, /* avoidMoveTaskToFront */ false));
+                    /* taskToFront */ true, /* avoidMoveTaskToFront */ false,
+                    /* allowedByAsmGracePeriod */ false, bas.mActivityOptedIn));
         }
     }
 
@@ -1295,11 +1254,24 @@ public class BackgroundActivityStartController {
      * Returns home if the passed in callingUid is not top of the stack, rather than returning to
      * previous task.
      */
-    void checkActivityAllowedToClearTask(@NonNull Task task, int callingUid,
+    void checkActivityAllowedToClearTask(@NonNull Task task, int callingUid, int callingPid,
             @NonNull String callerActivityClassName) {
         // We may have already checked that the callingUid has additional clearTask privileges, and
         // cleared the calling identify. If so, we infer we do not need further restrictions here.
         if (callingUid == SYSTEM_UID || !task.isVisible() || task.inMultiWindowMode()) {
+            return;
+        }
+
+        String packageName =  mService.mContext.getPackageManager().getNameForUid(callingUid);
+        BalState state = new BalState(callingUid, callingPid, packageName, INVALID_UID,
+                INVALID_PID, null, null, null, null, null, ActivityOptions.makeBasic());
+        @BalCode int balCode = checkBackgroundActivityStartAllowedByCaller(state).mCode;
+        if (balCode == BAL_ALLOW_ALLOWLISTED_UID
+                || balCode == BAL_ALLOW_ALLOWLISTED_COMPONENT
+                || balCode == BAL_ALLOW_PERMISSION
+                || balCode == BAL_ALLOW_SAW_PERMISSION
+                || balCode == BAL_ALLOW_VISIBLE_WINDOW
+                || balCode == BAL_ALLOW_NON_APP_VISIBLE_WINDOW) {
             return;
         }
 
@@ -1309,8 +1281,9 @@ public class BackgroundActivityStartController {
             return;
         }
 
-        BlockActivityStart bas = isTopActivityMatchingUidAbsentForAsm(task, callingUid, null);
-        if (!bas.mWouldBlockActivityStartIgnoringFlag) {
+        BlockActivityStart bas = checkTopActivityForAsm(task, callingUid, null,
+                new BlockActivityStart());
+        if (bas.mTopActivityMatchesSource) {
             return;
         }
 
@@ -1347,8 +1320,7 @@ public class BackgroundActivityStartController {
         );
 
         boolean restrictActivitySwitch = ActivitySecurityModelFeatureFlags
-                .shouldRestrictActivitySwitch(callingUid)
-                        && bas.mBlockActivityStartIfFlagEnabled;
+                .shouldRestrictActivitySwitch(callingUid) && bas.mTopActivityOptedIn;
 
         PackageManager pm = mService.mContext.getPackageManager();
         String callingPackage = pm.getNameForUid(callingUid);
@@ -1389,32 +1361,30 @@ public class BackgroundActivityStartController {
      * <p>
      * The 'sourceRecord' can be considered top even if it is 'finishing'
      * <p>
-     * Returns a class where the elements are:
-     * <pre>
-     * shouldBlockActivityStart: {@code true} if we should actually block the transition (takes into
-     * consideration feature flag and targetSdk).
-     * wouldBlockActivityStartIgnoringFlags: {@code true} if we should warn about the transition via
-     * toasts. This happens if the transition would be blocked in case both the app was targeting V+
-     * and the feature was enabled.
-     * </pre>
      */
-    private BlockActivityStart isTopActivityMatchingUidAbsentForAsm(@NonNull Task task,
-            int uid, @Nullable ActivityRecord sourceRecord) {
+    private BlockActivityStart checkTopActivityForAsm(@NonNull Task task,
+            int uid, @Nullable ActivityRecord sourceRecord, BlockActivityStart bas) {
         // If the source is visible, consider it 'top'.
         if (sourceRecord != null && sourceRecord.isVisibleRequested()) {
-            return BlockActivityStart.ACTIVITY_START_ALLOWED;
+            return bas.matchesSource();
         }
 
-        // Always allow actual top activity to clear task
+        // Always allow actual top activity
         ActivityRecord topActivity = task.getTopMostActivity();
-        if (topActivity != null && topActivity.isUid(uid)) {
-            return BlockActivityStart.ACTIVITY_START_ALLOWED;
+        if (topActivity == null) {
+            Slog.wtf(TAG, "Activities for task: " + task + " not found.");
+            return bas.optedIn(topActivity);
+        }
+
+        bas = checkCrossUidActivitySwitchFromBelow(topActivity, uid, bas);
+        if (bas.mTopActivityMatchesSource) {
+            return bas;
         }
 
         // If UID is visible in target task, allow launch
         if (task.forAllActivities((Predicate<ActivityRecord>)
                 ar -> ar.isUid(uid) && ar.isVisibleRequested())) {
-            return BlockActivityStart.ACTIVITY_START_ALLOWED;
+            return bas.matchesSource();
         }
 
         // Consider the source activity, whether or not it is finishing. Do not consider any other
@@ -1425,82 +1395,91 @@ public class BackgroundActivityStartController {
         // Check top of stack (or the first task fragment for embedding).
         topActivity = task.getActivity(topOfStackPredicate);
         if (topActivity == null) {
-            return new BlockActivityStart(true, true);
+            return bas;
         }
 
-        BlockActivityStart pair = blockCrossUidActivitySwitchFromBelow(topActivity, uid);
-        if (!pair.mBlockActivityStartIfFlagEnabled) {
-            return pair;
+        bas = checkCrossUidActivitySwitchFromBelow(topActivity, uid, bas);
+        if (bas.mTopActivityMatchesSource) {
+            return bas;
         }
 
         // Even if the top activity is not a match, we may be in an embedded activity scenario with
         // an adjacent task fragment. Get the second fragment.
         TaskFragment taskFragment = topActivity.getTaskFragment();
         if (taskFragment == null) {
-            return pair;
+            return bas;
         }
 
         TaskFragment adjacentTaskFragment = taskFragment.getAdjacentTaskFragment();
         if (adjacentTaskFragment == null) {
-            return pair;
+            return bas;
         }
 
         // Check the second fragment.
         topActivity = adjacentTaskFragment.getActivity(topOfStackPredicate);
         if (topActivity == null) {
-            return new BlockActivityStart(true, true);
+            return bas;
         }
 
-        return blockCrossUidActivitySwitchFromBelow(topActivity, uid);
+        return checkCrossUidActivitySwitchFromBelow(topActivity, uid, bas);
     }
 
     /**
      * Determines if a source is allowed to add or remove activities from the task,
      * if the current ActivityRecord is above it in the stack
      * <p>
-     * A transition is blocked ({@code false} returned) if all of the following are met:
+     * A transition is blocked if all of the following are met:
      * <pre>
      * 1. The source activity and the current activity record belong to different apps
      * (i.e, have different UIDs).
-     * 2. Both the source activity and the current activity target U+
-     * 3. The current activity has not set
+     * 2. The current activity target V+
+     * 3. The current app has set
+     * {@link R.styleable#AndroidManifestApplication_allowCrossUidActivitySwitchFromBelow}
+     * to {@code false}
+     * 4. The current activity has not set
      * {@link ActivityRecord#setAllowCrossUidActivitySwitchFromBelow(boolean)} to {@code true}
      * </pre>
      *
-     * Returns a class where the elements are:
-     * <pre>
-     * shouldBlockActivityStart: {@code true} if we should actually block the transition (takes into
-     * consideration feature flag and targetSdk).
-     * wouldBlockActivityStartIgnoringFlags: {@code true} if we should warn about the transition via
-     * toasts. This happens if the transition would be blocked in case both the app was targeting V+
-     * and the feature was enabled.
-     * </pre>
      *
      * @param sourceUid The source (s) activity performing the state change
      */
-    private BlockActivityStart blockCrossUidActivitySwitchFromBelow(ActivityRecord ar,
-            int sourceUid) {
+    private BlockActivityStart checkCrossUidActivitySwitchFromBelow(ActivityRecord ar,
+            int sourceUid, BlockActivityStart bas) {
         if (ar.isUid(sourceUid)) {
-            return BlockActivityStart.ACTIVITY_START_ALLOWED;
+            return bas.matchesSource();
         }
 
-        if (!blockCrossUidActivitySwitchFromBelowForActivity(ar)) {
-            return BlockActivityStart.ACTIVITY_START_ALLOWED;
+        // We don't need to check package level if activity has opted out.
+        if (ar.mAllowCrossUidActivitySwitchFromBelow) {
+            bas.mTopActivityOptedIn = false;
+            return bas.matchesSource();
         }
 
-        // At this point, we would block if the feature is launched and both apps were V+
-        // Since we have a feature flag, we need to check that too
-        // TODO(b/258792202) Replace with CompatChanges and replace Pair with boolean once feature
-        // flag is removed
-        boolean restrictActivitySwitch =
-                ActivitySecurityModelFeatureFlags.shouldRestrictActivitySwitch(ar.getUid())
-                        && ActivitySecurityModelFeatureFlags
-                        .shouldRestrictActivitySwitch(sourceUid);
-        if (restrictActivitySwitch) {
-            return BlockActivityStart.BLOCK;
-        } else {
-            return BlockActivityStart.LOG_ONLY;
+        if (!CompatChanges.isChangeEnabled(ASM_RESTRICTIONS, ar.getUid())) {
+            return bas;
         }
+
+        if (ar.isUid(SYSTEM_UID)) {
+            return bas.optedIn(ar);
+        }
+
+        String packageName = ar.packageName;
+        if (packageName == null) {
+            Slog.wtf(TAG, "Package name: " + ar + " not found.");
+            return bas.optedIn(ar);
+        }
+
+        PackageManager pm = mService.mContext.getPackageManager();
+        ApplicationInfo applicationInfo;
+
+        try {
+            applicationInfo = pm.getApplicationInfo(packageName, 0);
+        } catch (PackageManager.NameNotFoundException e) {
+            Slog.wtf(TAG, "Package name: " + packageName + " not found.");
+            return bas.optedIn(ar);
+        }
+
+        return applicationInfo.allowCrossUidActivitySwitchFromBelow ? bas : bas.optedIn(ar);
     }
 
     /**
@@ -1510,8 +1489,9 @@ public class BackgroundActivityStartController {
             @Nullable ActivityRecord sourceRecord, @NonNull ActivityRecord targetRecord,
             @Nullable Task targetTask, @Nullable ActivityRecord targetTopActivity,
             int realCallingUid, @BalCode int balCode,
-            boolean blockActivityStartAndFeatureEnabled, boolean taskToFront,
-            boolean avoidMoveTaskToFront) {
+            boolean enforceBlock, boolean taskToFront,
+            boolean avoidMoveTaskToFront, boolean allowedByGracePeriod,
+            ActivityRecord activityOptedIn) {
         final String prefix = "[ASM] ";
         Function<ActivityRecord, String> recordToString = (ar) -> {
             if (ar == null) {
@@ -1527,9 +1507,16 @@ public class BackgroundActivityStartController {
 
         StringJoiner joiner = new StringJoiner("\n");
         joiner.add(prefix + "------ Activity Security " + action + " Debug Logging Start ------");
-        joiner.add(prefix + "Block Enabled: " + blockActivityStartAndFeatureEnabled);
+        joiner.add(prefix + "Block Enabled: " + enforceBlock);
+        if (!enforceBlock) {
+            joiner.add(prefix + "Feature Flag Enabled: " + android.security
+                    .Flags.asmRestrictionsEnabled());
+            joiner.add(prefix + "Mendel Override: " + ActivitySecurityModelFeatureFlags
+                    .asmRestrictionsEnabledForAll());
+        }
         joiner.add(prefix + "ASM Version: " + ActivitySecurityModelFeatureFlags.ASM_VERSION);
         joiner.add(prefix + "System Time: " + SystemClock.uptimeMillis());
+        joiner.add(prefix + "Activity Opted In: " + recordToString.apply(activityOptedIn));
 
         boolean targetTaskMatchesSourceTask = targetTask != null
                 && sourceRecord != null && sourceRecord.getTask() == targetTask;
@@ -1569,6 +1556,7 @@ public class BackgroundActivityStartController {
         joiner.add(prefix + "TaskToFront: " + taskToFront);
         joiner.add(prefix + "AvoidMoveToFront: " + avoidMoveTaskToFront);
         joiner.add(prefix + "BalCode: " + balCodeToString(balCode));
+        joiner.add(prefix + "Allowed By Grace Period: " + allowedByGracePeriod);
         joiner.add(prefix + "LastResumedActivity: "
                        + recordToString.apply(mService.mLastResumedActivity));
 
@@ -1594,6 +1582,44 @@ public class BackgroundActivityStartController {
 
         joiner.add(prefix + "------ Activity Security " + action + " Debug Logging End ------");
         return joiner.toString();
+    }
+
+    private boolean allowedByAsmGracePeriod(int callingUid, @Nullable ActivityRecord sourceRecord,
+            @Nullable Task targetTask, @BalCode int balCode, boolean taskToFront,
+            boolean avoidMoveTaskToFront) {
+        if (balCode == BAL_ALLOW_GRACE_PERIOD) {
+            // Allow if launching into new task, and caller matches most recently finished activity
+            if (taskToFront && mTopFinishedActivity != null
+                    && mTopFinishedActivity.mUid == callingUid) {
+                return true;
+            }
+
+            // Launching into existing task - allow if matches most recently finished activity
+            // within the task.
+            // We can reach here multiple ways:
+            // 1. activity in fg fires intent (taskToFront = false, sourceRecord is available)
+            // 2. activity in bg fires intent (taskToFront = false, sourceRecord is available)
+            // 3. activity in bg fires intent with NEW_FLAG (taskToFront = true,
+            //         avoidMoveTaskToFront = true, sourceRecord is available)
+            // 4. activity in bg fires PI (taskToFront = true, avoidMoveTaskToFront = true,
+            //         sourceRecord is not available, targetTask may be available)
+            if (!taskToFront || avoidMoveTaskToFront) {
+                if (targetTask != null) {
+                    FinishedActivityEntry finishedEntry =
+                            mTaskIdToFinishedActivity.get(targetTask.mTaskId);
+                    if (finishedEntry != null && finishedEntry.mUid == callingUid) {
+                        return true;
+                    }
+                }
+
+                if (sourceRecord != null) {
+                    FinishedActivityEntry finishedEntry =
+                            mTaskIdToFinishedActivity.get(sourceRecord.getTask().mTaskId);
+                    return finishedEntry != null && finishedEntry.mUid == callingUid;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean isSystemExemptFlagEnabled() {
@@ -1706,55 +1732,22 @@ public class BackgroundActivityStartController {
         }
     }
 
-    /**
-     * Activity level allowCrossUidActivitySwitchFromBelow defaults to false.
-     * Package level defaults to true.
-     * We block the launch if dev has explicitly set package level to false, and activity level has
-     * not opted out
-     */
-    private boolean blockCrossUidActivitySwitchFromBelowForActivity(@NonNull ActivityRecord ar) {
-        // We don't need to check package level if activity has opted out.
-        if (ar.mAllowCrossUidActivitySwitchFromBelow) {
-            return false;
-        }
-
-        if (ActivitySecurityModelFeatureFlags.asmRestrictionsEnabledForAll()) {
-            return true;
-        }
-
-        String packageName = ar.packageName;
-        if (packageName == null) {
-            return false;
-        }
-
-        PackageManager pm = mService.mContext.getPackageManager();
-        ApplicationInfo applicationInfo;
-
-        try {
-            applicationInfo = pm.getApplicationInfo(packageName, 0);
-        } catch (PackageManager.NameNotFoundException e) {
-            Slog.wtf(TAG, "Package name: " + packageName + " not found.");
-            return false;
-        }
-
-        return !applicationInfo.allowCrossUidActivitySwitchFromBelow;
-    }
-
     private static class BlockActivityStart {
-        private static final BlockActivityStart ACTIVITY_START_ALLOWED =
-                new BlockActivityStart(false, false);
-        private static final BlockActivityStart LOG_ONLY = new BlockActivityStart(false, true);
-        private static final BlockActivityStart BLOCK = new BlockActivityStart(true, true);
-        // We should block if feature flag is enabled
-        private final boolean mBlockActivityStartIfFlagEnabled;
-        // Used for logging/toasts. Would we block if target sdk was V and feature was
-        // enabled?
-        private final boolean mWouldBlockActivityStartIgnoringFlag;
+        private boolean mTopActivityOptedIn;
+        private boolean mTopActivityMatchesSource;
+        private ActivityRecord mActivityOptedIn;
 
-        private BlockActivityStart(boolean shouldBlockActivityStart,
-                boolean wouldBlockActivityStartIgnoringFlags) {
-            this.mBlockActivityStartIfFlagEnabled = shouldBlockActivityStart;
-            this.mWouldBlockActivityStartIgnoringFlag = wouldBlockActivityStartIgnoringFlags;
+        BlockActivityStart optedIn(ActivityRecord activity) {
+            mTopActivityOptedIn = true;
+            if (mActivityOptedIn == null) {
+                mActivityOptedIn = activity;
+            }
+            return this;
+        }
+
+        BlockActivityStart matchesSource() {
+            mTopActivityMatchesSource = true;
+            return this;
         }
     }
 

@@ -38,6 +38,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import static kotlinx.coroutines.flow.FlowKt.emptyFlow;
+import static kotlinx.coroutines.flow.StateFlowKt.MutableStateFlow;
 
 import android.annotation.IdRes;
 import android.content.ContentResolver;
@@ -61,7 +62,6 @@ import android.view.accessibility.AccessibilityManager;
 
 import androidx.constraintlayout.widget.ConstraintSet;
 
-import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.testing.UiEventLoggerFake;
@@ -214,7 +214,6 @@ import java.util.List;
 import java.util.Optional;
 
 import kotlinx.coroutines.CoroutineDispatcher;
-import kotlinx.coroutines.flow.StateFlowKt;
 import kotlinx.coroutines.test.TestScope;
 
 public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
@@ -288,7 +287,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
     @Mock protected KeyguardMediaController mKeyguardMediaController;
     @Mock protected NavigationModeController mNavigationModeController;
     @Mock protected NavigationBarController mNavigationBarController;
-    @Mock protected QuickSettingsController mQsController;
+    @Mock protected QuickSettingsControllerImpl mQsController;
     @Mock protected ShadeHeaderController mShadeHeaderController;
     @Mock protected ContentResolver mContentResolver;
     @Mock protected TapAgainViewController mTapAgainViewController;
@@ -301,7 +300,6 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
     @Mock protected RecordingController mRecordingController;
     @Mock protected LockscreenGestureLogger mLockscreenGestureLogger;
     @Mock protected DumpManager mDumpManager;
-    @Mock protected InteractionJankMonitor mInteractionJankMonitor;
     @Mock protected NotificationsQSContainerController mNotificationsQSContainerController;
     @Mock protected QsFrameTranslateController mQsFrameTranslateController;
     @Mock protected StatusBarWindowStateController mStatusBarWindowStateController;
@@ -382,7 +380,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
     protected final ShadeExpansionStateManager mShadeExpansionStateManager =
             new ShadeExpansionStateManager();
 
-    protected QuickSettingsController mQuickSettingsController;
+    protected QuickSettingsControllerImpl mQuickSettingsController;
     @Mock protected Lazy<NotificationPanelViewController> mNotificationPanelViewControllerLazy;
 
     protected FragmentHostManager.FragmentListener mFragmentListener;
@@ -411,10 +409,10 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                 new ShadeAnimationRepository(), mShadeRepository);
         mPowerInteractor = keyguardInteractorDeps.getPowerInteractor();
         when(mKeyguardTransitionInteractor.isInTransitionToStateWhere(any())).thenReturn(
-                StateFlowKt.MutableStateFlow(false));
+                MutableStateFlow(false));
         DeviceEntryUdfpsInteractor deviceEntryUdfpsInteractor =
                 mock(DeviceEntryUdfpsInteractor.class);
-        when(deviceEntryUdfpsInteractor.isUdfpsSupported()).thenReturn(emptyFlow());
+        when(deviceEntryUdfpsInteractor.isUdfpsSupported()).thenReturn(MutableStateFlow(false));
 
         mShadeInteractor = new ShadeInteractorImpl(
                 mTestScope.getBackgroundScope(),
@@ -443,7 +441,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
         SystemClock systemClock = new FakeSystemClock();
         mStatusBarStateController = new StatusBarStateControllerImpl(
                 mUiEventLogger,
-                mInteractionJankMonitor,
+                mKosmos.getInteractionJankMonitor(),
                 mJavaAdapter,
                 () -> mShadeInteractor,
                 () -> mKosmos.getDeviceUnlockedInteractor(),
@@ -461,9 +459,8 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                 mDozeParameters,
                 mScreenOffAnimationController,
                 mKeyguardLogger,
-                mInteractionJankMonitor,
+                mKosmos.getInteractionJankMonitor(),
                 mKeyguardInteractor,
-                mKeyguardTransitionInteractor,
                 mDumpManager,
                 mPowerInteractor));
 
@@ -601,6 +598,8 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
         // Primary Bouncer->Gone
         when(mPrimaryBouncerToGoneTransitionViewModel.getLockscreenAlpha())
                 .thenReturn(emptyFlow());
+        when(mPrimaryBouncerToGoneTransitionViewModel.getNotificationAlpha())
+                .thenReturn(emptyFlow());
 
         NotificationsKeyguardViewStateRepository notifsKeyguardViewStateRepository =
                 new NotificationsKeyguardViewStateRepository();
@@ -612,7 +611,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                         mock(HeadsUpManager.class),
                         new StatusBarStateControllerImpl(
                                 new UiEventLoggerFake(),
-                                mInteractionJankMonitor,
+                                mKosmos.getInteractionJankMonitor(),
                                 mJavaAdapter,
                                 () -> mShadeInteractor,
                                 () -> mKosmos.getDeviceUnlockedInteractor(),
@@ -652,10 +651,6 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                 .thenReturn(mKeyguardBottomArea);
         when(mNotificationRemoteInputManager.isRemoteInputActive())
                 .thenReturn(false);
-        when(mInteractionJankMonitor.begin(any(), anyInt()))
-                .thenReturn(true);
-        when(mInteractionJankMonitor.end(anyInt()))
-                .thenReturn(true);
         doAnswer(invocation -> {
             ((Runnable) invocation.getArgument(0)).run();
             return null;
@@ -795,7 +790,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
 
         when(mNotificationPanelViewControllerLazy.get())
                 .thenReturn(mNotificationPanelViewController);
-        mQuickSettingsController = new QuickSettingsController(
+        mQuickSettingsController = new QuickSettingsControllerImpl(
                 mNotificationPanelViewControllerLazy,
                 mView,
                 mQsFrameTranslateController,
@@ -822,7 +817,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                 mAccessibilityManager,
                 mLockscreenGestureLogger,
                 mMetricsLogger,
-                mInteractionJankMonitor,
+                mKosmos.getInteractionJankMonitor(),
                 mShadeLog,
                 mDumpManager,
                 mDeviceEntryFaceAuthInteractor,

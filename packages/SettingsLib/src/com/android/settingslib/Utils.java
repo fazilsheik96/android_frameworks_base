@@ -33,6 +33,7 @@ import android.hardware.usb.UsbManager;
 import android.hardware.usb.UsbPort;
 import android.hardware.usb.UsbPortStatus;
 import android.hardware.usb.flags.Flags;
+import android.icu.text.NumberFormat;
 import android.location.LocationManager;
 import android.media.AudioManager;
 import android.net.NetworkCapabilities;
@@ -74,7 +75,6 @@ import com.android.settingslib.drawable.UserIconDrawable;
 import com.android.settingslib.fuelgauge.BatteryStatus;
 import com.android.settingslib.utils.BuildCompatUtils;
 
-import java.text.NumberFormat;
 import java.time.Duration;
 import java.util.List;
 
@@ -860,30 +860,6 @@ public class Utils {
         return false;
     }
 
-    /** Whether to show the wireless charging notification. */
-    public static boolean shouldShowWirelessChargingNotification(
-            @NonNull Context context, @NonNull String tag) {
-        try {
-            return shouldShowWirelessChargingNotificationInternal(context, tag);
-        } catch (Exception e) {
-            Log.e(tag, "shouldShowWirelessChargingNotification()", e);
-            return false;
-        }
-    }
-
-    /** Stores the timestamp of the wireless charging notification. */
-    public static void updateWirelessChargingNotificationTimestamp(
-            @NonNull Context context, long timestamp, @NonNull String tag) {
-        try {
-            Secure.putLong(
-                    context.getContentResolver(),
-                    WIRELESS_CHARGING_NOTIFICATION_TIMESTAMP,
-                    timestamp);
-        } catch (Exception e) {
-            Log.e(tag, "setWirelessChargingNotificationTimestamp()", e);
-        }
-    }
-
     /** Whether to show the wireless charging warning in Settings. */
     public static boolean shouldShowWirelessChargingWarningTip(
             @NonNull Context context, @NonNull String tag) {
@@ -907,38 +883,5 @@ public class Utils {
         } catch (Exception e) {
             Log.e(tag, "setWirelessChargingWarningEnabled()", e);
         }
-    }
-
-    private static boolean shouldShowWirelessChargingNotificationInternal(
-            @NonNull Context context, @NonNull String tag) {
-        final long lastNotificationTimeMillis =
-                Secure.getLong(
-                        context.getContentResolver(),
-                        WIRELESS_CHARGING_NOTIFICATION_TIMESTAMP,
-                        WIRELESS_CHARGING_DEFAULT_TIMESTAMP);
-        if (isWirelessChargingNotificationDisabled(lastNotificationTimeMillis)) {
-            return false;
-        }
-        if (isInitialWirelessChargingNotification(lastNotificationTimeMillis)) {
-            updateWirelessChargingNotificationTimestamp(context, System.currentTimeMillis(), tag);
-            updateWirelessChargingWarningEnabled(context, /* enabled= */ true, tag);
-            return true;
-        }
-        final long durationMillis = System.currentTimeMillis() - lastNotificationTimeMillis;
-        final boolean show = durationMillis > WIRELESS_CHARGING_NOTIFICATION_THRESHOLD_MILLIS;
-        Log.d(tag, "shouldShowWirelessChargingNotification = " + show);
-        if (show) {
-            updateWirelessChargingNotificationTimestamp(context, System.currentTimeMillis(), tag);
-            updateWirelessChargingWarningEnabled(context, /* enabled= */ true, tag);
-        }
-        return show;
-    }
-
-    private static boolean isWirelessChargingNotificationDisabled(long lastNotificationTimeMillis) {
-        return lastNotificationTimeMillis == Long.MIN_VALUE;
-    }
-
-    private static boolean isInitialWirelessChargingNotification(long lastNotificationTimeMillis) {
-        return lastNotificationTimeMillis == WIRELESS_CHARGING_DEFAULT_TIMESTAMP;
     }
 }

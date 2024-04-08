@@ -40,6 +40,7 @@ import static android.window.ConfigurationHelper.shouldUpdateResources;
 import static com.android.internal.annotations.VisibleForTesting.Visibility.PACKAGE;
 import static com.android.internal.os.SafeZipPathValidatorCallback.VALIDATE_ZIP_PATH_FOR_PATH_TRAVERSAL;
 import static com.android.sdksandbox.flags.Flags.sandboxActivitySdkBasedContext;
+import static com.android.window.flags.Flags.activityWindowInfoFlag;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -63,6 +64,7 @@ import android.app.servertransaction.ActivityLifecycleItem.LifecycleState;
 import android.app.servertransaction.ActivityRelaunchItem;
 import android.app.servertransaction.ActivityResultItem;
 import android.app.servertransaction.ClientTransaction;
+import android.app.servertransaction.ClientTransactionListenerController;
 import android.app.servertransaction.DestroyActivityItem;
 import android.app.servertransaction.PauseActivityItem;
 import android.app.servertransaction.PendingTransactionActions;
@@ -212,6 +214,7 @@ import android.view.contentcapture.IContentCaptureOptionsCallback;
 import android.view.translation.TranslationSpec;
 import android.view.translation.UiTranslationSpec;
 import android.webkit.WebView;
+import android.window.ActivityWindowInfo;
 import android.window.ITaskFragmentOrganizer;
 import android.window.SizeConfigurationBuckets;
 import android.window.SplashScreen;
@@ -604,6 +607,11 @@ public final class ActivityThread extends ClientTransactionHandler
         boolean hideForNow;
         Configuration createdConfig;
         Configuration overrideConfig;
+        @NonNull
+        private ActivityWindowInfo mActivityWindowInfo;
+        @Nullable
+        private ActivityWindowInfo mLastReportedActivityWindowInfo;
+
         // Used for consolidating configs before sending on to Activity.
         private final Configuration tmpConfig = new Configuration();
         // Callback used for updating activity override config and camera compat control state.
@@ -671,7 +679,8 @@ public final class ActivityThread extends ClientTransactionHandler
                 List<ReferrerIntent> pendingNewIntents, SceneTransitionInfo sceneTransitionInfo,
                 boolean isForward, ProfilerInfo profilerInfo, ClientTransactionHandler client,
                 IBinder assistToken, IBinder shareableActivityToken, boolean launchedFromBubble,
-                IBinder taskFragmentToken, IBinder initialCallerInfoAccessToken) {
+                IBinder taskFragmentToken, IBinder initialCallerInfoAccessToken,
+                ActivityWindowInfo activityWindowInfo) {
             this.token = token;
             this.assistToken = assistToken;
             this.shareableActivityToken = shareableActivityToken;
@@ -692,6 +701,7 @@ public final class ActivityThread extends ClientTransactionHandler
             mSceneTransitionInfo = sceneTransitionInfo;
             mLaunchedFromBubble = launchedFromBubble;
             mTaskFragmentToken = taskFragmentToken;
+            mActivityWindowInfo = activityWindowInfo;
             init();
         }
 
@@ -703,15 +713,21 @@ public final class ActivityThread extends ClientTransactionHandler
             stopped = false;
             hideForNow = false;
             activityConfigCallback = new ViewRootImpl.ActivityConfigCallback() {
+
                 @Override
-                public void onConfigurationChanged(Configuration overrideConfig,
-                        int newDisplayId) {
+                public void onConfigurationChanged(@NonNull Configuration overrideConfig,
+                        int newDisplayId, @Nullable ActivityWindowInfo activityWindowInfo) {
                     if (activity == null) {
                         throw new IllegalStateException(
                                 "Received config update for non-existing activity");
                     }
+                    if (activityWindowInfoFlag() && activityWindowInfo == null) {
+                        Log.w(TAG, "Received empty ActivityWindowInfo update for r=" + activity);
+                        activityWindowInfo = mActivityWindowInfo;
+                    }
                     activity.mMainThread.handleActivityConfigurationChanged(
                             ActivityClientRecord.this, overrideConfig, newDisplayId,
+                            activityWindowInfo,
                             false /* alwaysReportChange */);
                 }
 
@@ -778,6 +794,11 @@ public final class ActivityThread extends ClientTransactionHandler
 
         public boolean isVisibleFromServer() {
             return activity != null && activity.mVisibleFromServer;
+        }
+
+        @NonNull
+        public ActivityWindowInfo getActivityWindowInfo() {
+            return mActivityWindowInfo;
         }
 
         public String toString() {
@@ -960,6 +981,7 @@ public final class ActivityThread extends ClientTransactionHandler
         ContentCaptureOptions contentCaptureOptions;
 
         long[] disabledCompatChanges;
+        long[] mLoggableCompatChanges;
 
         SharedMemory mSerializedSystemFontMap;
 
@@ -1269,6 +1291,7 @@ public final class ActivityThread extends ClientTransactionHandler
                 AutofillOptions autofillOptions,
                 ContentCaptureOptions contentCaptureOptions,
                 long[] disabledCompatChanges,
+                long[] loggableCompatChanges,
                 SharedMemory serializedSystemFontMap,
                 long startRequestedElapsedTime,
                 long startRequestedUptime) {
@@ -1323,6 +1346,7 @@ public final class ActivityThread extends ClientTransactionHandler
             data.autofillOptions = autofillOptions;
             data.contentCaptureOptions = contentCaptureOptions;
             data.disabledCompatChanges = disabledCompatChanges;
+            data.mLoggableCompatChanges = loggableCompatChanges;
             data.mSerializedSystemFontMap = serializedSystemFontMap;
             data.startRequestedElapsedTime = startRequestedElapsedTime;
             data.startRequestedUptime = startRequestedUptime;
@@ -4059,6 +4083,13 @@ public final class ActivityThread extends ClientTransactionHandler
                     ActivityManager.getService().waitForNetworkStateUpdate(mNetworkBlockSeq);
                     mNetworkBlockSeq = INVALID_PROC_STATE_SEQ;
                 } catch (RemoteException ignored) {}
+                if (Flags.clearDnsCacheOnNetworkRulesUpdate()) {
+                    // InetAddress will cache UnknownHostException failures. If the rules got
+                    // updated and the app has network access now, we need to clear the negative
+                    // cache to ensure valid dns queries can work immediately.
+                    // TODO: b/329133769 - Clear only the negative cache once it is available.
+                    InetAddress.clearDnsCache();
+                }
             }
         }
     }
@@ -4170,6 +4201,9 @@ public final class ActivityThread extends ClientTransactionHandler
                 pendingActions.setRestoreInstanceState(true);
                 pendingActions.setCallOnPostCreate(true);
             }
+
+            // Trigger ActivityWindowInfo callback if first launch or change from relaunch.
+            handleActivityWindowInfoChanged(r);
         } else {
             // If there was an error, for any reason, tell the activity manager to stop us.
             ActivityClient.getInstance().finishActivity(r.token, Activity.RESULT_CANCELED,
@@ -4548,7 +4582,7 @@ public final class ActivityThread extends ClientTransactionHandler
     private void schedulePauseWithUserLeavingHint(ActivityClientRecord r) {
         final ClientTransaction transaction = ClientTransaction.obtain(mAppThread);
         final PauseActivityItem pauseActivityItem = PauseActivityItem.obtain(r.token,
-                r.activity.isFinishing(), /* userLeaving */ true, r.activity.mConfigChangeFlags,
+                r.activity.isFinishing(), /* userLeaving */ true,
                 /* dontReport */ false, /* autoEnteringPip */ false);
         transaction.addTransactionItem(pauseActivityItem);
         executeTransaction(transaction);
@@ -5422,13 +5456,12 @@ public final class ActivityThread extends ClientTransactionHandler
 
     @Override
     public void handlePauseActivity(ActivityClientRecord r, boolean finished, boolean userLeaving,
-            int configChanges, boolean autoEnteringPip, PendingTransactionActions pendingActions,
+            boolean autoEnteringPip, PendingTransactionActions pendingActions,
             String reason) {
         if (userLeaving) {
             performUserLeavingActivity(r);
         }
 
-        r.activity.mConfigChangeFlags |= configChanges;
         if (autoEnteringPip) {
             // Set mIsInPictureInPictureMode earlier in case of auto-enter-pip, see also
             // {@link Activity#enterPictureInPictureMode(PictureInPictureParams)}.
@@ -5677,9 +5710,8 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     @Override
-    public void handleStopActivity(ActivityClientRecord r, int configChanges,
+    public void handleStopActivity(ActivityClientRecord r,
             PendingTransactionActions pendingActions, boolean finalStateRequest, String reason) {
-        r.activity.mConfigChangeFlags |= configChanges;
 
         final StopInfo stopInfo = new StopInfo();
         performStopActivityInner(r, stopInfo, true /* saveState */, finalStateRequest,
@@ -5849,11 +5881,10 @@ public final class ActivityThread extends ClientTransactionHandler
 
     /** Core implementation of activity destroy call. */
     void performDestroyActivity(ActivityClientRecord r, boolean finishing,
-            int configChanges, boolean getNonConfigInstance, String reason) {
+            boolean getNonConfigInstance, String reason) {
         Class<? extends Activity> activityClass;
         if (localLOGV) Slog.v(TAG, "Performing finish of " + r);
         activityClass = r.activity.getClass();
-        r.activity.mConfigChangeFlags |= configChanges;
         if (finishing) {
             r.activity.mFinished = true;
         }
@@ -5918,9 +5949,9 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     @Override
-    public void handleDestroyActivity(ActivityClientRecord r, boolean finishing, int configChanges,
+    public void handleDestroyActivity(ActivityClientRecord r, boolean finishing,
             boolean getNonConfigInstance, String reason) {
-        performDestroyActivity(r, finishing, configChanges, getNonConfigInstance, reason);
+        performDestroyActivity(r, finishing, getNonConfigInstance, reason);
         cleanUpPendingRemoveWindows(r, finishing);
         WindowManager wm = r.activity.getWindowManager();
         View v = r.activity.mDecor;
@@ -5988,9 +6019,11 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     @Override
-    public ActivityClientRecord prepareRelaunchActivity(IBinder token,
-            List<ResultInfo> pendingResults, List<ReferrerIntent> pendingNewIntents,
-            int configChanges, MergedConfiguration config, boolean preserveWindow) {
+    public ActivityClientRecord prepareRelaunchActivity(@NonNull IBinder token,
+            @Nullable List<ResultInfo> pendingResults,
+            @Nullable List<ReferrerIntent> pendingNewIntents, int configChanges,
+            @NonNull MergedConfiguration config, boolean preserveWindow,
+            @NonNull ActivityWindowInfo activityWindowInfo) {
         ActivityClientRecord target = null;
         boolean scheduleRelaunch = false;
 
@@ -6031,14 +6064,15 @@ public final class ActivityThread extends ClientTransactionHandler
             target.createdConfig = config.getGlobalConfiguration();
             target.overrideConfig = config.getOverrideConfiguration();
             target.pendingConfigChanges |= configChanges;
+            target.mActivityWindowInfo = activityWindowInfo;
         }
 
         return scheduleRelaunch ? target : null;
     }
 
     @Override
-    public void handleRelaunchActivity(ActivityClientRecord tmp,
-            PendingTransactionActions pendingActions) {
+    public void handleRelaunchActivity(@NonNull ActivityClientRecord tmp,
+            @NonNull PendingTransactionActions pendingActions) {
         // If we are getting ready to gc after going to the background, well
         // we are back active so skip it.
         unscheduleGcIdler();
@@ -6117,8 +6151,9 @@ public final class ActivityThread extends ClientTransactionHandler
 
         r.activity.mChangingConfigurations = true;
 
-        handleRelaunchActivityInner(r, configChanges, tmp.pendingResults, tmp.pendingIntents,
-                pendingActions, tmp.startsNotResumed, tmp.overrideConfig, "handleRelaunchActivity");
+        handleRelaunchActivityInner(r, tmp.pendingResults, tmp.pendingIntents,
+                pendingActions, tmp.startsNotResumed, tmp.overrideConfig, tmp.mActivityWindowInfo,
+                "handleRelaunchActivity");
     }
 
     void scheduleRelaunchActivity(IBinder token) {
@@ -6173,7 +6208,8 @@ public final class ActivityThread extends ClientTransactionHandler
                 r.overrideConfig);
         final ActivityRelaunchItem activityRelaunchItem = ActivityRelaunchItem.obtain(
                 r.token, null /* pendingResults */, null /* pendingIntents */,
-                0 /* configChanges */, mergedConfiguration, r.mPreserveWindow);
+                0 /* configChanges */, mergedConfiguration, r.mPreserveWindow,
+                r.getActivityWindowInfo());
         // Make sure to match the existing lifecycle state in the end of the transaction.
         final ActivityLifecycleItem lifecycleRequest =
                 TransactionExecutorHelper.getLifecycleRequestForCurrentState(r);
@@ -6184,10 +6220,12 @@ public final class ActivityThread extends ClientTransactionHandler
         executeTransaction(transaction);
     }
 
-    private void handleRelaunchActivityInner(ActivityClientRecord r, int configChanges,
-            List<ResultInfo> pendingResults, List<ReferrerIntent> pendingIntents,
-            PendingTransactionActions pendingActions, boolean startsNotResumed,
-            Configuration overrideConfig, String reason) {
+    private void handleRelaunchActivityInner(@NonNull ActivityClientRecord r,
+            @Nullable List<ResultInfo> pendingResults,
+            @Nullable List<ReferrerIntent> pendingIntents,
+            @NonNull PendingTransactionActions pendingActions, boolean startsNotResumed,
+            @NonNull Configuration overrideConfig, @NonNull ActivityWindowInfo activityWindowInfo,
+            @NonNull String reason) {
         // Preserve last used intent, it may be set from Activity#setIntent().
         final Intent customIntent = r.activity.mIntent;
         // Need to ensure state is saved.
@@ -6198,7 +6236,7 @@ public final class ActivityThread extends ClientTransactionHandler
             callActivityOnStop(r, true /* saveState */, reason);
         }
 
-        handleDestroyActivity(r, false, configChanges, true, reason);
+        handleDestroyActivity(r, false /* finishing */, true /* getNonConfigInstance */, reason);
 
         r.activity = null;
         r.window = null;
@@ -6220,6 +6258,7 @@ public final class ActivityThread extends ClientTransactionHandler
         }
         r.startsNotResumed = startsNotResumed;
         r.overrideConfig = overrideConfig;
+        r.mActivityWindowInfo = activityWindowInfo;
 
         handleLaunchActivity(r, pendingActions, mLastReportedDeviceId, customIntent);
     }
@@ -6641,11 +6680,12 @@ public final class ActivityThread extends ClientTransactionHandler
     /**
      * Sets the supplied {@code overrideConfig} as pending for the {@code token}. Calling
      * this method prevents any calls to
-     * {@link #handleActivityConfigurationChanged(ActivityClientRecord, Configuration, int)} from
-     * processing any configurations older than {@code overrideConfig}.
+     * {@link #handleActivityConfigurationChanged(ActivityClientRecord, Configuration, int,
+     * ActivityWindowInfo)} from processing any configurations older than {@code overrideConfig}.
      */
     @Override
-    public void updatePendingActivityConfiguration(IBinder token, Configuration overrideConfig) {
+    public void updatePendingActivityConfiguration(@NonNull IBinder token,
+            @NonNull Configuration overrideConfig) {
         synchronized (mPendingOverrideConfigs) {
             final Configuration pendingOverrideConfig = mPendingOverrideConfigs.get(token);
             if (pendingOverrideConfig != null
@@ -6662,9 +6702,10 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     @Override
-    public void handleActivityConfigurationChanged(ActivityClientRecord r,
-            @NonNull Configuration overrideConfig, int displayId) {
-        handleActivityConfigurationChanged(r, overrideConfig, displayId,
+    public void handleActivityConfigurationChanged(@NonNull ActivityClientRecord r,
+            @NonNull Configuration overrideConfig, int displayId,
+            @NonNull ActivityWindowInfo activityWindowInfo) {
+        handleActivityConfigurationChanged(r, overrideConfig, displayId, activityWindowInfo,
                 // This is the only place that uses alwaysReportChange=true. The entry point should
                 // be from ActivityConfigurationChangeItem or MoveToDisplayItem, so the server side
                 // has confirmed the activity should handle the configuration instead of relaunch.
@@ -6682,9 +6723,11 @@ public final class ActivityThread extends ClientTransactionHandler
      * @param overrideConfig Activity override config.
      * @param displayId Id of the display where activity was moved to, -1 if there was no move and
      *                  value didn't change.
+     * @param activityWindowInfo the window info of the given activity.
      */
-    void handleActivityConfigurationChanged(ActivityClientRecord r,
-            @NonNull Configuration overrideConfig, int displayId, boolean alwaysReportChange) {
+    void handleActivityConfigurationChanged(@NonNull ActivityClientRecord r,
+            @NonNull Configuration overrideConfig, int displayId,
+            @NonNull ActivityWindowInfo activityWindowInfo, boolean alwaysReportChange) {
         synchronized (mPendingOverrideConfigs) {
             final Configuration pendingOverrideConfig = mPendingOverrideConfigs.get(r.token);
             if (overrideConfig.isOtherSeqNewer(pendingOverrideConfig)) {
@@ -6717,6 +6760,8 @@ public final class ActivityThread extends ClientTransactionHandler
 
         // Perform updates.
         r.overrideConfig = overrideConfig;
+        r.mActivityWindowInfo = activityWindowInfo;
+
         final ViewRootImpl viewRoot = r.activity.mDecor != null
             ? r.activity.mDecor.getViewRootImpl() : null;
 
@@ -6739,6 +6784,22 @@ public final class ActivityThread extends ClientTransactionHandler
             viewRoot.updateConfiguration(displayId);
         }
         mSomeActivitiesChanged = true;
+
+        // Trigger ActivityWindowInfo callback if changed.
+        handleActivityWindowInfoChanged(r);
+    }
+
+    private void handleActivityWindowInfoChanged(@NonNull ActivityClientRecord r) {
+        if (!activityWindowInfoFlag()) {
+            return;
+        }
+        if (r.mActivityWindowInfo == null
+                || r.mActivityWindowInfo.equals(r.mLastReportedActivityWindowInfo)) {
+            return;
+        }
+        r.mLastReportedActivityWindowInfo = r.mActivityWindowInfo;
+        ClientTransactionListenerController.getInstance().onActivityWindowInfoChanged(r.token,
+                r.mActivityWindowInfo);
     }
 
     final void handleProfilerControl(boolean start, ProfilerInfo profilerInfo, int profileType) {
@@ -7081,7 +7142,7 @@ public final class ActivityThread extends ClientTransactionHandler
         Process.setStartTimes(SystemClock.elapsedRealtime(), SystemClock.uptimeMillis(),
                 data.startRequestedElapsedTime, data.startRequestedUptime);
 
-        AppCompatCallbacks.install(data.disabledCompatChanges);
+        AppCompatCallbacks.install(data.disabledCompatChanges, data.mLoggableCompatChanges);
         // Let libcore handle any compat changes after installing the list of compat changes.
         AppSpecializationHooks.handleCompatChangesBeforeBindingApplication();
 

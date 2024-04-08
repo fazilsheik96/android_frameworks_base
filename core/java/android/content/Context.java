@@ -83,6 +83,7 @@ import android.os.StatFs;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
+import android.provider.E2eeContactKeysManager;
 import android.provider.MediaStore;
 import android.telephony.TelephonyRegistryManager;
 import android.util.AttributeSet;
@@ -4207,7 +4208,7 @@ public abstract class Context {
             MEDIA_COMMUNICATION_SERVICE,
             BATTERY_SERVICE,
             JOB_SCHEDULER_SERVICE,
-            //@hide: PERSISTENT_DATA_BLOCK_SERVICE,
+            PERSISTENT_DATA_BLOCK_SERVICE,
             //@hide: OEM_LOCK_SERVICE,
             MEDIA_PROJECTION_SERVICE,
             MIDI_SERVICE,
@@ -4237,7 +4238,6 @@ public abstract class Context {
             //@hide: ATTESTATION_VERIFICATION_SERVICE,
             //@hide: SAFETY_CENTER_SERVICE,
             DISPLAY_HASH_SERVICE,
-            //@hide: CROSS_DEVICE_SERVICE,
             CREDENTIAL_SERVICE,
             DEVICE_LOCK_SERVICE,
             VIRTUALIZATION_SERVICE,
@@ -4572,13 +4572,6 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
-     * {@link CrossDeviceManager} for interacting with the Cross Device Service.
-     * @hide
-     */
-    public static final String CROSS_DEVICE_SERVICE = "cross_device_service";
-
-    /**
-     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.app.UriGrantsManager} for interacting with the global system state.
      *
      * @see #getSystemService(String)
@@ -4823,9 +4816,7 @@ public abstract class Context {
      * @see android.net.thread.ThreadNetworkManager
      * @hide
      */
-    // TODO (b/325886480): update the flag to
-    // "com.android.net.thread.platform.flags.Flags.FLAG_THREAD_ENABLED_PLATFORM"
-    @FlaggedApi("com.android.net.thread.flags.thread_enabled_platform")
+    @FlaggedApi(com.android.net.thread.platform.flags.Flags.FLAG_THREAD_ENABLED_PLATFORM)
     @SystemApi
     public static final String THREAD_NETWORK_SERVICE = "thread_network";
 
@@ -5076,7 +5067,6 @@ public abstract class Context {
      * {@link android.hardware.fingerprint.FingerprintManager} for handling management
      * of fingerprints.
      *
-     * @removed See {@link android.hardware.biometrics.BiometricPrompt}
      * @see #getSystemService(String)
      * @see android.hardware.fingerprint.FingerprintManager
      */
@@ -5091,8 +5081,6 @@ public abstract class Context {
      * @see #getSystemService
      * @see android.hardware.face.FaceManager
      */
-    @FlaggedApi(android.hardware.biometrics.Flags.FLAG_FACE_BACKGROUND_AUTHENTICATION)
-    @SystemApi
     public static final String FACE_SERVICE = "face";
 
     /**
@@ -5405,6 +5393,19 @@ public abstract class Context {
      */
     @SystemApi
     public static final String SMARTSPACE_SERVICE = "smartspace";
+
+    /**
+     * Used for getting the contextual search service.
+     *
+     * <p><b>NOTE: </b> this service is optional; callers of
+     * {@code Context.getSystemServiceName(CONTEXTUAL_SEARCH_SERVICE)} must check for {@code null}.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     */
+    @FlaggedApi(android.app.contextualsearch.flags.Flags.FLAG_ENABLE_SERVICE)
+    @SystemApi
+    public static final String CONTEXTUAL_SEARCH_SERVICE = "contextual_search";
 
     /**
      * Used for getting the cloudsearch service.
@@ -5928,9 +5929,8 @@ public abstract class Context {
      *
      * @see #getSystemService(String)
      * @see android.service.persistentdata.PersistentDataBlockManager
-     * @hide
      */
-    @SystemApi
+    @FlaggedApi(android.security.Flags.FLAG_FRP_ENFORCEMENT)
     public static final String PERSISTENT_DATA_BLOCK_SERVICE = "persistent_data_block";
 
     /**
@@ -6575,10 +6575,10 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
-     * {@link android.provider.ContactKeysManager} to managing contact keys.
+     * {@link E2eeContactKeysManager} to managing contact keys.
      *
      * @see #getSystemService(String)
-     * @see android.provider.ContactKeysManager
+     * @see E2eeContactKeysManager
      */
     @FlaggedApi(android.provider.Flags.FLAG_USER_KEYS)
     public static final String CONTACT_KEYS_SERVICE = "contact_keys";
@@ -6604,6 +6604,19 @@ public abstract class Context {
     @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     @SuppressLint("ServiceName")
     public static final String WEBVIEW_UPDATE_SERVICE = "webviewupdate";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.provider.BlockedNumbersManager} for accessing the blocked number service.
+     *
+     * @see #getSystemService(String)
+     * @see android.provider.BlockedNumbersManager
+     * @hide
+     */
+    @FlaggedApi(
+            com.android.server.telecom.flags.Flags.FLAG_TELECOM_MAINLINE_BLOCKED_NUMBERS_MANAGER)
+    @SystemApi
+    public static final String BLOCKED_NUMBERS_SERVICE = "blocked_numbers";
 
     /**
      * Determine whether the given permission is allowed for a particular

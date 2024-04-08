@@ -97,7 +97,6 @@ import android.app.PendingIntent;
 import android.app.ProfilerInfo;
 import android.app.WaitResult;
 import android.app.WindowConfiguration;
-import android.app.RemoteTaskConstants;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
 import android.content.IIntentSender;
@@ -114,7 +113,6 @@ import android.content.res.Configuration;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.DeviceIntegrationUtils;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.Trace;
@@ -280,8 +278,6 @@ class ActivityStarter {
     private long mLastStartActivityTimeMs;
     // The reason we were trying to start the last activity
     private String mLastStartReason;
-    // Device Integration: RemoteTaskManager
-    private RemoteTaskManager mRemoteTaskManager;
 
     /*
      * Request details provided through setter methods. Should be reset after {@link #execute()}
@@ -419,6 +415,7 @@ class ActivityStarter {
         int filterCallingUid;
         PendingIntentRecord originatingPendingIntent;
         BackgroundStartPrivileges forcedBalByPiSender;
+        boolean freezeScreen;
 
         final StringBuilder logMessage = new StringBuilder();
 
@@ -482,6 +479,7 @@ class ActivityStarter {
             filterCallingUid = UserHandle.USER_NULL;
             originatingPendingIntent = null;
             forcedBalByPiSender = BackgroundStartPrivileges.NONE;
+            freezeScreen = false;
             errorCallbackToken = null;
         }
 
@@ -525,6 +523,7 @@ class ActivityStarter {
             filterCallingUid = request.filterCallingUid;
             originatingPendingIntent = request.originatingPendingIntent;
             forcedBalByPiSender = request.forcedBalByPiSender;
+            freezeScreen = request.freezeScreen;
             errorCallbackToken = request.errorCallbackToken;
         }
 
@@ -649,9 +648,6 @@ class ActivityStarter {
         mRootWindowContainer = service.mRootWindowContainer;
         mSupervisor = supervisor;
         mInterceptor = interceptor;
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-            mRemoteTaskManager = mService.getRemoteTaskManager();
-        }
         reset(true);
     }
 
@@ -1533,6 +1529,18 @@ class ActivityStarter {
         Transition newTransition = transitionController.isShellTransitionsEnabled()
                 ? transitionController.createAndStartCollecting(TRANSIT_OPEN) : null;
         RemoteTransition remoteTransition = r.takeRemoteTransition();
+        // Create a display snapshot as soon as possible.
+        if (newTransition != null && mRequest.freezeScreen) {
+            final TaskDisplayArea tda = mLaunchParams.hasPreferredTaskDisplayArea()
+                    ? mLaunchParams.mPreferredTaskDisplayArea
+                    : mRootWindowContainer.getDefaultTaskDisplayArea();
+            final DisplayContent dc = mRootWindowContainer.getDisplayContentOrCreate(
+                    tda.getDisplayId());
+            if (dc != null) {
+                transitionController.collect(dc);
+                transitionController.collectVisibleChange(dc);
+            }
+        }
         try {
             mService.deferWindowLayout();
             transitionController.collect(r);
@@ -1541,6 +1549,8 @@ class ActivityStarter {
                 result = startActivityInner(r, sourceRecord, voiceSession, voiceInteractor,
                         startFlags, options, inTask, inTaskFragment, balVerdict,
                         intentGrants, realCallingUid);
+            } catch (Exception ex) {
+                Slog.e(TAG, "Exception on startActivityInner", ex);
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
                 startedActivityRootTask = handleStartResult(r, options, result, newTransition,
@@ -1616,7 +1626,7 @@ class ActivityStarter {
         final ActivityRecord currentTop = startedActivityRootTask.topRunningActivity();
         if (currentTop != null && currentTop.shouldUpdateConfigForDisplayChanged()) {
             mRootWindowContainer.ensureVisibilityAndConfig(
-                    currentTop, currentTop.getDisplayId(), false /* deferResume */);
+                    currentTop, currentTop.mDisplayContent, false /* deferResume */);
         }
 
         if (!avoidMoveToFront() && mDoResume && mRootWindowContainer
@@ -1733,21 +1743,6 @@ class ActivityStarter {
         final Task targetTask = reusedTask != null ? reusedTask : computeTargetTask();
         final boolean newTask = targetTask == null;
 
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
-            && (newTask || reusedTask != null)) {
-            final boolean shouldInterfere
-                    = newTask && mRemoteTaskManager.isDeliverToCurrentTop(
-                            mPreferredTaskDisplayArea, mStartActivity,
-                            mNotTop, mLaunchFlags, mLaunchMode);
-            if (!shouldInterfere) {
-                options = mRemoteTaskManager.verifyRemoteTaskIfNeeded(mRootWindowContainer,
-                        mRequest.caller, mRequest.callingPid, mRequest.callingUid,
-                        mRequest.realCallingPid, mRequest.realCallingUid, reusedTask,
-                        mSourceRecord != null ? mSourceRecord : sourceRecord, r, options);
-                mOptions = options;
-            }
-        }
-
         mTargetTask = targetTask;
 
         computeLaunchParams(r, sourceRecord, targetTask);
@@ -1807,9 +1802,6 @@ class ActivityStarter {
             startResult =
                     recycleTask(targetTask, targetTaskTop, reusedTask, intentGrants, balVerdict);
             if (startResult != START_SUCCESS) {
-                if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION && reusedTask != null) {
-                    mRemoteTaskManager.activateRemoteTaskIfNeeded(newTask, reusedTask,r, mOptions);
-                }
                 return startResult;
             }
         } else {
@@ -1822,9 +1814,6 @@ class ActivityStarter {
         if (topRootTask != null) {
             startResult = deliverToCurrentTopIfNeeded(topRootTask, intentGrants);
             if (startResult != START_SUCCESS) {
-                if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION && reusedTask != null) {
-                    mRemoteTaskManager.activateRemoteTaskIfNeeded(newTask, reusedTask,r, mOptions);
-                }
                 return startResult;
             }
         }
@@ -1943,9 +1932,6 @@ class ActivityStarter {
                 && balVerdict.allows()) {
             mRootWindowContainer.moveActivityToPinnedRootTask(mStartActivity,
                     sourceRecord, "launch-into-pip");
-        }
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-            mRemoteTaskManager.activateRemoteTaskIfNeeded(newTask, reusedTask, r, mOptions);
         }
 
         mSupervisor.getBackgroundActivityLaunchController()
@@ -2105,7 +2091,7 @@ class ActivityStarter {
 
         if (!mSupervisor.getBackgroundActivityLaunchController().checkActivityAllowedToStart(
                 mSourceRecord, r, newTask, avoidMoveToFront(), targetTask, mLaunchFlags, mBalCode,
-                mCallingUid, mRealCallingUid)) {
+                mCallingUid, mRealCallingUid, mPreferredTaskDisplayArea)) {
             return START_ABORTED;
         }
 
@@ -2300,15 +2286,7 @@ class ActivityStarter {
             // removed from calling performClearTaskLocked (For example, if it is being brought out
             // of history or if it is finished immediately), thus disassociating the task. Keep the
             // task-overlay activity because the targetTask will be reused to launch new activity.
-            if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-                if (!mRemoteTaskManager.inAnyInterceptSession(mOptions)) {
-                    // Device Integration: if we got a intention for moving task between displays, stop cleaning
-                    // any activity from task, we want to keep context in apps unchange.
-                    targetTask.performClearTaskForReuse(true /* excludingTaskOverlay*/);
-                }
-            } else {
-                targetTask.performClearTaskForReuse(true /* excludingTaskOverlay*/);
-            }
+            targetTask.performClearTaskForReuse(true /* excludingTaskOverlay*/);
             targetTask.setIntent(mStartActivity);
             mAddingToTask = true;
             mIsTaskCleared = true;
@@ -2316,13 +2294,6 @@ class ActivityStarter {
                 || isDocumentLaunchesIntoExisting(mLaunchFlags)
                 || isLaunchModeOneOf(LAUNCH_SINGLE_INSTANCE, LAUNCH_SINGLE_TASK,
                         LAUNCH_SINGLE_INSTANCE_PER_TASK)) {
-            // Device Integration: if we got a intention for moving task between displays, stop cleaning any activity from task
-            // we want to keep context in app unchange.
-            if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
-                && mRemoteTaskManager.inAnyInterceptSession(mOptions)
-                    && (mLaunchFlags & FLAG_ACTIVITY_CLEAR_TOP) == 0) {
-                return;
-            }
             // In this situation we want to remove all activities from the task up to the one
             // being started. In most cases this means we are resetting the task to its initial
             // state.
@@ -2797,9 +2768,6 @@ class ActivityStarter {
                 intentActivity =
                         mRootWindowContainer.findTask(mStartActivity, mPreferredTaskDisplayArea);
             }
-        } else if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-            intentActivity = mRemoteTaskManager.findTaskForReuseIfNeeded(mStartActivity,
-                        mOptions, mPreferredTaskDisplayArea, mLaunchFlags);
         }
 
         if (intentActivity != null && mLaunchMode == LAUNCH_SINGLE_INSTANCE_PER_TASK
@@ -3319,6 +3287,11 @@ class ActivityStarter {
 
     ActivityStarter setBackgroundStartPrivileges(BackgroundStartPrivileges forcedBalByPiSender) {
         mRequest.forcedBalByPiSender = forcedBalByPiSender;
+        return this;
+    }
+
+    ActivityStarter setFreezeScreen(boolean freezeScreen) {
+        mRequest.freezeScreen = freezeScreen;
         return this;
     }
 

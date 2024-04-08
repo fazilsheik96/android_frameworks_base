@@ -62,6 +62,7 @@ android_test {
         "cts-wm-util",
         "platform-compat-test-rules",
         "mockito-target-minus-junit4",
+        "mockito-kotlin2",
         "platform-test-annotations",
         "ShortcutManagerTestUtils",
         "truth",
@@ -85,6 +86,7 @@ android_test {
         "ravenwood-junit",
         "net_flags_lib",
         "CtsVirtualDeviceCommonLib",
+        "com_android_server_accessibility_flags_lib",
     ],
 
     libs: [

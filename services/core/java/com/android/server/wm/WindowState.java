@@ -88,7 +88,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_SEARCH_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_ADDITIONAL;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL;
-import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_BLACKSCREEN_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
@@ -202,7 +201,6 @@ import android.gui.TouchOcclusionMode;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Debug;
-import android.os.DeviceIntegrationUtils;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.RemoteCallbackList;
@@ -242,12 +240,12 @@ import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 import android.view.inputmethod.ImeTracker;
+import android.window.ActivityWindowInfo;
 import android.window.ClientWindowFrames;
 import android.window.OnBackInvokedCallbackInfo;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.KeyInterceptionInfo;
-import com.android.internal.protolog.ProtoLogImpl;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.ToBooleanFunction;
@@ -367,6 +365,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private boolean mDragResizing;
     private boolean mDragResizingChangeReported = true;
     private boolean mRedrawForSyncReported = true;
+    private long mCreateTime = System.currentTimeMillis();
 
     /**
      * Used to assosciate a given set of state changes sent from MSG_RESIZED
@@ -698,7 +697,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      */
     private boolean mDrawnStateEvaluated;
 
-    private final Point mSurfacePosition = new Point();
+    /** The surface position relative to the parent container. */
+    final Point mSurfacePosition = new Point();
 
     /**
      * A region inside of this window to be excluded from touch.
@@ -1079,12 +1079,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mViewVisibility = viewVisibility;
         mPolicy = mWmService.mPolicy;
         mContext = mWmService.mContext;
-        // Device Integration: This is to make phone screen not show our black screen
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-            mForceSeamlesslyRotate = token.mRoundedCornerOverlay || mAttrs.type == TYPE_SYSTEM_BLACKSCREEN_OVERLAY;
-        } else {
-            mForceSeamlesslyRotate = token.mRoundedCornerOverlay;
-        }
+        mForceSeamlesslyRotate = token.mRoundedCornerOverlay;
         mInputWindowHandle = new InputWindowHandleWrapper(new InputWindowHandle(
                 mActivityRecord != null
                         ? mActivityRecord.getInputApplicationHandle(false /* update */) : null,
@@ -1350,7 +1345,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // This window doesn't provide any insets.
             return;
         }
-        if (mGivenInsetsPending && mAttrs.providedInsets == null) {
+        if (mGivenInsetsPending) {
             // The given insets are pending, and they are not reliable for now. The source frame
             // should be updated after the new given insets are sent to window manager.
             return;
@@ -1721,6 +1716,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 : DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
     }
 
+    long getCreateTime() {
+        return mCreateTime;
+    }
+
     /**
      * Returns true if, at any point, the application token associated with this window has actually
      * displayed any windows. This is most useful with the "starting up" window to determine if any
@@ -1900,6 +1899,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     boolean isSecureLocked() {
+        if (mWmService.getDisableSecureWindows()) {
+            return false;
+        }
+
         if ((mAttrs.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
             return true;
         }
@@ -2047,6 +2050,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     /** @see WindowManagerInternal#waitForAllWindowsDrawn */
     void requestDrawIfNeeded(List<WindowState> outWaitingForDrawn) {
         if (!isVisible()) {
+            return;
+        }
+        final WallpaperWindowToken wallpaperToken = mToken.asWallpaperToken();
+        if (wallpaperToken != null) {
+            if (wallpaperToken.hasVisibleNotDrawnWallpaper()) {
+                outWaitingForDrawn.add(this);
+            }
             return;
         }
         if (mActivityRecord != null) {
@@ -3687,19 +3697,32 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         markRedrawForSyncReported();
 
+        // App window resize may trigger Activity#onConfigurationChanged, so we need to update
+        // ActivityWindowInfo as well.
+        final IBinder activityToken;
+        final ActivityWindowInfo activityWindowInfo;
+        if (Flags.activityWindowInfoFlag() && mActivityRecord != null) {
+            activityToken = mActivityRecord.token;
+            activityWindowInfo = mActivityRecord.getActivityWindowInfo();
+        } else {
+            activityToken = null;
+            activityWindowInfo = null;
+        }
+
         if (Flags.bundleClientTransactionFlag()) {
             getProcess().scheduleClientTransactionItem(
                     WindowStateResizeItem.obtain(mClient, mClientWindowFrames, reportDraw,
                             mLastReportedConfiguration, getCompatInsetsState(), forceRelayout,
                             alwaysConsumeSystemBars, displayId,
-                            syncWithBuffers ? mSyncSeqId : -1, isDragResizing));
+                            syncWithBuffers ? mSyncSeqId : -1, isDragResizing,
+                            activityToken, activityWindowInfo));
             onResizePostDispatched(drawPending, prevRotation, displayId);
         } else {
             // TODO(b/301870955): cleanup after launch
             try {
                 mClient.resized(mClientWindowFrames, reportDraw, mLastReportedConfiguration,
                         getCompatInsetsState(), forceRelayout, alwaysConsumeSystemBars, displayId,
-                        syncWithBuffers ? mSyncSeqId : -1, isDragResizing);
+                        syncWithBuffers ? mSyncSeqId : -1, isDragResizing, activityWindowInfo);
                 onResizePostDispatched(drawPending, prevRotation, displayId);
             } catch (RemoteException e) {
                 // Cancel orientation change of this window to avoid blocking unfreeze display.
@@ -4688,7 +4711,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     void onExitAnimationDone() {
-        if (ProtoLogImpl.isEnabled(WM_DEBUG_ANIM)) {
+        if (ProtoLog.isEnabled(WM_DEBUG_ANIM)) {
             final AnimationAdapter animationAdapter = mSurfaceAnimator.getAnimation();
             StringWriter sw = new StringWriter();
             if (animationAdapter != null) {
@@ -5700,7 +5723,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // window becomes visible while the sync group is still active.
             return true;
         }
-        if (mSyncState == SYNC_STATE_WAITING_FOR_DRAW && mLastConfigReportedToClient && isDrawn()) {
+        if (mSyncState == SYNC_STATE_WAITING_FOR_DRAW && mLastConfigReportedToClient && isDrawn()
+                && mPrepareSyncSeqId <= 0) {
             // Complete the sync state immediately for a drawn window that doesn't need to redraw.
             onSyncFinishedDrawing();
         }

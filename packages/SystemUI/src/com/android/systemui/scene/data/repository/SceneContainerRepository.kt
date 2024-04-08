@@ -18,12 +18,12 @@
 
 package com.android.systemui.scene.data.repository
 
+import com.android.compose.animation.scene.ObservableTransitionState
+import com.android.compose.animation.scene.SceneKey
+import com.android.compose.animation.scene.TransitionKey
 import com.android.systemui.dagger.qualifiers.Application
-import com.android.systemui.scene.shared.model.ObservableTransitionState
 import com.android.systemui.scene.shared.model.SceneContainerConfig
 import com.android.systemui.scene.shared.model.SceneDataSource
-import com.android.systemui.scene.shared.model.SceneKey
-import com.android.systemui.scene.shared.model.TransitionKey
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -48,6 +48,13 @@ constructor(
 
     private val _isVisible = MutableStateFlow(true)
     val isVisible: StateFlow<Boolean> = _isVisible.asStateFlow()
+
+    /**
+     * Whether there's an ongoing remotely-initiated user interaction.
+     *
+     * For more information see the logic in `SceneInteractor` that mutates this.
+     */
+    val isRemoteUserInteractionOngoing = MutableStateFlow(false)
 
     private val defaultTransitionState = ObservableTransitionState.Idle(config.initialSceneKey)
     private val _transitionState = MutableStateFlow<Flow<ObservableTransitionState>?>(null)

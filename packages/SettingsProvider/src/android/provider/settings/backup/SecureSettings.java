@@ -154,6 +154,7 @@ public class SecureSettings {
         Settings.Secure.MANUAL_RINGER_TOGGLE_COUNT,
         Settings.Secure.LOW_POWER_WARNING_ACKNOWLEDGED,
         Settings.Secure.EXTRA_LOW_POWER_WARNING_ACKNOWLEDGED,
+        Settings.Secure.EMERGENCY_THERMAL_ALERT_DISABLED,
         Settings.Secure.HUSH_GESTURE_USED,
         Settings.Secure.IN_CALL_NOTIFICATION_ENABLED,
         Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS,
@@ -227,6 +228,7 @@ public class SecureSettings {
         Settings.Secure.ACCESSIBILITY_MAGNIFICATION_JOYSTICK_ENABLED,
         Settings.Secure.ACCESSIBILITY_MAGNIFICATION_TWO_FINGER_TRIPLE_TAP_ENABLED,
         Settings.Secure.ACCESSIBILITY_PINCH_TO_ZOOM_ANYWHERE_ENABLED,
+        Settings.Secure.ACCESSIBILITY_SINGLE_FINGER_PANNING_ENABLED,
         Settings.Secure.ODI_CAPTIONS_VOLUME_UI_ENABLED,
         Settings.Secure.NOTIFICATION_BUBBLES,
         Settings.Secure.LOCATION_TIME_ZONE_DETECTION_ENABLED,
@@ -254,8 +256,7 @@ public class SecureSettings {
         Settings.Secure.HEARING_AID_MEDIA_ROUTING,
         Settings.Secure.HEARING_AID_NOTIFICATION_ROUTING,
         Settings.Secure.ACCESSIBILITY_FONT_SCALING_HAS_BEEN_CHANGED,
-        Settings.Secure.SEARCH_PRESS_HOLD_NAV_HANDLE_ENABLED,
-        Settings.Secure.SEARCH_LONG_PRESS_HOME_ENABLED,
+        Settings.Secure.SEARCH_ALL_ENTRYPOINTS_ENABLED,
         Settings.Secure.HUB_MODE_TUTORIAL_STATE,
         Settings.Secure.STYLUS_BUTTONS_ENABLED,
         Settings.Secure.STYLUS_HANDWRITING_ENABLED,
@@ -266,6 +267,9 @@ public class SecureSettings {
         Settings.Secure.EVEN_DIMMER_MIN_NITS,
         Settings.Secure.STYLUS_POINTER_ICON_ENABLED,
         Settings.Secure.CAMERA_EXTENSIONS_FALLBACK,
-        Settings.Secure.VISUAL_QUERY_ACCESSIBILITY_DETECTION_ENABLED
+        Settings.Secure.VISUAL_QUERY_ACCESSIBILITY_DETECTION_ENABLED,
+        Settings.Secure.IMMERSIVE_MODE_CONFIRMATIONS,
+        Settings.Secure.AUDIO_DEVICE_INVENTORY,
+        Settings.Secure.ACCESSIBILITY_FLOATING_MENU_TARGETS
     };
 }

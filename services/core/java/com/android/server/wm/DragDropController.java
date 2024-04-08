@@ -16,8 +16,10 @@
 
 package com.android.server.wm;
 
+import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.View.DRAG_FLAG_GLOBAL;
 import static android.view.View.DRAG_FLAG_GLOBAL_SAME_APPLICATION;
+import static android.view.View.DRAG_FLAG_START_INTENT_SENDER_ON_UNHANDLED_DRAG;
 
 import static com.android.input.flags.Flags.enablePointerChoreographer;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DRAG;
@@ -35,6 +37,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
+import android.os.Trace;
 import android.util.Slog;
 import android.view.Display;
 import android.view.DragEvent;
@@ -51,6 +54,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.wm.WindowManagerInternal.IDragDropCallback;
 
 import java.util.Objects;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -373,8 +377,11 @@ class DragDropController {
     boolean notifyUnhandledDrop(DragEvent dropEvent, String reason) {
         final boolean isLocalDrag =
                 (mDragState.mFlags & (DRAG_FLAG_GLOBAL_SAME_APPLICATION | DRAG_FLAG_GLOBAL)) == 0;
+        final boolean shouldDelegateUnhandledDrag =
+                (mDragState.mFlags & DRAG_FLAG_START_INTENT_SENDER_ON_UNHANDLED_DRAG) != 0;
         if (!com.android.window.flags.Flags.delegateUnhandledDrags()
                 || mGlobalDragListener == null
+                || !shouldDelegateUnhandledDrag
                 || isLocalDrag) {
             // Skip if the flag is disabled, there is no unhandled-drag listener, or if this is a
             // purely local drag
@@ -382,6 +389,9 @@ class DragDropController {
                     + "(listener=" + mGlobalDragListener + ", flags=" + mDragState.mFlags + ")");
             return false;
         }
+        final int traceCookie = new Random().nextInt();
+        Trace.asyncTraceBegin(TRACE_TAG_WINDOW_MANAGER, "DragDropController#notifyUnhandledDrop",
+                traceCookie);
         if (DEBUG_DRAG) Slog.d(TAG_WM, "Sending DROP to unhandled listener (" + reason + ")");
         try {
             // Schedule timeout for the unhandled drag listener to call back
@@ -392,6 +402,8 @@ class DragDropController {
                     if (DEBUG_DRAG) Slog.d(TAG_WM, "Unhandled listener finished handling DROP");
                     synchronized (mService.mGlobalLock) {
                         onUnhandledDropCallback(consumedByListener);
+                        Trace.asyncTraceEnd(TRACE_TAG_WINDOW_MANAGER,
+                                "DragDropController#notifyUnhandledDrop", traceCookie);
                     }
                 }
             });

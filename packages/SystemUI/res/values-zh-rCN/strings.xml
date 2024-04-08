@@ -35,6 +35,8 @@
     <string name="battery_saver_confirmation_ok" msgid="5042136476802816494">"开启"</string>
     <string name="battery_saver_start_action" msgid="8353766979886287140">"开启"</string>
     <string name="battery_saver_dismiss_action" msgid="7199342621040014738">"不用了"</string>
+    <string name="standard_battery_saver_text" msgid="6855876746552374119">"标准"</string>
+    <string name="extreme_battery_saver_text" msgid="8455810156739865335">"超级"</string>
     <string name="status_bar_settings_auto_rotation" msgid="8329080442278431708">"自动旋转屏幕"</string>
     <string name="usb_device_permission_prompt" msgid="4414719028369181772">"要允许<xliff:g id="APPLICATION">%1$s</xliff:g>访问<xliff:g id="USB_DEVICE">%2$s</xliff:g>吗？"</string>
     <string name="usb_device_permission_prompt_warn" msgid="2309129784984063656">"是否允许<xliff:g id="APPLICATION">%1$s</xliff:g>访问<xliff:g id="USB_DEVICE">%2$s</xliff:g>？\n此应用未获得录音权限，但能通过此 USB 设备录制音频。"</string>
@@ -272,10 +274,9 @@
     <string name="quick_settings_bluetooth_device_saved" msgid="7549938728928069477">"已保存"</string>
     <string name="accessibility_quick_settings_bluetooth_device_tap_to_disconnect" msgid="415980329093277342">"断开连接"</string>
     <string name="accessibility_quick_settings_bluetooth_device_tap_to_activate" msgid="3724301751036877403">"启用"</string>
-    <!-- no translation found for turn_on_bluetooth_auto_tomorrow (414836329962473906) -->
-    <skip />
-    <!-- no translation found for turn_on_bluetooth_auto_info (8831410009251539988) -->
-    <skip />
+    <string name="turn_on_bluetooth_auto_tomorrow" msgid="414836329962473906">"明天自动重新开启"</string>
+    <string name="turn_on_bluetooth_auto_info_disabled" msgid="8267380591344023327">"“快速分享”“查找我的设备”“设备位置信息”等功能会使用蓝牙"</string>
+    <string name="turn_on_bluetooth_auto_info_enabled" msgid="4802071533678400330">"蓝牙将于明天早晨 5 点开启"</string>
     <string name="quick_settings_bluetooth_secondary_label_battery_level" msgid="4182034939479344093">"<xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%s</xliff:g> 的电量"</string>
     <string name="quick_settings_bluetooth_secondary_label_audio" msgid="780333390310051161">"音频"</string>
     <string name="quick_settings_bluetooth_secondary_label_headset" msgid="2332093067553000852">"耳机"</string>
@@ -435,10 +436,15 @@
     <string name="cta_label_to_open_widget_picker" msgid="3874946756976360699">"添加更多微件"</string>
     <string name="popup_on_dismiss_cta_tile_text" msgid="8292501780996070019">"长按即可自定义微件"</string>
     <string name="button_to_configure_widgets_text" msgid="4191862850185256901">"自定义微件"</string>
+    <string name="icon_description_for_disabled_widget" msgid="4693151565003206943">"已停用微件的应用图标"</string>
     <string name="edit_widget" msgid="9030848101135393954">"修改微件"</string>
     <string name="button_to_remove_widget" msgid="3948204829181214098">"移除"</string>
     <string name="hub_mode_add_widget_button_text" msgid="4831464661209971729">"添加微件"</string>
     <string name="hub_mode_editing_exit_button_text" msgid="3704686734192264771">"完成"</string>
+    <string name="dialog_title_to_allow_any_widget" msgid="1004820948962675644">"允许在锁屏状态下显示任何微件？"</string>
+    <string name="button_text_to_open_settings" msgid="1987729256950941628">"打开设置"</string>
+    <string name="work_mode_off_title" msgid="5794818421357835873">"是否为工作应用解除暂停状态？"</string>
+    <string name="work_mode_turn_on" msgid="907813741770247267">"解除暂停"</string>
     <string name="accessibility_multi_user_switch_switcher" msgid="5330448341251092660">"切换用户"</string>
     <string name="accessibility_multi_user_list_switcher" msgid="8574105376229857407">"下拉菜单"</string>
     <string name="guest_exit_guest_dialog_message" msgid="8183450985628495709">"此会话中的所有应用和数据都将被删除。"</string>
@@ -536,6 +542,7 @@
     <string name="monitoring_description_parental_controls" msgid="8184693528917051626">"此设备由您的家长管理。您的家长可以查看和管理相关信息，例如您使用的应用、您的位置信息和设备使用时间。"</string>
     <string name="legacy_vpn_name" msgid="4174223520162559145">"VPN"</string>
     <string name="keyguard_indication_trust_unlocked" msgid="7395154975733744547">"由 TrustAgent 保持解锁状态"</string>
+    <string name="kg_prompt_after_adaptive_auth_lock" msgid="1265107698772588299">"防盗保护\n设备已锁定，因为尝试解锁的次数过多"</string>
     <string name="zen_mode_and_condition" msgid="5043165189511223718">"<xliff:g id="ZEN_MODE">%1$s</xliff:g>（<xliff:g id="EXIT_CONDITION">%2$s</xliff:g>）"</string>
     <string name="accessibility_volume_settings" msgid="1458961116951564784">"声音设置"</string>
     <string name="volume_odi_captions_tip" msgid="8825655463280990941">"自动生成媒体字幕"</string>
@@ -545,8 +552,7 @@
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"停用"</string>
     <string name="sound_settings" msgid="8874581353127418308">"声音和振动"</string>
     <string name="volume_panel_dialog_settings_button" msgid="2513228491513390310">"设置"</string>
-    <!-- no translation found for volume_panel_captioning_title (5984936949147684357) -->
-    <skip />
+    <string name="volume_panel_captioning_title" msgid="5984936949147684357">"实时字幕"</string>
     <string name="csd_lowered_title" product="default" msgid="2464112924151691129">"音量已降至较安全的水平"</string>
     <string name="csd_system_lowered_text" product="default" msgid="1250251883692996888">"您以高音量使用耳机的时长超过了建议值"</string>
     <string name="csd_500_system_lowered_text" product="default" msgid="7414943302186884124">"耳机音量已超出这周的安全上限"</string>
@@ -579,17 +585,40 @@
     <string name="volume_ringer_status_normal" msgid="1339039682222461143">"响铃"</string>
     <string name="volume_ringer_status_vibrate" msgid="6970078708957857825">"振动"</string>
     <string name="volume_ringer_status_silent" msgid="3691324657849880883">"静音"</string>
+    <string name="media_device_cast" msgid="4786241789687569892">"投屏"</string>
+    <string name="stream_notification_unavailable" msgid="4313854556205836435">"该功能无法使用，因为铃声被静音"</string>
+    <!-- no translation found for stream_alarm_unavailable (4059817189292197839) -->
+    <skip />
+    <!-- no translation found for stream_media_unavailable (6823020894438959853) -->
+    <skip />
     <string name="volume_stream_content_description_unmute" msgid="7729576371406792977">"%1$s。点按即可取消静音。"</string>
     <string name="volume_stream_content_description_vibrate" msgid="4858111994183089761">"%1$s。点按即可设为振动，但可能会同时将无障碍服务设为静音。"</string>
     <string name="volume_stream_content_description_mute" msgid="4079046784917920984">"%1$s。点按即可设为静音，但可能会同时将无障碍服务设为静音。"</string>
     <string name="volume_stream_content_description_vibrate_a11y" msgid="2742330052979397471">"%1$s。点按即可设为振动。"</string>
     <string name="volume_stream_content_description_mute_a11y" msgid="5743548478357238156">"%1$s。点按即可设为静音。"</string>
+    <string name="volume_panel_noise_control_title" msgid="7413949943872304474">"噪声控制"</string>
+    <string name="volume_panel_spatial_audio_title" msgid="3367048857932040660">"空间音频"</string>
+    <string name="volume_panel_spatial_audio_off" msgid="4177490084606772989">"关闭"</string>
+    <string name="volume_panel_spatial_audio_fixed" msgid="3136080137827746046">"固定"</string>
+    <string name="volume_panel_spatial_audio_tracking" msgid="5711115234001762974">"头部跟踪"</string>
     <string name="volume_ringer_change" msgid="3574969197796055532">"点按即可更改振铃器模式"</string>
     <string name="volume_ringer_hint_mute" msgid="4263821214125126614">"静音"</string>
     <string name="volume_ringer_hint_unmute" msgid="6119086890306456976">"取消静音"</string>
     <string name="volume_ringer_hint_vibrate" msgid="6211609047099337509">"振动"</string>
     <string name="volume_dialog_title" msgid="6502703403483577940">"%s音量控件"</string>
     <string name="volume_dialog_ringer_guidance_ring" msgid="9143194270463146858">"有来电和通知时会响铃 (<xliff:g id="VOLUME_LEVEL">%1$s</xliff:g>)"</string>
+    <!-- no translation found for volume_panel_enter_media_output_settings (8824244246272552669) -->
+    <skip />
+    <!-- no translation found for volume_panel_expanded_sliders (1885750987768506271) -->
+    <skip />
+    <!-- no translation found for volume_panel_collapsed_sliders (1413383759434791450) -->
+    <skip />
+    <!-- no translation found for volume_panel_hint_mute (6962563028495243738) -->
+    <skip />
+    <!-- no translation found for volume_panel_hint_unmute (7489063242934477382) -->
+    <skip />
+    <string name="media_output_label_title" msgid="872824698593182505">"<xliff:g id="LABEL">%s</xliff:g>播放位置："</string>
+    <string name="media_output_title_without_playing" msgid="3825663683169305013">"音频播放位置："</string>
     <string name="system_ui_tuner" msgid="1471348823289954729">"系统界面调节工具"</string>
     <string name="status_bar" msgid="4357390266055077437">"状态栏"</string>
     <string name="demo_mode" msgid="263484519766901593">"系统界面演示模式"</string>
@@ -730,9 +759,9 @@
     <string name="group_system_access_system_app_shortcuts" msgid="8562482996626694026">"显示快捷键"</string>
     <string name="group_system_go_back" msgid="2730322046244918816">"返回"</string>
     <string name="group_system_access_home_screen" msgid="4130366993484706483">"前往主屏幕"</string>
-    <string name="group_system_overview_open_apps" msgid="5659958952937994104">"查看最近运行过的应用"</string>
-    <string name="group_system_cycle_forward" msgid="5478663965957647805">"向前循环浏览近期使用的应用"</string>
-    <string name="group_system_cycle_back" msgid="8194102916946802902">"向后循环浏览近期使用的应用"</string>
+    <string name="group_system_overview_open_apps" msgid="5659958952937994104">"查看最近用过的应用"</string>
+    <string name="group_system_cycle_forward" msgid="5478663965957647805">"向前循环浏览最近用过的应用"</string>
+    <string name="group_system_cycle_back" msgid="8194102916946802902">"向后循环浏览最近用过的应用"</string>
     <string name="group_system_access_all_apps_search" msgid="1553588630154197469">"打开应用列表"</string>
     <string name="group_system_hide_reshow_taskbar" msgid="6108733797075862081">"显示任务栏"</string>
     <string name="group_system_access_system_settings" msgid="8731721963449070017">"打开设置"</string>
@@ -836,6 +865,8 @@
     <string name="accessibility_quick_settings_power_menu" msgid="6820426108301758412">"电源菜单"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"第 <xliff:g id="ID_1">%1$d</xliff:g> 页，共 <xliff:g id="ID_2">%2$d</xliff:g> 页"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"锁定屏幕"</string>
+    <string name="finder_active" msgid="7907846989716941952">"即使手机已关机，您也可以通过“查找我的设备”找到这部手机"</string>
+    <string name="shutdown_progress" msgid="5464239146561542178">"正在关机…"</string>
     <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"查看处理步骤"</string>
     <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"查看处理步骤"</string>
     <string name="high_temp_alarm_title" msgid="8654754369605452169">"拔出设备"</string>
@@ -1191,6 +1222,7 @@
     <string name="dream_overlay_weather_complication_desc" msgid="824503662089783824">"<xliff:g id="WEATHER_CONDITION">%1$s</xliff:g>，<xliff:g id="TEMPERATURE">%2$s</xliff:g>"</string>
     <string name="note_task_button_label" msgid="230135078402003532">"记事"</string>
     <string name="note_task_shortcut_long_label" msgid="7729325091147319409">"记事，<xliff:g id="NOTE_TAKING_APP">%1$s</xliff:g>"</string>
+    <string name="audio_sharing_description" msgid="8849060142768870004">"正在分享音频"</string>
     <string name="broadcasting_description_is_broadcasting" msgid="765627502786404290">"正在广播"</string>
     <string name="bt_le_audio_broadcast_dialog_title" msgid="3605428497924077811">"要停止广播“<xliff:g id="APP_NAME">%1$s</xliff:g>”的内容吗？"</string>
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="7889684551194225793">"如果广播“<xliff:g id="SWITCHAPP">%1$s</xliff:g>”的内容或更改输出来源，当前的广播就会停止"</string>
@@ -1221,6 +1253,9 @@
     <string name="rear_display_unfolded_bottom_sheet_description" msgid="7229961336309960201">"若要获得更高的分辨率，请翻转手机"</string>
     <string name="rear_display_accessibility_folded_animation" msgid="1538121649587978179">"正在展开可折叠设备"</string>
     <string name="rear_display_accessibility_unfolded_animation" msgid="1946153682258289040">"正在翻转可折叠设备"</string>
+    <string name="quick_settings_rotation_posture_folded" msgid="2430280856312528289">"折叠状态"</string>
+    <string name="quick_settings_rotation_posture_unfolded" msgid="6372316273574167114">"展开状态"</string>
+    <string name="rotation_tile_with_posture_secondary_label_template" msgid="7648496484163318886">"%1$s/%2$s"</string>
     <string name="stylus_battery_low_percentage" msgid="1620068112350141558">"电池还剩 <xliff:g id="PERCENTAGE">%s</xliff:g> 的电量"</string>
     <string name="stylus_battery_low_subtitle" msgid="3583843128908823273">"请将触控笔连接充电器"</string>
     <string name="stylus_battery_low" msgid="7134370101603167096">"触控笔电池电量低"</string>
@@ -1236,7 +1271,8 @@
     <string name="camera_blocked_dream_overlay_content_description" msgid="4074759493559418130">"已禁用摄像头"</string>
     <string name="camera_and_microphone_blocked_dream_overlay_content_description" msgid="7891078093416249764">"已禁用摄像头和麦克风"</string>
     <string name="microphone_blocked_dream_overlay_content_description" msgid="5466897982130007033">"已禁用麦克风"</string>
-    <string name="priority_mode_dream_overlay_content_description" msgid="6044561000253314632">"已开启优先模式"</string>
+    <!-- no translation found for priority_mode_dream_overlay_content_description (3361628029609329182) -->
+    <skip />
     <string name="assistant_attention_content_description" msgid="4166330881435263596">"检测到用户存在"</string>
     <string name="set_default_notes_app_toast_content" msgid="2812374329662610753">"在设置中设置默认记事应用"</string>
     <string name="install_app" msgid="5066668100199613936">"安装应用"</string>

@@ -21,6 +21,7 @@ import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.ACTIO
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -94,6 +95,7 @@ public class MenuItemAccessibilityDelegateTest extends SysuiTestCase {
                 mContext, stubWindowManager, mAccessibilityManager,
                 stubMenuViewModel, stubMenuViewAppearance, mMenuView,
                 mock(IAccessibilityFloatingMenu.class), mSecureSettings));
+        doNothing().when(mMenuViewLayer).gotoEditScreen();
 
         doReturn(mDraggableBounds).when(mMenuView).getMenuDraggableBounds();
         mStubListView = new RecyclerView(mContext);

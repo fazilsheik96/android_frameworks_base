@@ -22,6 +22,7 @@ import static android.app.WindowConfiguration.windowingModeToString;
 
 import static com.android.launcher3.icons.BaseIconFactory.MODE_DEFAULT;
 
+import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.app.WindowConfiguration.WindowingMode;
 import android.content.Context;
@@ -56,9 +57,12 @@ import com.android.wm.shell.common.DisplayLayout;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.desktopmode.DesktopModeStatus;
 import com.android.wm.shell.desktopmode.DesktopTasksController;
+import com.android.wm.shell.windowdecor.extension.TaskInfoKt;
 import com.android.wm.shell.windowdecor.viewholder.DesktopModeAppControlsWindowDecorationViewHolder;
 import com.android.wm.shell.windowdecor.viewholder.DesktopModeFocusedWindowDecorationViewHolder;
 import com.android.wm.shell.windowdecor.viewholder.DesktopModeWindowDecorationViewHolder;
+
+import kotlin.Unit;
 
 import java.util.function.Supplier;
 
@@ -79,6 +83,7 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
     private View.OnClickListener mOnCaptionButtonClickListener;
     private View.OnTouchListener mOnCaptionTouchListener;
     private View.OnLongClickListener mOnCaptionLongClickListener;
+    private View.OnGenericMotionListener mOnCaptionGenericMotionListener;
     private DragPositioningCallback mDragPositioningCallback;
     private DragResizeInputListener mDragResizeListener;
     private DragDetector mDragDetector;
@@ -152,10 +157,12 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
     void setCaptionListeners(
             View.OnClickListener onCaptionButtonClickListener,
             View.OnTouchListener onCaptionTouchListener,
-            View.OnLongClickListener onLongClickListener) {
+            View.OnLongClickListener onLongClickListener,
+            View.OnGenericMotionListener onGenericMotionListener) {
         mOnCaptionButtonClickListener = onCaptionButtonClickListener;
         mOnCaptionTouchListener = onCaptionTouchListener;
         mOnCaptionLongClickListener = onLongClickListener;
+        mOnCaptionGenericMotionListener = onGenericMotionListener;
     }
 
     void setExclusionRegionListener(ExclusionRegionListener exclusionRegionListener) {
@@ -225,9 +232,15 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
                         mOnCaptionTouchListener,
                         mOnCaptionButtonClickListener,
                         mOnCaptionLongClickListener,
+                        mOnCaptionGenericMotionListener,
                         mAppName,
-                        mAppIconBitmap
-                );
+                        mAppIconBitmap,
+                        () -> {
+                            if (!isMaximizeMenuActive()) {
+                                createMaximizeMenu();
+                            }
+                            return Unit.INSTANCE;
+                        });
             } else {
                 throw new IllegalArgumentException("Unexpected layout resource id");
             }
@@ -306,24 +319,24 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
         relayoutParams.mCaptionHeightId = getCaptionHeightIdStatic(taskInfo.getWindowingMode());
         relayoutParams.mCaptionWidthId = getCaptionWidthId(relayoutParams.mLayoutResId);
 
-        // The "app controls" type caption bar should report the occluding elements as bounding
-        // rects to the insets system so that apps can draw in the empty space left in the center.
         if (captionLayoutId == R.layout.desktop_mode_app_controls_window_decor) {
-            // The "app chip" section of the caption bar, it's aligned to the left and its width
-            // varies depending on the length of the app name, but we'll report its max width for
-            // now.
-            // TODO(b/316387515): consider reporting the true width after it's been laid out.
+            // If the app is requesting to customize the caption bar, allow input to fall through
+            // to the windows below so that the app can respond to input events on their custom
+            // content.
+            relayoutParams.mAllowCaptionInputFallthrough =
+                    TaskInfoKt.isTransparentCaptionBarAppearance(taskInfo);
+            // Report occluding elements as bounding rects to the insets system so that apps can
+            // draw in the empty space in the center:
+            //   First, the "app chip" section of the caption bar (+ some extra margins).
             final RelayoutParams.OccludingCaptionElement appChipElement =
                     new RelayoutParams.OccludingCaptionElement();
-            appChipElement.mWidthResId = R.dimen.desktop_mode_app_details_max_width;
+            appChipElement.mWidthResId = R.dimen.desktop_mode_customizable_caption_margin_start;
             appChipElement.mAlignment = RelayoutParams.OccludingCaptionElement.Alignment.START;
             relayoutParams.mOccludingCaptionElements.add(appChipElement);
-            // The "controls" section of the caption bar (maximize, close btns). These are aligned
-            // to the right of the caption bar and have a fixed width.
-            // TODO(b/316387515): add additional padding for an exclusive drag-move region.
+            //   Then, the right-aligned section (drag space, maximize and close buttons).
             final RelayoutParams.OccludingCaptionElement controlsElement =
                     new RelayoutParams.OccludingCaptionElement();
-            controlsElement.mWidthResId = R.dimen.desktop_mode_right_edge_buttons_width;
+            controlsElement.mWidthResId = R.dimen.desktop_mode_customizable_caption_margin_end;
             controlsElement.mAlignment = RelayoutParams.OccludingCaptionElement.Alignment.END;
             relayoutParams.mOccludingCaptionElements.add(controlsElement);
         }
@@ -438,7 +451,7 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
      * until a resize event calls showResizeVeil below.
      */
     void createResizeVeil() {
-        mResizeVeil = new ResizeVeil(mContext, mAppIconDrawable, mTaskInfo,
+        mResizeVeil = new ResizeVeil(mContext, mAppIconDrawable, mTaskInfo, mTaskSurface,
                 mSurfaceControlBuilderSupplier, mDisplay, mSurfaceControlTransactionSupplier);
     }
 
@@ -487,6 +500,7 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
      * Determine valid drag area for this task based on elements in the app chip.
      */
     @Override
+    @NonNull
     Rect calculateValidDragArea() {
         final int appTextWidth = ((DesktopModeAppControlsWindowDecorationViewHolder)
                 mWindowDecorViewHolder).getAppNameTextWidth();
@@ -548,7 +562,8 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
      */
     void createMaximizeMenu() {
         mMaximizeMenu = new MaximizeMenu(mSyncQueue, mRootTaskDisplayAreaOrganizer,
-                mDisplayController, mTaskInfo, mOnCaptionButtonClickListener, mContext,
+                mDisplayController, mTaskInfo, mOnCaptionButtonClickListener,
+                mOnCaptionGenericMotionListener, mOnCaptionTouchListener, mContext,
                 calculateMaximizeMenuPosition(), mSurfaceControlTransactionSupplier);
         mMaximizeMenu.show();
     }
@@ -687,6 +702,13 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
     }
 
     /**
+     * Checks whether the touch event falls inside the customizable caption region.
+     */
+    boolean checkTouchEventInCustomizableRegion(MotionEvent ev) {
+        return mResult.mCustomizableCaptionRegion.contains((int) ev.getRawX(), (int) ev.getRawY());
+    }
+
+    /**
      * Check a passed MotionEvent if a click has occurred on any button on this caption
      * Note this should only be called when a regular onClick is not possible
      * (i.e. the button was clicked through status bar layer)
@@ -774,6 +796,22 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
     @Override
     int getCaptionViewId() {
         return R.id.desktop_mode_caption;
+    }
+
+    void setAnimatingTaskResize(boolean animatingTaskResize) {
+        if (mRelayoutParams.mLayoutResId == R.layout.desktop_mode_focused_window_decor) return;
+        ((DesktopModeAppControlsWindowDecorationViewHolder) mWindowDecorViewHolder)
+                .setAnimatingTaskResize(animatingTaskResize);
+    }
+
+    void onMaximizeWindowHoverExit() {
+        ((DesktopModeAppControlsWindowDecorationViewHolder) mWindowDecorViewHolder)
+                .onMaximizeWindowHoverExit();
+    }
+
+    void onMaximizeWindowHoverEnter() {
+        ((DesktopModeAppControlsWindowDecorationViewHolder) mWindowDecorViewHolder)
+                .onMaximizeWindowHoverEnter();
     }
 
     @Override

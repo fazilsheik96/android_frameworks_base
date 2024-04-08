@@ -41,8 +41,10 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.qs.QSHost
 import com.android.systemui.qs.QsEventLogger
 import com.android.systemui.qs.logging.QSLogger
+import com.android.systemui.qs.pipeline.domain.interactor.PanelInteractor
 import com.android.systemui.qs.tileimpl.QSTileImpl
 import com.android.systemui.recordissue.IssueRecordingService
+import com.android.systemui.recordissue.IssueRecordingState
 import com.android.systemui.recordissue.RecordIssueDialogDelegate
 import com.android.systemui.res.R
 import com.android.systemui.screenrecord.RecordingService
@@ -66,7 +68,9 @@ constructor(
     private val keyguardDismissUtil: KeyguardDismissUtil,
     private val keyguardStateController: KeyguardStateController,
     private val dialogTransitionAnimator: DialogTransitionAnimator,
+    private val panelInteractor: PanelInteractor,
     private val userContextProvider: UserContextProvider,
+    private val issueRecordingState: IssueRecordingState,
     private val delegateFactory: RecordIssueDialogDelegate.Factory,
 ) :
     QSTileImpl<QSTile.BooleanState>(
@@ -81,11 +85,26 @@ constructor(
         qsLogger
     ) {
 
-    @VisibleForTesting var isRecording: Boolean = false
+    private val onRecordingChangeListener = Runnable { refreshState() }
+
+    override fun handleSetListening(listening: Boolean) {
+        super.handleSetListening(listening)
+        if (listening) {
+            issueRecordingState.addListener(onRecordingChangeListener)
+        } else {
+            issueRecordingState.removeListener(onRecordingChangeListener)
+        }
+    }
 
     override fun getTileLabel(): CharSequence = mContext.getString(R.string.qs_record_issue_label)
 
-    override fun isAvailable(): Boolean = recordIssueQsTile()
+    /**
+     * There are SELinux constraints that are stopping this tile from reaching production builds.
+     * Once those are resolved, this condition will be removed, but the solution (of properly
+     * creating a distince SELinux context for com.android.systemui) is complex and will take time
+     * to implement.
+     */
+    override fun isAvailable(): Boolean = android.os.Build.IS_DEBUGGABLE && recordIssueQsTile()
 
     override fun newTileState(): QSTile.BooleanState =
         QSTile.BooleanState().apply {
@@ -95,16 +114,27 @@ constructor(
 
     @VisibleForTesting
     public override fun handleClick(view: View?) {
-        if (isRecording) {
-            isRecording = false
-            stopScreenRecord()
+        if (issueRecordingState.isRecording) {
+            stopIssueRecordingService()
         } else {
             mUiHandler.post { showPrompt(view) }
         }
-        refreshState()
     }
 
-    private fun stopScreenRecord() =
+    private fun startIssueRecordingService(screenRecord: Boolean, winscopeTracing: Boolean) =
+        PendingIntent.getForegroundService(
+                userContextProvider.userContext,
+                RecordingService.REQUEST_CODE,
+                IssueRecordingService.getStartIntent(
+                    userContextProvider.userContext,
+                    screenRecord,
+                    winscopeTracing
+                ),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            .send(BroadcastOptions.makeBasic().apply { isInteractive = true }.toBundle())
+
+    private fun stopIssueRecordingService() =
         PendingIntent.getService(
                 userContextProvider.userContext,
                 RecordingService.REQUEST_CODE,
@@ -117,8 +147,9 @@ constructor(
         val dialog: AlertDialog =
             delegateFactory
                 .create {
-                    isRecording = true
-                    refreshState()
+                    startIssueRecordingService(it.screenRecord, it.winscopeTracing)
+                    dialogTransitionAnimator.disableAllCurrentDialogsExitAnimations()
+                    panelInteractor.collapsePanels()
                 }
                 .createDialog()
         val dismissAction =
@@ -144,7 +175,7 @@ constructor(
     @VisibleForTesting
     public override fun handleUpdateState(qsTileState: QSTile.BooleanState, arg: Any?) {
         qsTileState.apply {
-            if (isRecording) {
+            if (issueRecordingState.isRecording) {
                 value = true
                 state = Tile.STATE_ACTIVE
                 forceExpandIcon = false

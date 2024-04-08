@@ -74,6 +74,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.permission.PermissionGroupUsage;
 import android.permission.PermissionUsageHelper;
+import android.permission.flags.Flags;
 import android.provider.DeviceConfig;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -99,7 +100,6 @@ import com.android.internal.util.DataClass;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.Parcelling;
 import com.android.internal.util.Preconditions;
-import com.android.media.flags.Flags;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -1581,6 +1581,10 @@ public class AppOpsManager {
      * Allows an app to access location without the traditional location permissions and while the
      * user location setting is off, but only during pre-defined emergency sessions.
      *
+     * <p>This op is only used for tracking, not for permissions, so it is still the client's
+     * responsibility to check the {@link Manifest.permission.LOCATION_BYPASS} permission
+     * appropriately.
+     *
      * @hide
      */
     public static final int OP_EMERGENCY_LOCATION = AppProtoEnums.APP_OP_EMERGENCY_LOCATION;
@@ -2077,7 +2081,8 @@ public class AppOpsManager {
      * @hide
      */
     @SystemApi
-    @FlaggedApi(Flags.FLAG_ENABLE_PRIVILEGED_ROUTING_FOR_MEDIA_ROUTING_CONTROL)
+    @FlaggedApi(com.android.media.flags.Flags
+            .FLAG_ENABLE_PRIVILEGED_ROUTING_FOR_MEDIA_ROUTING_CONTROL)
     public static final String OPSTR_MEDIA_ROUTING_CONTROL = "android:media_routing_control";
 
     /**
@@ -2243,7 +2248,7 @@ public class AppOpsManager {
      *
      * @hide
      */
-    @FlaggedApi(android.permission.flags.Flags.FLAG_ENHANCED_CONFIRMATION_MODE_APIS_ENABLED)
+    @FlaggedApi(Flags.FLAG_ENHANCED_CONFIRMATION_MODE_APIS_ENABLED)
     @SystemApi
     public static final String OPSTR_ACCESS_RESTRICTED_SETTINGS =
             "android:access_restricted_settings";
@@ -2457,6 +2462,10 @@ public class AppOpsManager {
     /**
      * Allows an app to access location without the traditional location permissions and while the
      * user location setting is off, but only during pre-defined emergency sessions.
+     *
+     * <p>This op is only used for tracking, not for permissions, so it is still the client's
+     * responsibility to check the {@link Manifest.permission.LOCATION_BYPASS} permission
+     * appropriately.
      *
      * @hide
      */
@@ -2950,7 +2959,9 @@ public class AppOpsManager {
         new AppOpInfo.Builder(OP_ESTABLISH_VPN_MANAGER, OPSTR_ESTABLISH_VPN_MANAGER,
                 "ESTABLISH_VPN_MANAGER").setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
         new AppOpInfo.Builder(OP_ACCESS_RESTRICTED_SETTINGS, OPSTR_ACCESS_RESTRICTED_SETTINGS,
-                "ACCESS_RESTRICTED_SETTINGS").setDefaultMode(AppOpsManager.MODE_ALLOWED)
+                "ACCESS_RESTRICTED_SETTINGS").setDefaultMode(
+                        android.permission.flags.Flags.enhancedConfirmationModeApisEnabled()
+                                ? MODE_DEFAULT : MODE_ALLOWED)
             .setDisableReset(true).setRestrictRead(true).build(),
         new AppOpInfo.Builder(OP_RECEIVE_AMBIENT_TRIGGER_AUDIO, OPSTR_RECEIVE_AMBIENT_TRIGGER_AUDIO,
                 "RECEIVE_SOUNDTRIGGER_AUDIO").setDefaultMode(AppOpsManager.MODE_ALLOWED)
@@ -3044,8 +3055,10 @@ public class AppOpsManager {
         new AppOpInfo.Builder(OP_UNARCHIVAL_CONFIRMATION, OPSTR_UNARCHIVAL_CONFIRMATION,
                 "UNARCHIVAL_CONFIRMATION")
                 .setDefaultMode(MODE_ALLOWED).build(),
-        // TODO(b/301150056): STOPSHIP determine how this appop should work with the permission
         new AppOpInfo.Builder(OP_EMERGENCY_LOCATION, OPSTR_EMERGENCY_LOCATION, "EMERGENCY_LOCATION")
+                .setDefaultMode(MODE_ALLOWED)
+                // even though this has a permission associated, this op is only used for tracking,
+                // and the client is responsible for checking the LOCATION_BYPASS permission.
                 .setPermission(Manifest.permission.LOCATION_BYPASS).build(),
     };
 
@@ -3432,7 +3445,8 @@ public class AppOpsManager {
             }
         }
 
-        public static final @android.annotation.NonNull Creator<PackageOps> CREATOR = new Creator<PackageOps>() {
+        public static final @android.annotation.NonNull Creator<PackageOps> CREATOR =
+                new Creator<PackageOps>() {
             @Override public PackageOps createFromParcel(Parcel source) {
                 return new PackageOps(source);
             }
@@ -7410,7 +7424,7 @@ public class AppOpsManager {
          * @param userId User id of the app whose Op changed.
          * @param persistentDeviceId persistent device id whose Op changed.
          */
-        @FlaggedApi(android.permission.flags.Flags.FLAG_DEVICE_AWARE_PERMISSION_APIS_ENABLED)
+        @FlaggedApi(Flags.FLAG_DEVICE_AWARE_PERMISSION_APIS_ENABLED)
         default void onOpChanged(@NonNull String op, @NonNull String packageName, int userId,
                 @NonNull String persistentDeviceId) {
             if (Objects.equals(persistentDeviceId,
@@ -7480,7 +7494,7 @@ public class AppOpsManager {
          * @param attributionFlags the attribution flags for this operation.
          * @param attributionChainId the unique id of the attribution chain this op is a part of.
          */
-        @FlaggedApi(android.permission.flags.Flags.FLAG_DEVICE_AWARE_PERMISSION_APIS_ENABLED)
+        @FlaggedApi(Flags.FLAG_DEVICE_AWARE_PERMISSION_APIS_ENABLED)
         default void onOpActiveChanged(@NonNull String op, int uid, @NonNull String packageName,
                 @Nullable String attributionTag, int virtualDeviceId, boolean active,
                 @AttributionFlags int attributionFlags, int attributionChainId) {
@@ -7534,7 +7548,7 @@ public class AppOpsManager {
          * @param flags The flags of this op
          * @param result The result of the note.
          */
-        @FlaggedApi(android.permission.flags.Flags.FLAG_DEVICE_AWARE_PERMISSION_APIS_ENABLED)
+        @FlaggedApi(Flags.FLAG_DEVICE_AWARE_PERMISSION_APIS_ENABLED)
         default void onOpNoted(@NonNull String op, int uid, @NonNull String packageName,
                 @Nullable String attributionTag, int virtualDeviceId, @OpFlags int flags,
                 @Mode int result) {
@@ -7798,7 +7812,7 @@ public class AppOpsManager {
         }
         final List<AppOpsManager.PackageOps> result;
         try {
-            result =  mService.getPackagesForOpsForDevice(opCodes, persistentDeviceId);
+            result = mService.getPackagesForOpsForDevice(opCodes, persistentDeviceId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -8270,14 +8284,24 @@ public class AppOpsManager {
                 cb = new IAppOpsCallback.Stub() {
                     public void opChanged(int op, int uid, String packageName,
                             String persistentDeviceId) {
-                        if (callback instanceof OnOpChangedInternalListener) {
-                            ((OnOpChangedInternalListener)callback).onOpChanged(op, packageName,
-                                persistentDeviceId);
-                        }
-                        if (sAppOpInfos[op].name != null) {
-
-                            callback.onOpChanged(sAppOpInfos[op].name, packageName,
-                                    UserHandle.getUserId(uid), persistentDeviceId);
+                        if (Flags.deviceAwarePermissionApisEnabled()) {
+                            if (callback instanceof OnOpChangedInternalListener) {
+                                ((OnOpChangedInternalListener)callback).onOpChanged(op, packageName,
+                                        persistentDeviceId);
+                            }
+                            if (sAppOpInfos[op].name != null) {
+                                callback.onOpChanged(sAppOpInfos[op].name, packageName,
+                                        UserHandle.getUserId(uid), persistentDeviceId);
+                            }
+                        } else {
+                            if (callback instanceof OnOpChangedInternalListener) {
+                                ((OnOpChangedInternalListener) callback).onOpChanged(op,
+                                        packageName);
+                            }
+                            if (sAppOpInfos[op].name != null) {
+                                callback.onOpChanged(sAppOpInfos[op].name, packageName,
+                                        UserHandle.getUserId(uid));
+                            }
                         }
                     }
                 };
@@ -8361,14 +8385,26 @@ public class AppOpsManager {
                         String attributionTag, int virtualDeviceId, boolean active,
                         @AttributionFlags int attributionFlags, int attributionChainId) {
                     executor.execute(() -> {
-                        if (callback instanceof OnOpActiveChangedInternalListener) {
-                            ((OnOpActiveChangedInternalListener) callback).onOpActiveChanged(op,
-                                    uid, packageName, virtualDeviceId, active);
-                        }
-                        if (sAppOpInfos[op].name != null) {
-                            callback.onOpActiveChanged(sAppOpInfos[op].name, uid, packageName,
-                                    attributionTag, virtualDeviceId, active, attributionFlags,
-                                    attributionChainId);
+                        if (Flags.deviceAwarePermissionApisEnabled()) {
+                            if (callback instanceof OnOpActiveChangedInternalListener) {
+                                ((OnOpActiveChangedInternalListener) callback).onOpActiveChanged(op,
+                                        uid, packageName, virtualDeviceId, active);
+                            }
+                            if (sAppOpInfos[op].name != null) {
+                                callback.onOpActiveChanged(sAppOpInfos[op].name, uid, packageName,
+                                        attributionTag, virtualDeviceId, active, attributionFlags,
+                                        attributionChainId);
+                            }
+                        } else {
+                            if (callback instanceof OnOpActiveChangedInternalListener) {
+                                ((OnOpActiveChangedInternalListener) callback).onOpActiveChanged(op,
+                                        uid, packageName, active);
+                            }
+                            if (sAppOpInfos[op].name != null) {
+                                callback.onOpActiveChanged(sAppOpInfos[op].name, uid, packageName,
+                                        attributionTag, active, attributionFlags,
+                                        attributionChainId);
+                            }
                         }
                     });
                 }
@@ -8613,9 +8649,13 @@ public class AppOpsManager {
                     try {
                         executor.execute(() -> {
                             if (sAppOpInfos[op].name != null) {
-                                listener.onOpNoted(sAppOpInfos[op].name, uid, packageName,
-                                        attributionTag, virtualDeviceId,
-                                        flags, mode);
+                                if (Flags.deviceAwarePermissionApisEnabled()) {
+                                    listener.onOpNoted(sAppOpInfos[op].name, uid, packageName,
+                                            attributionTag, virtualDeviceId, flags, mode);
+                                } else {
+                                    listener.onOpNoted(sAppOpInfos[op].name, uid, packageName,
+                                            attributionTag, flags, mode);
+                                }
                             }
                         });
                     } finally {
@@ -8922,6 +8962,8 @@ public class AppOpsManager {
      *
      * @hide
      */
+    @TestApi
+    @SuppressLint("UnflaggedApi")
     public int noteOpNoThrow(int op, @NonNull AttributionSource attributionSource,
             @Nullable String message) {
         return noteOpNoThrow(op, attributionSource.getUid(), attributionSource.getPackageName(),

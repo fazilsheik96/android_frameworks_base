@@ -25,12 +25,12 @@ import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
-import android.content.pm.Flags
 import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageInstaller.SessionInfo
 import android.content.pm.PackageInstaller.SessionParams
 import android.content.pm.PackageManager
+import android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.os.Process
@@ -96,6 +96,7 @@ class InstallRepository(private val context: Context) {
     var stagedSessionId = SessionInfo.INVALID_ID
         private set
     private var callingUid = Process.INVALID_UID
+    private var originatingUid = Process.INVALID_UID
     private var callingPackage: String? = null
     private var sessionStager: SessionStager? = null
     private lateinit var intent: Intent
@@ -148,7 +149,7 @@ class InstallRepository(private val context: Context) {
         }
         val sourceInfo: ApplicationInfo? = getSourceInfo(callingPackage)
         // Uid of the source package, with a preference to uid from ApplicationInfo
-        val originatingUid = sourceInfo?.uid ?: callingUid
+        originatingUid = sourceInfo?.uid ?: callingUid
         appOpRequestInfo = AppOpRequestInfo(
             getPackageNameForUid(context, originatingUid, callingPackage),
             originatingUid, callingAttributionTag
@@ -282,7 +283,7 @@ class InstallRepository(private val context: Context) {
                     context.contentResolver.openAssetFileDescriptor(uri, "r").use { afd ->
                         val pfd: ParcelFileDescriptor? = afd?.parcelFileDescriptor
                         val params: SessionParams =
-                            createSessionParams(intent, pfd, uri.toString())
+                            createSessionParams(originatingUid, intent, pfd, uri.toString())
                         stagedSessionId = packageInstaller.createSession(params)
                     }
                 } catch (e: Exception) {
@@ -338,6 +339,7 @@ class InstallRepository(private val context: Context) {
     }
 
     private fun createSessionParams(
+        originatingUid: Int,
         intent: Intent,
         pfd: ParcelFileDescriptor?,
         debugPathName: String,
@@ -354,16 +356,14 @@ class InstallRepository(private val context: Context) {
         params.setOriginatingUri(
             intent.getParcelableExtra(Intent.EXTRA_ORIGINATING_URI, Uri::class.java)
         )
-        params.setOriginatingUid(
-            intent.getIntExtra(Intent.EXTRA_ORIGINATING_UID, Process.INVALID_UID)
-        )
+        params.setOriginatingUid(originatingUid)
         params.setInstallerPackageName(intent.getStringExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME))
         params.setInstallReason(PackageManager.INSTALL_REASON_USER)
         // Disable full screen intent usage by for sideloads.
         params.setPermissionState(
             Manifest.permission.USE_FULL_SCREEN_INTENT, SessionParams.PERMISSION_STATE_DENIED
         )
-        if (pfd != null && Flags.readInstallInfo()) {
+        if (pfd != null) {
             try {
                 val installInfo = packageInstaller.readInstallInfo(pfd, debugPathName, 0)
                 params.setAppPackageName(installInfo.packageName)
@@ -426,8 +426,7 @@ class InstallRepository(private val context: Context) {
 
         if (PackageInstaller.ACTION_CONFIRM_INSTALL == intent.action) {
             val info = packageInstaller.getSessionInfo(sessionId)
-            val resolvedPath =
-                    if (Flags.getResolvedApkPath()) info?.resolvedBaseApkPath else null
+            val resolvedPath = info?.resolvedBaseApkPath
             if (info == null || !info.isSealed || resolvedPath == null) {
                 Log.w(LOG_TAG, "Session $sessionId in funky state; ignoring")
                 return InstallAborted(ABORT_REASON_INTERNAL_ERROR)
@@ -832,12 +831,21 @@ class InstallRepository(private val context: Context) {
             val resultIntent = if (shouldReturnResult) {
                 Intent().putExtra(Intent.EXTRA_INSTALL_RESULT, PackageManager.INSTALL_SUCCEEDED)
             } else {
-                packageManager.getLaunchIntentForPackage(newPackageInfo!!.packageName)
+                val intent = packageManager.getLaunchIntentForPackage(newPackageInfo!!.packageName)
+                if (isLauncherActivityEnabled(intent)) intent else null
             }
             _installResult.setValue(InstallSuccess(appSnippet, shouldReturnResult, resultIntent))
         } else {
             _installResult.setValue(InstallFailed(appSnippet, statusCode, legacyStatus, message))
         }
+    }
+
+    private fun isLauncherActivityEnabled(intent: Intent?): Boolean {
+        if (intent == null || intent.component == null) {
+            return false
+        }
+        return (intent.component?.let { packageManager.getComponentEnabledSetting(it) }
+            != COMPONENT_ENABLED_STATE_DISABLED)
     }
 
     /**

@@ -51,19 +51,27 @@ import com.android.systemui.statusbar.pipeline.mobile.domain.model.SignalIconMod
 import com.android.systemui.statusbar.pipeline.satellite.ui.model.SatelliteIconModel
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState
+import com.android.systemui.util.CarrierNameCustomization
+import com.android.systemui.util.kotlin.pairwiseBy
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 interface MobileIconInteractor {
     /** The table log created for this connection */
@@ -88,6 +96,9 @@ interface MobileIconInteractor {
 
     /** True if we consider this connection to be in service, i.e. can make calls */
     val isInService: StateFlow<Boolean>
+
+    /** True if this connection is emergency only */
+    val isEmergencyOnly: StateFlow<Boolean>
 
     /** Observable for the data enabled state of this connection */
     val isDataEnabled: StateFlow<Boolean>
@@ -166,6 +177,10 @@ interface MobileIconInteractor {
     val voWifiAvailable: StateFlow<Boolean>
 
     val customizedIcon: StateFlow<SignalIconModel?>
+
+    val customizedCarrierName: StateFlow<String>
+
+    val customizedNetworkName: StateFlow<NetworkNameModel>
 }
 
 /** Interactor for a single mobile connection. This connection _should_ have one subscription ID */
@@ -192,6 +207,7 @@ class MobileIconInteractorImpl(
     private val defaultDataSubId: StateFlow<Int>,
     ddsIcon: StateFlow<SignalIconModel?>,
     crossSimdisplaySingnalLevel: StateFlow<Boolean>,
+    carrierNameCustomization: CarrierNameCustomization,
     val carrierIdOverrides: MobileIconCarrierIdOverrides = MobileIconCarrierIdOverridesImpl()
 ) : MobileIconInteractor {
     override val tableLogBuffer: TableLogBuffer = connectionRepository.tableLogBuffer
@@ -259,6 +275,36 @@ class MobileIconInteractorImpl(
             )
         }
         .stateIn(scope, SharingStarted.WhileSubscribed(), MobileIconCustomizationMode())
+
+    override val customizedCarrierName =
+        combine(
+            carrierName,
+            connectionRepository.nrIconType,
+            connectionRepository.dataNetworkType,
+            connectionRepository.voiceNetworkType,
+            connectionRepository.isInService,
+        ) { carrierName, nrIconType, dataNetworkType, voiceNetworkType, isInService ->
+            carrierNameCustomization.getCustomizeCarrierNameModern(connectionRepository.subId,
+                carrierName, true, nrIconType, dataNetworkType, voiceNetworkType, isInService)
+        }
+        .stateIn(
+            scope,
+            SharingStarted.WhileSubscribed(),
+            connectionRepository.carrierName.value.name
+        )
+
+    override val customizedNetworkName =
+        networkName
+            .map {
+                val customizationName = carrierNameCustomization.getCustomizeCarrierNameModern(
+                    connectionRepository.subId, it.name, false, 0, 0, 0, false)
+                NetworkNameModel.IntentDerived(customizationName)
+            }
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                connectionRepository.networkName.value
+            )
 
     override val isRoaming: StateFlow<Boolean> =
         combine(
@@ -365,8 +411,8 @@ class MobileIconInteractorImpl(
                 ddsIcon,
                 crossSimdisplaySingnalLevel,
                 connectionRepository.ciwlanAvailable,
-            ) { isDefaultDataSub, imsRegistrationTech, ddsIcon, ciwlanAvailable,
-                crossSimdisplaySingnalLevel ->
+            ) { isDefaultDataSub, imsRegistrationTech, ddsIcon, crossSimdisplaySingnalLevel,
+                ciwlanAvailable ->
                 if (!isDefaultDataSub
                     && crossSimdisplaySingnalLevel
                     && ciwlanAvailable
@@ -454,6 +500,43 @@ class MobileIconInteractorImpl(
             MutableStateFlow(false).asStateFlow()
         }
 
+    private val hysteresisActive = MutableStateFlow(false)
+
+    private val isNonTerrestrialWithHysteresis: StateFlow<Boolean> =
+        combine(isNonTerrestrial, hysteresisActive) { isNonTerrestrial, hysteresisActive ->
+                if (hysteresisActive) {
+                    true
+                } else {
+                    isNonTerrestrial
+                }
+            }
+            .logDiffsForTable(
+                tableLogBuffer = tableLogBuffer,
+                columnName = "isNonTerrestrialWithHysteresis",
+                columnPrefix = "",
+                initialValue = Flags.carrierEnabledSatelliteFlag(),
+            )
+            .stateIn(scope, SharingStarted.Eagerly, Flags.carrierEnabledSatelliteFlag())
+
+    private val lostSatelliteConnection =
+        isNonTerrestrial.pairwiseBy { old, new -> hysteresisActive.value = old && !new }
+
+    init {
+        scope.launch { lostSatelliteConnection.collect() }
+        scope.launch {
+            hysteresisActive.collectLatest {
+                if (it) {
+                    delay(
+                        connectionRepository.satelliteConnectionHysteresisSeconds.value.toDuration(
+                            DurationUnit.SECONDS
+                        )
+                    )
+                    hysteresisActive.value = false
+                }
+            }
+        }
+    }
+
     private val level: StateFlow<Int> =
         combine(
                 connectionRepository.isGsm,
@@ -478,12 +561,7 @@ class MobileIconInteractorImpl(
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), 0)
 
-    private val numberOfLevels: StateFlow<Int> =
-        connectionRepository.numberOfLevels.stateIn(
-            scope,
-            SharingStarted.WhileSubscribed(),
-            connectionRepository.numberOfLevels.value,
-        )
+    private val numberOfLevels: StateFlow<Int> = connectionRepository.numberOfLevels
 
     override val isDataConnected: StateFlow<Boolean> =
         connectionRepository.dataConnectionState
@@ -536,6 +614,8 @@ class MobileIconInteractorImpl(
                 || networkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA
     }
 
+    override val isEmergencyOnly: StateFlow<Boolean> = connectionRepository.isEmergencyOnly
+
     override val isAllowedDuringAirplaneMode = connectionRepository.isAllowedDuringAirplaneMode
 
     /** Whether or not to show the error state of [SignalDrawable] */
@@ -586,6 +666,18 @@ class MobileIconInteractorImpl(
             )
         }
 
+    private val customizedCellularIcon : Flow<SignalIconModel.Cellular> =
+        combine(
+            cellularIcon,
+            customizedIcon,
+        ) { cellularIcon, customizedIcon ->
+            if (customizedIcon != null && customizedIcon is SignalIconModel.Cellular) {
+                customizedIcon
+            } else {
+                cellularIcon
+            }
+        }
+
     override val signalLevelIcon: StateFlow<SignalIconModel> = run {
         val initial =
             SignalIconModel.Cellular(
@@ -594,12 +686,12 @@ class MobileIconInteractorImpl(
                 showExclamationMark.value,
                 carrierNetworkChangeActive.value,
             )
-        isNonTerrestrial
+        isNonTerrestrialWithHysteresis
             .flatMapLatest { ntn ->
                 if (ntn) {
                     satelliteIcon
                 } else {
-                    cellularIcon
+                    customizedCellularIcon
                 }
             }
             .distinctUntilChanged()

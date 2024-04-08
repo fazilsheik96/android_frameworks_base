@@ -145,6 +145,17 @@ java_library {
 }
 
 java_library {
+    name: "services.fakes.ravenwood-jarjar",
+    installable: false,
+    srcs: [":services.fakes-sources"],
+    libs: [
+        "ravenwood-framework",
+        "services.core.ravenwood",
+    ],
+    jarjar_rules: ":ravenwood-services-jarjar-rules",
+}
+
+java_library {
     name: "mockito-ravenwood-prebuilt",
     installable: false,
     static_libs: [
@@ -189,13 +200,20 @@ android_ravenwood_libgroup {
         "ravenwood-helper-runtime",
         "hoststubgen-helper-runtime.ravenwood",
         "services.core.ravenwood-jarjar",
+        "services.fakes.ravenwood-jarjar",
 
         // Provide runtime versions of utils linked in below
         "junit",
         "truth",
+        "flag-junit",
+        "ravenwood-framework",
         "ravenwood-junit-impl",
+        "ravenwood-junit-impl-flag",
         "mockito-ravenwood-prebuilt",
         "inline-mockito-ravenwood-prebuilt",
+    ],
+    jni_libs: [
+        "libandroid_runtime",
     ],
 }
 
@@ -204,6 +222,8 @@ android_ravenwood_libgroup {
     libs: [
         "junit",
         "truth",
+        "flag-junit",
+        "ravenwood-framework",
         "ravenwood-junit",
         "mockito-ravenwood-prebuilt",
         "inline-mockito-ravenwood-prebuilt",

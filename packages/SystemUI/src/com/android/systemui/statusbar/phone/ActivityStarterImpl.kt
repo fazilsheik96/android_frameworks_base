@@ -21,6 +21,7 @@ import android.app.PendingIntent
 import android.app.TaskStackBuilder
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.os.RemoteException
 import android.os.UserHandle
 import android.provider.Settings
@@ -45,8 +46,8 @@ import com.android.systemui.plugins.ActivityStarter.OnDismissAction
 import com.android.systemui.res.R
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.shade.ShadeController
-import com.android.systemui.shade.ShadeViewController
 import com.android.systemui.shade.domain.interactor.ShadeAnimationInteractor
+import com.android.systemui.statusbar.CommandQueue
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import com.android.systemui.statusbar.NotificationShadeWindowController
 import com.android.systemui.statusbar.SysuiStatusBarStateController
@@ -71,7 +72,7 @@ constructor(
     private val biometricUnlockControllerLazy: Lazy<BiometricUnlockController>,
     private val keyguardViewMediatorLazy: Lazy<KeyguardViewMediator>,
     private val shadeControllerLazy: Lazy<ShadeController>,
-    private val shadeViewControllerLazy: Lazy<ShadeViewController>,
+    private val commandQueue: CommandQueue,
     private val shadeAnimationInteractor: ShadeAnimationInteractor,
     private val statusBarKeyguardViewManagerLazy: Lazy<StatusBarKeyguardViewManager>,
     private val notifShadeWindowControllerLazy: Lazy<NotificationShadeWindowController>,
@@ -146,6 +147,23 @@ constructor(
             intentSentUiThreadCallback = intentSentUiThreadCallback,
             animationController = animationController,
             showOverLockscreen = true,
+        )
+    }
+
+    override fun startPendingIntentMaybeDismissingKeyguard(
+        intent: PendingIntent,
+        intentSentUiThreadCallback: Runnable?,
+        animationController: ActivityTransitionAnimator.Controller?,
+        fillInIntent: Intent?,
+        extraOptions: Bundle?,
+    ) {
+        activityStarterInternal.startPendingIntentDismissingKeyguard(
+            intent = intent,
+            intentSentUiThreadCallback = intentSentUiThreadCallback,
+            animationController = animationController,
+            showOverLockscreen = true,
+            fillInIntent = fillInIntent,
+            extraOptions = extraOptions,
         )
     }
 
@@ -554,6 +572,8 @@ constructor(
             associatedView: View? = null,
             animationController: ActivityTransitionAnimator.Controller? = null,
             showOverLockscreen: Boolean = false,
+            fillInIntent: Intent? = null,
+            extraOptions: Bundle? = null,
         ) {
             val animationController =
                 if (associatedView is ExpandableNotificationRow) {
@@ -614,9 +634,10 @@ constructor(
                                 val options =
                                     ActivityOptions(
                                         CentralSurfaces.getActivityOptions(
-                                            displayId,
-                                            animationAdapter
-                                        )
+                                                displayId,
+                                                animationAdapter
+                                            )
+                                            .apply { extraOptions?.let { putAll(it) } }
                                     )
                                 // TODO b/221255671: restrict this to only be set for
                                 // notifications
@@ -625,9 +646,9 @@ constructor(
                                     ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
                                 )
                                 return intent.sendAndReturnResult(
-                                    null,
+                                    context,
                                     0,
-                                    null,
+                                    fillInIntent,
                                     null,
                                     null,
                                     null,
@@ -648,6 +669,10 @@ constructor(
                 }
                 if (intent.isActivity) {
                     assistManagerLazy.get().hideAssist()
+                    // This activity could have started while the device is dreaming, in which case
+                    // the dream would occlude the activity. In order to show the newly started
+                    // activity, we wake from the dream.
+                    keyguardUpdateMonitor.awakenFromDream()
                 }
                 intentSentUiThreadCallback?.let { postOnUiThread(runnable = it) }
             }
@@ -853,10 +878,11 @@ constructor(
                 if (dismissShade) {
                     return StatusBarTransitionAnimatorController(
                         animationController,
-                        shadeViewControllerLazy.get(),
                         shadeAnimationInteractor,
                         shadeControllerLazy.get(),
                         notifShadeWindowControllerLazy.get(),
+                        commandQueue,
+                        displayId,
                         isLaunchForActivity
                     )
                 }

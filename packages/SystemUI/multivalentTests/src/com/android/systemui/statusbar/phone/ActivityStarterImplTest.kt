@@ -16,12 +16,15 @@
 
 package com.android.systemui.statusbar.phone
 
+import android.app.ActivityOptions
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Bundle
 import android.os.RemoteException
 import android.os.UserHandle
 import android.view.View
 import android.widget.FrameLayout
+import android.window.SplashScreen.SPLASH_SCREEN_STYLE_SOLID_COLOR
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import com.android.keyguard.KeyguardUpdateMonitor
@@ -35,10 +38,10 @@ import com.android.systemui.keyguard.WakefulnessLifecycle
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.shade.ShadeController
-import com.android.systemui.shade.ShadeViewController
 import com.android.systemui.shade.data.repository.FakeShadeRepository
 import com.android.systemui.shade.data.repository.ShadeAnimationRepository
 import com.android.systemui.shade.domain.interactor.ShadeAnimationInteractorLegacyImpl
+import com.android.systemui.statusbar.CommandQueue
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import com.android.systemui.statusbar.NotificationShadeWindowController
 import com.android.systemui.statusbar.SysuiStatusBarStateController
@@ -48,6 +51,7 @@ import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.statusbar.window.StatusBarWindowController
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.any
+import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.mockito.nullable
 import com.android.systemui.util.mockito.whenever
@@ -76,7 +80,7 @@ class ActivityStarterImplTest : SysuiTestCase() {
     @Mock private lateinit var biometricUnlockController: BiometricUnlockController
     @Mock private lateinit var keyguardViewMediator: KeyguardViewMediator
     @Mock private lateinit var shadeController: ShadeController
-    @Mock private lateinit var shadeViewController: ShadeViewController
+    @Mock private lateinit var commandQueue: CommandQueue
     @Mock private lateinit var statusBarKeyguardViewManager: StatusBarKeyguardViewManager
     @Mock private lateinit var mActivityTransitionAnimator: ActivityTransitionAnimator
     @Mock private lateinit var lockScreenUserManager: NotificationLockscreenUserManager
@@ -105,7 +109,7 @@ class ActivityStarterImplTest : SysuiTestCase() {
                 Lazy { biometricUnlockController },
                 Lazy { keyguardViewMediator },
                 Lazy { shadeController },
-                Lazy { shadeViewController },
+                commandQueue,
                 shadeAnimationInteractor,
                 Lazy { statusBarKeyguardViewManager },
                 Lazy { notifShadeWindowController },
@@ -171,6 +175,53 @@ class ActivityStarterImplTest : SysuiTestCase() {
                 eq(true),
                 any(),
             )
+    }
+
+    fun startPendingIntentDismissingKeyguard_fillInIntentAndExtraOptions_sendAndReturnResult() {
+        val pendingIntent = mock(PendingIntent::class.java)
+        val fillInIntent = mock(Intent::class.java)
+        val parent = FrameLayout(context)
+        val view =
+            object : View(context), LaunchableView {
+                override fun setShouldBlockVisibilityChanges(block: Boolean) {}
+            }
+        parent.addView(view)
+        val controller = ActivityTransitionAnimator.Controller.fromView(view)
+        whenever(pendingIntent.isActivity).thenReturn(true)
+        whenever(keyguardStateController.isShowing).thenReturn(true)
+        whenever(deviceProvisionedController.isDeviceProvisioned).thenReturn(true)
+        whenever(activityIntentHelper.wouldPendingShowOverLockscreen(eq(pendingIntent), anyInt()))
+            .thenReturn(false)
+
+        // extra activity options to set on pending intent
+        val activityOptions = mock(ActivityOptions::class.java)
+        activityOptions.splashScreenStyle = SPLASH_SCREEN_STYLE_SOLID_COLOR
+        activityOptions.isPendingIntentBackgroundActivityLaunchAllowedByPermission = false
+        val bundleCaptor = argumentCaptor<Bundle>()
+
+        underTest.startPendingIntentMaybeDismissingKeyguard(
+            intent = pendingIntent,
+            animationController = controller,
+            intentSentUiThreadCallback = null,
+            fillInIntent = fillInIntent,
+            extraOptions = activityOptions.toBundle(),
+        )
+        mainExecutor.runAllReady()
+
+        // Fill-in intent is passed and options contain extra values specified
+        verify(pendingIntent)
+            .sendAndReturnResult(
+                eq(context),
+                eq(0),
+                eq(fillInIntent),
+                nullable(),
+                nullable(),
+                nullable(),
+                bundleCaptor.capture()
+            )
+        val options = ActivityOptions.fromBundle(bundleCaptor.value)
+        assertThat(options.isPendingIntentBackgroundActivityLaunchAllowedByPermission).isFalse()
+        assertThat(options.splashScreenStyle).isEqualTo(SPLASH_SCREEN_STYLE_SOLID_COLOR)
     }
 
     @Test

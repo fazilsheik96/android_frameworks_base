@@ -36,14 +36,15 @@ import com.android.app.animation.Interpolators
 import com.android.internal.jank.InteractionJankMonitor
 import com.android.internal.jank.InteractionJankMonitor.CUJ_SCREEN_OFF_SHOW_AOD
 import com.android.keyguard.KeyguardClockSwitch.MISSING_CLOCK_ID
-import com.android.systemui.Flags.keyguardBottomAreaRefactor
-import com.android.systemui.Flags.migrateClocksToBlueprint
 import com.android.systemui.Flags.newAodTransition
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.common.shared.model.Text
 import com.android.systemui.common.shared.model.TintedIcon
 import com.android.systemui.common.ui.ConfigurationState
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntryHapticsInteractor
+import com.android.systemui.deviceentry.shared.DeviceEntryUdfpsRefactor
+import com.android.systemui.keyguard.KeyguardBottomAreaRefactor
+import com.android.systemui.keyguard.MigrateClocksToBlueprint
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.shared.model.TransitionState
 import com.android.systemui.keyguard.ui.viewmodel.BurnInParameters
@@ -73,7 +74,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -109,7 +109,7 @@ object KeyguardRootViewBinder {
         val endButton = R.id.end_button
         val lockIcon = R.id.lock_icon_view
 
-        if (keyguardBottomAreaRefactor()) {
+        if (KeyguardBottomAreaRefactor.isEnabled) {
             view.setOnTouchListener { _, event ->
                 if (falsingManager?.isFalseTap(FalsingManager.LOW_PENALTY) == false) {
                     viewModel.setRootViewLastTapPosition(Point(event.x.toInt(), event.y.toInt()))
@@ -143,16 +143,21 @@ object KeyguardRootViewBinder {
                         }
                     }
 
-                    if (keyguardBottomAreaRefactor()) {
+                    if (
+                        KeyguardBottomAreaRefactor.isEnabled || DeviceEntryUdfpsRefactor.isEnabled
+                    ) {
                         launch {
                             viewModel.alpha(viewState).collect { alpha ->
                                 view.alpha = alpha
-                                childViews[statusViewId]?.alpha = alpha
+                                if (KeyguardBottomAreaRefactor.isEnabled) {
+                                    childViews[statusViewId]?.alpha = alpha
+                                    childViews[burnInLayerId]?.alpha = alpha
+                                }
                             }
                         }
                     }
 
-                    if (migrateClocksToBlueprint()) {
+                    if (MigrateClocksToBlueprint.isEnabled) {
                         launch {
                             viewModel.burnInLayerVisibility.collect { visibility ->
                                 childViews[burnInLayerId]?.visibility = visibility
@@ -195,66 +200,68 @@ object KeyguardRootViewBinder {
                             // large clock isn't added to burnInLayer due to its scale transition
                             // so we also need to add translation to it here
                             // same as translationX
-                            burnInParams
-                                .flatMapLatest { params -> viewModel.translationY(params) }
-                                .collect { y ->
-                                    childViews[burnInLayerId]?.translationY = y
-                                    childViews[largeClockId]?.translationY = y
-                                    childViews[aodNotificationIconContainerId]?.translationY = y
-                                }
+                            viewModel.translationY.collect { y ->
+                                childViews[burnInLayerId]?.translationY = y
+                                childViews[largeClockId]?.translationY = y
+                                childViews[aodNotificationIconContainerId]?.translationY = y
+                            }
                         }
 
                         launch {
-                            burnInParams
-                                .flatMapLatest { params -> viewModel.translationX(params) }
-                                .collect { state ->
-                                    val px = state.value ?: return@collect
-                                    when {
-                                        state.isToOrFrom(KeyguardState.AOD) -> {
-                                            childViews[largeClockId]?.translationX = px
-                                            childViews[burnInLayerId]?.translationX = px
-                                            childViews[aodNotificationIconContainerId]
-                                                ?.translationX = px
-                                        }
-                                        state.isToOrFrom(KeyguardState.GLANCEABLE_HUB) -> {
-                                            for ((key, childView) in childViews.entries) {
-                                                when (key) {
-                                                    indicationArea,
-                                                    startButton,
-                                                    endButton,
-                                                    lockIcon -> {
-                                                        // Do not move these views
-                                                    }
-                                                    else -> childView.translationX = px
+                            viewModel.translationX.collect { state ->
+                                val px = state.value ?: return@collect
+                                when {
+                                    state.isToOrFrom(KeyguardState.AOD) -> {
+                                        childViews[largeClockId]?.translationX = px
+                                        childViews[burnInLayerId]?.translationX = px
+                                        childViews[aodNotificationIconContainerId]?.translationX =
+                                            px
+                                    }
+                                    state.isToOrFrom(KeyguardState.GLANCEABLE_HUB) -> {
+                                        for ((key, childView) in childViews.entries) {
+                                            when (key) {
+                                                indicationArea,
+                                                startButton,
+                                                endButton,
+                                                lockIcon -> {
+                                                    // Do not move these views
                                                 }
+                                                else -> childView.translationX = px
                                             }
                                         }
                                     }
                                 }
+                            }
                         }
 
                         launch {
-                            burnInParams
-                                .flatMapLatest { params -> viewModel.scale(params) }
-                                .collect { scaleViewModel ->
-                                    if (scaleViewModel.scaleClockOnly) {
-                                        // For clocks except weather clock, we have scale transition
-                                        // besides translate
-                                        childViews[largeClockId]?.let {
-                                            it.scaleX = scaleViewModel.scale
-                                            it.scaleY = scaleViewModel.scale
-                                        }
-                                    } else {
-                                        // For weather clock, large clock should have only scale
-                                        // transition with other parts in burnInLayer
-                                        childViews[burnInLayerId]?.scaleX = scaleViewModel.scale
-                                        childViews[burnInLayerId]?.scaleY = scaleViewModel.scale
-                                        childViews[aodNotificationIconContainerId]?.scaleX =
-                                            scaleViewModel.scale
-                                        childViews[aodNotificationIconContainerId]?.scaleY =
-                                            scaleViewModel.scale
+                            viewModel.scale.collect { scaleViewModel ->
+                                if (scaleViewModel.scaleClockOnly) {
+                                    // For clocks except weather clock, we have scale transition
+                                    // besides translate
+                                    childViews[largeClockId]?.let {
+                                        it.scaleX = scaleViewModel.scale
+                                        it.scaleY = scaleViewModel.scale
                                     }
+                                    // Make sure to reset these views, or they will be invisible
+                                    if (childViews[burnInLayerId]?.scaleX != 1f) {
+                                        childViews[burnInLayerId]?.scaleX = 1f
+                                        childViews[burnInLayerId]?.scaleY = 1f
+                                        childViews[aodNotificationIconContainerId]?.scaleX = 1f
+                                        childViews[aodNotificationIconContainerId]?.scaleY = 1f
+                                        view.requestLayout()
+                                    }
+                                } else {
+                                    // For weather clock, large clock should have only scale
+                                    // transition with other parts in burnInLayer
+                                    childViews[burnInLayerId]?.scaleX = scaleViewModel.scale
+                                    childViews[burnInLayerId]?.scaleY = scaleViewModel.scale
+                                    childViews[aodNotificationIconContainerId]?.scaleX =
+                                        scaleViewModel.scale
+                                    childViews[aodNotificationIconContainerId]?.scaleY =
+                                        scaleViewModel.scale
                                 }
+                            }
                         }
 
                         if (NotificationIconContainerRefactor.isEnabled) {
@@ -311,6 +318,8 @@ object KeyguardRootViewBinder {
                         }
                     }
 
+                    launch { burnInParams.collect { viewModel.updateBurnInParams(it) } }
+
                     if (deviceEntryHapticsInteractor != null && vibratorHelper != null) {
                         launch {
                             deviceEntryHapticsInteractor.playSuccessHaptic.collect {
@@ -335,13 +344,13 @@ object KeyguardRootViewBinder {
                 }
             }
 
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled) {
             burnInParams.update { current ->
                 current.copy(clockControllerProvider = clockControllerProvider)
             }
         }
 
-        if (migrateClocksToBlueprint()) {
+        if (MigrateClocksToBlueprint.isEnabled) {
             burnInParams.update { current ->
                 current.copy(translationY = { childViews[burnInLayerId]?.translationY })
             }
@@ -432,7 +441,7 @@ object KeyguardRootViewBinder {
             burnInParams.update { current ->
                 current.copy(
                     minViewY =
-                        if (migrateClocksToBlueprint()) {
+                        if (MigrateClocksToBlueprint.isEnabled) {
                             // To ensure burn-in doesn't enroach the top inset, get the min top Y
                             childViews.entries.fold(Int.MAX_VALUE) { currentMin, (viewId, view) ->
                                 min(
@@ -465,7 +474,7 @@ object KeyguardRootViewBinder {
         configuration: ConfigurationState,
         screenOffAnimationController: ScreenOffAnimationController,
     ) {
-        if (migrateClocksToBlueprint()) {
+        if (MigrateClocksToBlueprint.isEnabled) {
             throw IllegalStateException("should only be called in legacy code paths")
         }
         if (NotificationIconContainerRefactor.isUnexpectedlyInLegacyMode()) return
@@ -496,7 +505,7 @@ object KeyguardRootViewBinder {
             }
         when {
             !isVisible.isAnimating -> {
-                if (!migrateClocksToBlueprint()) {
+                if (!MigrateClocksToBlueprint.isEnabled) {
                     translationY = 0f
                 }
                 visibility =
@@ -546,7 +555,7 @@ object KeyguardRootViewBinder {
         animatorListener: Animator.AnimatorListener,
     ) {
         if (animate) {
-            if (!migrateClocksToBlueprint()) {
+            if (!MigrateClocksToBlueprint.isEnabled) {
                 translationY = -iconAppearTranslation.toFloat()
             }
             alpha = 0f
@@ -554,19 +563,19 @@ object KeyguardRootViewBinder {
                 .alpha(1f)
                 .setInterpolator(Interpolators.LINEAR)
                 .setDuration(AOD_ICONS_APPEAR_DURATION)
-                .apply { if (migrateClocksToBlueprint()) animateInIconTranslation() }
+                .apply { if (MigrateClocksToBlueprint.isEnabled) animateInIconTranslation() }
                 .setListener(animatorListener)
                 .start()
         } else {
             alpha = 1.0f
-            if (!migrateClocksToBlueprint()) {
+            if (!MigrateClocksToBlueprint.isEnabled) {
                 translationY = 0f
             }
         }
     }
 
     private fun View.animateInIconTranslation() {
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled) {
             animate().animateInIconTranslation().setDuration(AOD_ICONS_APPEAR_DURATION).start()
         }
     }

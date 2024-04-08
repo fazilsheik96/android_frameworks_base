@@ -1461,11 +1461,14 @@ public class TelecomManager {
     }
 
     /**
-     * This API will return all {@link PhoneAccount}s registered via
-     * {@link TelecomManager#registerPhoneAccount(PhoneAccount)}. If a {@link PhoneAccount} appears
-     * to be missing from the list, Telecom has either unregistered the {@link PhoneAccount}
-     * or the caller registered the {@link PhoneAccount} under a different user and does not
-     * have the {@link android.Manifest.permission#INTERACT_ACROSS_USERS} permission.
+     * This API will return all {@link PhoneAccount}s the caller registered via
+     * {@link TelecomManager#registerPhoneAccount(PhoneAccount)}.  If a {@link PhoneAccount} appears
+     * to be missing from the list, Telecom has either unregistered the {@link PhoneAccount} (for
+     * cleanup purposes) or the caller registered the {@link PhoneAccount} under a different user
+     * and does not have the  {@link android.Manifest.permission#INTERACT_ACROSS_USERS} permission.
+     * <b>Note:</b> This API will only return {@link PhoneAccount}s registered by the same app.  For
+     * system Dialers that need all the {@link PhoneAccount}s registered by every application, see
+     * {@link TelecomManager#getAllPhoneAccounts()}.
      *
      * @return all the {@link PhoneAccount}s registered by the caller.
      */
@@ -2821,16 +2824,15 @@ public class TelecomManager {
 
     /**
      * Determines whether there are any ongoing {@link PhoneAccount#CAPABILITY_SELF_MANAGED}
-     * calls for a given {@code packageName} and {@code userHandle}.
+     * calls for a given {@code packageName} and {@code userHandle}. If UserHandle.ALL or a user
+     * that isn't the calling user is passed in, the caller will need to have granted the ability
+     * to interact across users.
      *
      * @param packageName the package name of the app to check calls for.
-     * @param userHandle the user handle on which to check for calls.
-     * @param detectForAllUsers indicates if calls should be detected across all users. If it is
-     *                          set to {@code true}, and the caller has the ability to interact
-     *                          across users, the userHandle parameter is disregarded.
+     * @param userHandle the user handle to check calls for.
      * @return {@code true} if there are ongoing calls, {@code false} otherwise.
-     * @throws SecurityException if detectForAllUsers is true or userHandle is not the calling user
-     * and the caller does not grant the ability to interact across users.
+     * @throws SecurityException if the userHandle is not the calling user and the caller does not
+     * grant the ability to interact across users.
      * @hide
      */
     @SystemApi
@@ -2838,12 +2840,12 @@ public class TelecomManager {
     @RequiresPermission(allOf = {Manifest.permission.READ_PRIVILEGED_PHONE_STATE,
             Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
     public boolean isInSelfManagedCall(@NonNull String packageName,
-            @NonNull UserHandle userHandle, boolean detectForAllUsers) {
+            @NonNull UserHandle userHandle) {
         ITelecomService service = getTelecomService();
         if (service != null) {
             try {
                 return service.isInSelfManagedCall(packageName, userHandle,
-                        mContext.getOpPackageName(), detectForAllUsers);
+                        mContext.getOpPackageName());
             } catch (RemoteException e) {
                 Log.e(TAG, "RemoteException isInSelfManagedCall: " + e);
                 e.rethrowFromSystemServer();

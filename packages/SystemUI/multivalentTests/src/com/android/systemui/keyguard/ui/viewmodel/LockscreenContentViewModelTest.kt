@@ -26,6 +26,8 @@ import com.android.systemui.flags.fakeFeatureFlagsClassic
 import com.android.systemui.keyguard.data.repository.fakeKeyguardClockRepository
 import com.android.systemui.kosmos.Kosmos
 import com.android.systemui.kosmos.testScope
+import com.android.systemui.shade.data.repository.shadeRepository
+import com.android.systemui.shade.shared.model.ShadeMode
 import com.android.systemui.testKosmos
 import com.android.systemui.util.mockito.whenever
 import com.google.common.truth.Truth.assertThat
@@ -36,7 +38,6 @@ import org.junit.runner.RunWith
 
 @SmallTest
 @RunWith(AndroidJUnit4::class)
-@android.platform.test.annotations.EnabledOnRavenwood
 class LockscreenContentViewModelTest : SysuiTestCase() {
 
     private val kosmos: Kosmos = testKosmos()
@@ -47,6 +48,7 @@ class LockscreenContentViewModelTest : SysuiTestCase() {
     fun setup() {
         with(kosmos) {
             fakeFeatureFlagsClassic.set(Flags.LOCK_SCREEN_LONG_PRESS_ENABLED, true)
+            shadeRepository.setShadeMode(ShadeMode.Single)
             underTest = lockscreenContentViewModel
         }
     }
@@ -88,6 +90,16 @@ class LockscreenContentViewModelTest : SysuiTestCase() {
         }
 
     @Test
+    fun areNotificationsVisible_splitShadeTrue_true() =
+        with(kosmos) {
+            testScope.runTest {
+                shadeRepository.setShadeMode(ShadeMode.Split)
+                kosmos.fakeKeyguardClockRepository.setClockSize(KeyguardClockSwitch.LARGE)
+
+                assertThat(underTest.areNotificationsVisible).isTrue()
+            }
+        }
+    @Test
     fun areNotificationsVisible_withSmallClock_true() =
         with(kosmos) {
             testScope.runTest {
@@ -102,6 +114,33 @@ class LockscreenContentViewModelTest : SysuiTestCase() {
             testScope.runTest {
                 kosmos.fakeKeyguardClockRepository.setClockSize(KeyguardClockSwitch.LARGE)
                 assertThat(underTest.areNotificationsVisible).isFalse()
+            }
+        }
+
+    @Test
+    fun shouldUseSplitNotificationShade_withConfigTrue_true() =
+        with(kosmos) {
+            testScope.runTest {
+                shadeRepository.setShadeMode(ShadeMode.Split)
+                assertThat(underTest.shouldUseSplitNotificationShade).isTrue()
+            }
+        }
+
+    @Test
+    fun shouldUseSplitNotificationShade_withConfigFalse_false() =
+        with(kosmos) {
+            testScope.runTest {
+                shadeRepository.setShadeMode(ShadeMode.Single)
+                assertThat(underTest.shouldUseSplitNotificationShade).isFalse()
+            }
+        }
+
+    @Test
+    fun sceneKey() =
+        with(kosmos) {
+            testScope.runTest {
+                shadeRepository.setShadeMode(ShadeMode.Single)
+                assertThat(underTest.shouldUseSplitNotificationShade).isFalse()
             }
         }
 }

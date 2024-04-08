@@ -666,24 +666,18 @@
     <string name="fingerprint_authenticated" msgid="2024862866860283100">"ഫിംഗർപ്രിന്റ് പരിശോധിച്ചുറപ്പിച്ചു"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="8867889115112348167">"മുഖം പരിശോധിച്ചുറപ്പിച്ചു"</string>
     <string name="face_authenticated_confirmation_required" msgid="6872632732508013755">"മുഖം പരിശോധിച്ചുറപ്പിച്ചു, സ്ഥിരീകരിക്കുക അമർത്തുക"</string>
-    <!-- no translation found for fingerprint_error_hw_not_available (7755729484334001137) -->
-    <skip />
+    <string name="fingerprint_error_hw_not_available" msgid="7755729484334001137">"ഫിംഗർപ്രിന്റ് ഹാർഡ്‌വെയർ ലഭ്യമല്ല"</string>
     <string name="fingerprint_error_no_space" msgid="7285481581905967580">"ഫിംഗർപ്രിന്റ് സജ്ജീകരിക്കാനാകില്ല"</string>
     <string name="fingerprint_error_timeout" msgid="7361192266621252164">"ഫിംഗർപ്രിന്റ് സജ്ജീകരണം ടൈംഔട്ടായി. വീണ്ടും ശ്രമിക്കുക."</string>
-    <!-- no translation found for fingerprint_error_canceled (5541771463159727513) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_user_canceled (2017941773466506863) -->
-    <skip />
+    <string name="fingerprint_error_canceled" msgid="5541771463159727513">"ഫിംഗർപ്രിന്റ് പ്രവർത്തനം റദ്ദാക്കി"</string>
+    <string name="fingerprint_error_user_canceled" msgid="2017941773466506863">"ഫിംഗർപ്രിന്റിന്റെ പ്രവർത്തനം ഉപയോക്താവ് റദ്ദാക്കി"</string>
     <string name="fingerprint_error_lockout" msgid="6626753679019351368">"നിരവധി ശ്രമങ്ങൾ. പകരം സ്‌ക്രീൻ ലോക്ക് ഉപയോഗിക്കുക."</string>
     <string name="fingerprint_error_lockout_permanent" msgid="9060651300306264843">"നിരവധി ശ്രമങ്ങൾ. പകരം സ്‌ക്രീൻ ലോക്ക് ഉപയോഗിക്കുക."</string>
     <string name="fingerprint_error_unable_to_process" msgid="2446280592818621224">"ഫിംഗർപ്രിന്റ് പ്രോസസ് ചെയ്യാനാകില്ല. വീണ്ടും ശ്രമിക്കുക."</string>
-    <!-- no translation found for fingerprint_error_no_fingerprints (3144806556204061862) -->
-    <skip />
+    <string name="fingerprint_error_no_fingerprints" msgid="3144806556204061862">"ഫിംഗർപ്രിന്റുകളൊന്നും എൻറോൾ ചെയ്‌തിട്ടില്ല"</string>
     <string name="fingerprint_error_hw_not_present" msgid="5898827259419366359">"ഈ ഉപകരണത്തിൽ ഫിംഗർപ്രിന്റ് സെൻസർ ഇല്ല"</string>
-    <!-- no translation found for fingerprint_error_security_update_required (8440349108169661934) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_bad_calibration (6770614925736183528) -->
-    <skip />
+    <string name="fingerprint_error_security_update_required" msgid="8440349108169661934">"സെൻസർ താൽക്കാലികമായി പ്രവർത്തനരഹിതമാക്കി"</string>
+    <string name="fingerprint_error_bad_calibration" msgid="6770614925736183528">"ഫിംഗർപ്രിന്റ് സെൻസർ ഉപയോഗിക്കാനാകില്ല. റിപ്പയർ കേന്ദ്രം സന്ദർശിക്കുക."</string>
     <string name="fingerprint_error_power_pressed" msgid="5479524500542129414">"പവർ ബട്ടൺ അമർത്തി"</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"ഫിംഗർ <xliff:g id="FINGERID">%d</xliff:g>"</string>
     <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"ഫിംഗർപ്രിന്റ് ഉപയോഗിക്കുക"</string>
@@ -712,8 +706,8 @@
     <string name="face_acquired_too_far" msgid="2922278214231064859">"ഫോൺ അടുത്തേക്ക് നീക്കുക"</string>
     <string name="face_acquired_too_high" msgid="8278815780046368576">"ഫോൺ മുകളിലേക്ക് ഉയർത്തുക"</string>
     <string name="face_acquired_too_low" msgid="4075391872960840081">"ഫോൺ കൂടുതൽ താഴേക്ക് നീക്കുക"</string>
-    <string name="face_acquired_too_right" msgid="6245286514593540859">"ഫോൺ നിങ്ങളുടെ ഇടതുവശത്തേക്ക് നീക്കുക"</string>
-    <string name="face_acquired_too_left" msgid="9201762240918405486">"ഫോൺ നിങ്ങളുടെ വലതുവശത്തേക്ക് നീക്കുക"</string>
+    <string name="face_acquired_too_right" msgid="6245286514593540859">"ഫോൺ ഇടതുവശത്തേക്ക് നീക്കുക"</string>
+    <string name="face_acquired_too_left" msgid="9201762240918405486">"ഫോൺ വലതുവശത്തേക്ക് നീക്കുക"</string>
     <string name="face_acquired_poor_gaze" msgid="4427153558773628020">"നിങ്ങളുടെ ഉപകരണത്തിന് നേരെ കൂടുതൽ നന്നായി നോക്കുക."</string>
     <string name="face_acquired_not_detected" msgid="1057966913397548150">"മുഖം കാണുന്നില്ല. ഫോൺ കണ്ണിന് നേരെ പിടിക്കുക."</string>
     <string name="face_acquired_too_much_motion" msgid="8199691445085189528">"വളരെയധികം ചലനം. ഫോൺ അനക്കാതെ നേരെ പിടിക്കുക."</string>
@@ -1992,6 +1986,9 @@
     <string name="work_mode_off_title" msgid="6367463960165135829">"വർക്ക് ആപ്പുകൾ പുനരാരംഭിക്കണോ?"</string>
     <string name="work_mode_turn_on" msgid="5316648862401307800">"പുനരാരംഭിക്കുക"</string>
     <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"അടിയന്തരം"</string>
+    <string name="set_up_screen_lock_title" msgid="8346083801616474030">"സ്‌ക്രീൻ ലോക്ക് സജ്ജീകരിക്കൂ"</string>
+    <string name="set_up_screen_lock_action_label" msgid="2687634803649209367">"സ്‌ക്രീൻ ലോക്ക് സജ്ജീകരിക്കൂ"</string>
+    <string name="private_space_set_up_screen_lock_message" msgid="1109956797005149814">"സ്വകാര്യ സ്പേസിന്, ഇതിൽ സ്ക്രീൻ ലോക്ക് സജ്ജീകരിക്കൂ"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"ആപ്പ് ലഭ്യമല്ല"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> ഇപ്പോൾ ലഭ്യമല്ല."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> ലഭ്യമല്ല"</string>
@@ -2396,4 +2393,5 @@
     <string name="satellite_notification_summary" msgid="5207364139430767162">"മൊബൈലോ വൈഫൈ നെറ്റ്‌വർക്കോ ഇല്ലാതെ തന്നെ സന്ദേശങ്ങൾ അയയ്‌ക്കാനും സ്വീകരിക്കാനും നിങ്ങൾക്ക് കഴിയും"</string>
     <string name="satellite_notification_open_message" msgid="4149234979688273729">"Messages തുറക്കുക"</string>
     <string name="satellite_notification_how_it_works" msgid="3132069321977520519">"ഇത് പ്രവർത്തിക്കുന്നത് എങ്ങനെയാണ്"</string>
+    <string name="unarchival_session_app_label" msgid="6811856981546348205">"തീർപ്പാക്കിയിട്ടില്ല..."</string>
 </resources>

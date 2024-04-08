@@ -92,9 +92,9 @@ public class DisplayManagerFlags {
             Flags.FLAG_BRIGHTNESS_INT_RANGE_USER_PERCEPTION,
             Flags::brightnessIntRangeUserPerception);
 
-    private final FlagState mVsyncProximityVote = new FlagState(
-            Flags.FLAG_ENABLE_EXTERNAL_VSYNC_PROXIMITY_VOTE,
-            Flags::enableExternalVsyncProximityVote);
+    private final FlagState mRestrictDisplayModes = new FlagState(
+            Flags.FLAG_ENABLE_RESTRICT_DISPLAY_MODES,
+            Flags::enableRestrictDisplayModes);
 
     private final FlagState mVsyncLowPowerVote = new FlagState(
             Flags.FLAG_ENABLE_VSYNC_LOW_POWER_VOTE,
@@ -116,10 +116,36 @@ public class DisplayManagerFlags {
             Flags.FLAG_FAST_HDR_TRANSITIONS,
             Flags::fastHdrTransitions);
 
+    private final FlagState mAlwaysRotateDisplayDevice = new FlagState(
+            Flags.FLAG_ALWAYS_ROTATE_DISPLAY_DEVICE,
+            Flags::alwaysRotateDisplayDevice);
+
     private final FlagState mRefreshRateVotingTelemetry = new FlagState(
             Flags.FLAG_REFRESH_RATE_VOTING_TELEMETRY,
             Flags::refreshRateVotingTelemetry
     );
+
+    private final FlagState mPixelAnisotropyCorrectionEnabled = new FlagState(
+            Flags.FLAG_ENABLE_PIXEL_ANISOTROPY_CORRECTION,
+            Flags::enablePixelAnisotropyCorrection
+    );
+
+    private final FlagState mSensorBasedBrightnessThrottling = new FlagState(
+            Flags.FLAG_SENSOR_BASED_BRIGHTNESS_THROTTLING,
+            Flags::sensorBasedBrightnessThrottling
+    );
+
+    private final FlagState mIdleScreenRefreshRateTimeout = new FlagState(
+            Flags.FLAG_IDLE_SCREEN_REFRESH_RATE_TIMEOUT,
+            Flags::idleScreenRefreshRateTimeout
+    );
+
+
+    private final FlagState mRefactorDisplayPowerController = new FlagState(
+            Flags.FLAG_REFACTOR_DISPLAY_POWER_CONTROLLER,
+            Flags::refactorDisplayPowerController
+    );
+
 
     /**
      * @return {@code true} if 'port' is allowed in display layout configuration file.
@@ -216,8 +242,8 @@ public class DisplayManagerFlags {
         return mBrightnessIntRangeUserPerceptionFlagState.isEnabled();
     }
 
-    public boolean isVsyncProximityVoteEnabled() {
-        return mVsyncProximityVote.isEnabled();
+    public boolean isRestrictDisplayModesEnabled() {
+        return mRestrictDisplayModes.isEnabled();
     }
 
     public boolean isVsyncLowPowerVoteEnabled() {
@@ -243,8 +269,28 @@ public class DisplayManagerFlags {
         return mFastHdrTransitions.isEnabled();
     }
 
+    public boolean isAlwaysRotateDisplayDeviceEnabled() {
+        return mAlwaysRotateDisplayDevice.isEnabled();
+    }
+
     public boolean isRefreshRateVotingTelemetryEnabled() {
         return mRefreshRateVotingTelemetry.isEnabled();
+    }
+
+    public boolean isPixelAnisotropyCorrectionInLogicalDisplayEnabled() {
+        return mPixelAnisotropyCorrectionEnabled.isEnabled();
+    }
+
+    public boolean isSensorBasedBrightnessThrottlingEnabled() {
+        return mSensorBasedBrightnessThrottling.isEnabled();
+    }
+
+    public boolean isIdleScreenRefreshRateTimeoutEnabled() {
+        return mIdleScreenRefreshRateTimeout.isEnabled();
+    }
+
+    public boolean isRefactorDisplayPowerControllerEnabled() {
+        return mRefactorDisplayPowerController.isEnabled();
     }
 
     /**
@@ -265,11 +311,16 @@ public class DisplayManagerFlags {
         pw.println(" " + mPowerThrottlingClamperFlagState);
         pw.println(" " + mSmallAreaDetectionFlagState);
         pw.println(" " + mBrightnessIntRangeUserPerceptionFlagState);
-        pw.println(" " + mVsyncProximityVote);
+        pw.println(" " + mRestrictDisplayModes);
         pw.println(" " + mBrightnessWearBedtimeModeClamperFlagState);
         pw.println(" " + mAutoBrightnessModesFlagState);
         pw.println(" " + mFastHdrTransitions);
+        pw.println(" " + mAlwaysRotateDisplayDevice);
         pw.println(" " + mRefreshRateVotingTelemetry);
+        pw.println(" " + mPixelAnisotropyCorrectionEnabled);
+        pw.println(" " + mSensorBasedBrightnessThrottling);
+        pw.println(" " + mIdleScreenRefreshRateTimeout);
+        pw.println(" " + mRefactorDisplayPowerController);
     }
 
     private static class FlagState {

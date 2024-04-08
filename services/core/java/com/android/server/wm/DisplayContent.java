@@ -87,7 +87,6 @@ import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.view.inputmethod.ImeTracker.DEBUG_IME_VISIBILITY;
 import static android.window.DisplayAreaOrganizer.FEATURE_IME;
 import static android.window.DisplayAreaOrganizer.FEATURE_ROOT;
-import static android.window.DisplayAreaOrganizer.FEATURE_WINDOWED_MAGNIFICATION;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BOOT;
@@ -188,7 +187,6 @@ import android.hardware.display.VirtualDisplayConfig;
 import android.metrics.LogMaker;
 import android.os.Bundle;
 import android.os.Debug;
-import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.IBinder;
@@ -341,12 +339,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     private SurfaceControl mA11yOverlayLayer;
 
     /**
-     * The direct child layer of the display to put all non-overlay windows. This is also used for
-     * screen rotation animation so that there is a parent layer to put the animation leash.
-     */
-    private SurfaceControl mWindowingLayer;
-
-    /**
      * Delegate for handling all logic around content recording; decides if this DisplayContent is
      * recording, and if so, applies necessary updates to SurfaceFlinger.
      */
@@ -366,7 +358,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     private final ImeContainer mImeWindowsContainer = new ImeContainer(mWmService);
 
     @VisibleForTesting
-    DisplayAreaPolicy mDisplayAreaPolicy;
+    final DisplayAreaPolicy mDisplayAreaPolicy;
 
     private WindowState mTmpWindow;
     private boolean mUpdateImeTarget;
@@ -1246,6 +1238,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mWindowCornerRadius = mDisplayPolicy.getWindowCornerRadius();
         mPinnedTaskController = new PinnedTaskController(mWmService, this);
 
+        // Set up the policy and build the display area hierarchy.
+        // Build the hierarchy only after creating the surface, so it is reparented correctly
+        mDisplayAreaPolicy = mWmService.getDisplayAreaPolicyProvider().instantiate(
+                mWmService, this /* content */, this /* root */, mImeWindowsContainer);
         final Transaction pendingTransaction = getPendingTransaction();
         configureSurfaces(pendingTransaction);
         pendingTransaction.apply();
@@ -1316,14 +1312,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mLastDeltaRotation = Surface.ROTATION_0;
 
         configureSurfaces(t);
-
-        for (int i = 0; i < mChildren.size(); i++)  {
-            SurfaceControl sc = mChildren.get(i).getSurfaceControl();
-            if (sc != null) {
-                t.reparent(sc, mSurfaceControl);
-            }
-        }
-
         scheduleAnimation();
     }
 
@@ -1339,31 +1327,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 .setContainerLayer()
                 .setCallsite("DisplayContent");
         mSurfaceControl = b.setName(getName()).setContainerLayer().build();
-
-        if (mDisplayAreaPolicy == null) {
-            // Setup the policy and build the display area hierarchy.
-            // Build the hierarchy only after creating the surface so it is reparented correctly
-            mDisplayAreaPolicy = mWmService.getDisplayAreaPolicyProvider().instantiate(
-                    mWmService, this /* content */, this /* root */,
-                    mImeWindowsContainer);
-        }
-
-        final List<DisplayArea<? extends WindowContainer>> areas =
-                mDisplayAreaPolicy.getDisplayAreas(FEATURE_WINDOWED_MAGNIFICATION);
-        final DisplayArea<?> area = areas.size() == 1 ? areas.get(0) : null;
-
-        if (area != null && area.getParent() == this) {
-            // The windowed magnification area should contain all non-overlay windows, so just use
-            // it as the windowing layer.
-            mWindowingLayer = area.mSurfaceControl;
-            transaction.reparent(mWindowingLayer, mSurfaceControl);
-        } else {
-            // Need an additional layer for screen level animation, so move the layer containing
-            // the windows to the new root.
-            mWindowingLayer = mSurfaceControl;
-            mSurfaceControl = b.setName("RootWrapper").build();
-            transaction.reparent(mWindowingLayer, mSurfaceControl)
-                    .show(mWindowingLayer);
+        for (int i = getChildCount() - 1; i >= 0; i--)  {
+            final SurfaceControl sc = getChildAt(i).mSurfaceControl;
+            if (sc != null) {
+                transaction.reparent(sc, mSurfaceControl);
+            }
         }
 
         if (mOverlayLayer == null) {
@@ -1386,7 +1354,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         transaction
-                .setLayer(mSurfaceControl, 0)
                 .setLayerStack(mSurfaceControl, mDisplayId)
                 .show(mSurfaceControl)
                 .setLayer(mOverlayLayer, Integer.MAX_VALUE)
@@ -1626,22 +1593,23 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         if (configChanged) {
             mWaitingForConfig = true;
-            if (mTransitionController.isShellTransitionsEnabled()) {
+            if (mLastHasContent && mTransitionController.isShellTransitionsEnabled()) {
                 final Rect startBounds = currentDisplayConfig.windowConfiguration.getBounds();
                 final Rect endBounds = mTmpConfiguration.windowConfiguration.getBounds();
-                final Transition transition = mTransitionController.getCollectingTransition();
-                final TransitionRequestInfo.DisplayChange change = transition != null
-                                ? null : new TransitionRequestInfo.DisplayChange(mDisplayId);
-                if (change != null) {
+                if (!mTransitionController.isCollecting()) {
+                    final TransitionRequestInfo.DisplayChange change =
+                            new TransitionRequestInfo.DisplayChange(mDisplayId);
                     change.setStartAbsBounds(startBounds);
                     change.setEndAbsBounds(endBounds);
+                    requestChangeTransition(changes, change);
                 } else {
+                    final Transition transition = mTransitionController.getCollectingTransition();
                     transition.setKnownConfigChanges(this, changes);
                     // A collecting transition is existed. The sync method must be set before
                     // collecting this display, so WindowState#prepareSync can use the sync method.
                     mTransitionController.setDisplaySyncMethod(startBounds, endBounds, this);
+                    collectDisplayChange(transition);
                 }
-                requestChangeTransitionIfNeeded(changes, change);
             } else if (mLastHasContent) {
                 mWmService.startFreezingDisplay(0 /* exitAnim */, 0 /* enterAnim */, this);
             }
@@ -1948,6 +1916,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return mFixedRotationLaunchingApp != null
                 // Ignore animating recents because it hasn't really become the top.
                 && mFixedRotationLaunchingApp != mFixedRotationTransitionListener.mAnimatingRecents;
+    }
+
+    /** It usually means whether the recents activity is launching with a different rotation. */
+    boolean hasFixedRotationTransientLaunch() {
+        return mFixedRotationLaunchingApp != null
+                && mTransitionController.isTransientLaunch(mFixedRotationLaunchingApp);
     }
 
     boolean isFixedRotationLaunchingApp(ActivityRecord r) {
@@ -2302,7 +2276,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mDisplayInfo.flags &= ~Display.FLAG_SCALING_DISABLED;
         }
 
-        computeSizeRanges(mDisplayInfo, rotated, dw, dh, mDisplayMetrics.density, outConfig);
+        computeSizeRanges(mDisplayInfo, rotated, dw, dh, mDisplayMetrics.density, outConfig,
+                false /* legacyConfig */);
 
         setDisplayInfoOverride();
 
@@ -2438,7 +2413,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         displayInfo.appHeight = appBounds.height();
         final DisplayCutout displayCutout = calculateDisplayCutoutForRotation(rotation);
         displayInfo.displayCutout = displayCutout.isEmpty() ? null : displayCutout;
-        computeSizeRanges(displayInfo, rotated, dw, dh, mDisplayMetrics.density, outConfig);
+        computeSizeRanges(displayInfo, rotated, dw, dh, mDisplayMetrics.density, outConfig,
+                false /* legacyConfig */);
         return displayInfo;
     }
 
@@ -2602,8 +2578,21 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return curSize;
     }
 
-    private void computeSizeRanges(DisplayInfo displayInfo, boolean rotated,
-            int dw, int dh, float density, Configuration outConfig) {
+    /**
+     * Compute size range related fields of DisplayInfo and Configuration based on provided info.
+     * The fields usually contain word such as smallest or largest.
+     *
+     * @param displayInfo In-out display info to compute the result.
+     * @param rotated Whether the display is rotated.
+     * @param dw Display Width in current rotation.
+     * @param dh Display Height in current rotation.
+     * @param density Display density.
+     * @param outConfig The output configuration to
+     * @param legacyConfig Whether we need to report the legacy result, which is excluding system
+     *                     decorations.
+     */
+    void computeSizeRanges(DisplayInfo displayInfo, boolean rotated,
+            int dw, int dh, float density, Configuration outConfig, boolean legacyConfig) {
 
         // We need to determine the smallest width that will occur under normal
         // operation.  To this, start with the base screen size and compute the
@@ -2621,10 +2610,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         displayInfo.smallestNominalAppHeight = 1<<30;
         displayInfo.largestNominalAppWidth = 0;
         displayInfo.largestNominalAppHeight = 0;
-        adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_0, unrotDw, unrotDh);
-        adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_90, unrotDh, unrotDw);
-        adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_180, unrotDw, unrotDh);
-        adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_270, unrotDh, unrotDw);
+        adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_0, unrotDw, unrotDh, legacyConfig);
+        adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_90, unrotDh, unrotDw, legacyConfig);
+        adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_180, unrotDw, unrotDh, legacyConfig);
+        adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_270, unrotDh, unrotDw, legacyConfig);
 
         if (outConfig == null) {
             return;
@@ -2633,11 +2622,19 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 (int) (displayInfo.smallestNominalAppWidth / density + 0.5f);
     }
 
-    private void adjustDisplaySizeRanges(DisplayInfo displayInfo, int rotation, int dw, int dh) {
+    private void adjustDisplaySizeRanges(DisplayInfo displayInfo, int rotation, int dw, int dh,
+            boolean legacyConfig) {
         final DisplayPolicy.DecorInsets.Info info = mDisplayPolicy.getDecorInsetsInfo(
                 rotation, dw, dh);
-        final int w = info.mConfigFrame.width();
-        final int h = info.mConfigFrame.height();
+        final int w;
+        final int h;
+        if (!legacyConfig) {
+            w = info.mConfigFrame.width();
+            h = info.mConfigFrame.height();
+        } else {
+            w = info.mLegacyConfigFrame.width();
+            h = info.mLegacyConfigFrame.height();
+        }
         if (w < displayInfo.smallestNominalAppWidth) {
             displayInfo.smallestNominalAppWidth = w;
         }
@@ -3432,7 +3429,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mOverlayLayer.release();
             mInputOverlayLayer.release();
             mA11yOverlayLayer.release();
-            mWindowingLayer.release();
             mInputMonitor.onDisplayRemoved();
             mWmService.mDisplayNotificationController.dispatchDisplayRemoved(this);
             mDisplayRotation.onDisplayRemoved();
@@ -3492,6 +3488,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     void enableHighPerfTransition(boolean enable) {
+        if (!mWmService.mSupportsHighPerfTransitions) {
+            return;
+        }
         if (!explicitRefreshRateHints()) {
             if (enable) {
                 getPendingTransaction().setEarlyWakeupStart();
@@ -3552,58 +3551,60 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     /**
-     * Requests to start a transition for the display configuration change. The given changes must
-     * be non-zero. This method is no-op if the display has been collected.
+     * Collects this display into an already-collecting transition.
      */
-    void requestChangeTransitionIfNeeded(@ActivityInfo.Config int changes,
-            @Nullable TransitionRequestInfo.DisplayChange displayChange) {
+    void collectDisplayChange(@NonNull Transition transition) {
         if (!mLastHasContent) return;
-        final TransitionController controller = mTransitionController;
-        if (controller.isCollecting()) {
-            if (displayChange != null) {
-                throw new IllegalArgumentException("Provided displayChange for non-new transition");
-            }
-            if (!controller.isCollecting(this)) {
-                controller.collect(this);
-                startAsyncRotationIfNeeded();
-                if (mFixedRotationLaunchingApp != null) {
-                    setSeamlessTransitionForFixedRotation(controller.getCollectingTransition());
-                }
-            } else if (mAsyncRotationController != null && !isRotationChanging()) {
-                Slog.i(TAG, "Finish AsyncRotation for previous intermediate change");
-                finishAsyncRotationIfPossible();
-            }
-            return;
+        if (!transition.isCollecting()) {
+            throw new IllegalArgumentException("Can only collect display change if transition"
+                    + " is collecting");
         }
-        final Transition t = controller.requestTransitionIfNeeded(TRANSIT_CHANGE, 0 /* flags */,
-                this, this, null /* remoteTransition */, displayChange);
-        if (t != null) {
-            mAtmService.startPowerMode(POWER_MODE_REASON_CHANGE_DISPLAY);
-            if (mAsyncRotationController != null) {
-                // Give a chance to update the transform if the current rotation is changed when
-                // some windows haven't finished previous rotation.
-                mAsyncRotationController.updateRotation();
-            }
+        if (!transition.mParticipants.contains(this)) {
+            transition.collect(this);
+            startAsyncRotationIfNeeded();
             if (mFixedRotationLaunchingApp != null) {
-                // A fixed-rotation transition is done, then continue to start a seamless display
-                // transition.
-                setSeamlessTransitionForFixedRotation(t);
-            } else if (isRotationChanging()) {
-                if (displayChange != null) {
-                    final boolean seamless = mDisplayRotation.shouldRotateSeamlessly(
-                            displayChange.getStartRotation(), displayChange.getEndRotation(),
-                            false /* forceUpdate */);
-                    if (seamless) {
-                        t.onSeamlessRotating(this);
-                    }
-                }
-                mWmService.mLatencyTracker.onActionStart(ACTION_ROTATE_SCREEN);
-                controller.mTransitionMetricsReporter.associate(t.getToken(),
-                        startTime -> mWmService.mLatencyTracker.onActionEnd(ACTION_ROTATE_SCREEN));
-                startAsyncRotation(false /* shouldDebounce */);
+                setSeamlessTransitionForFixedRotation(transition);
             }
-            t.setKnownConfigChanges(this, changes);
+        } else if (mAsyncRotationController != null && !isRotationChanging()) {
+            Slog.i(TAG, "Finish AsyncRotation for previous intermediate change");
+            finishAsyncRotationIfPossible();
         }
+    }
+
+    /**
+     * Requests to start a transition for a display change. {@code changes} must be non-zero.
+     */
+    void requestChangeTransition(@ActivityInfo.Config int changes,
+            @Nullable TransitionRequestInfo.DisplayChange displayChange) {
+        final TransitionController controller = mTransitionController;
+        final Transition t = controller.requestStartDisplayTransition(TRANSIT_CHANGE, 0 /* flags */,
+                this, null /* remoteTransition */, displayChange);
+        t.collect(this);
+        mAtmService.startPowerMode(POWER_MODE_REASON_CHANGE_DISPLAY);
+        if (mAsyncRotationController != null) {
+            // Give a chance to update the transform if the current rotation is changed when
+            // some windows haven't finished previous rotation.
+            mAsyncRotationController.updateRotation();
+        }
+        if (mFixedRotationLaunchingApp != null) {
+            // A fixed-rotation transition is done, then continue to start a seamless display
+            // transition.
+            setSeamlessTransitionForFixedRotation(t);
+        } else if (isRotationChanging()) {
+            if (displayChange != null) {
+                final boolean seamless = mDisplayRotation.shouldRotateSeamlessly(
+                        displayChange.getStartRotation(), displayChange.getEndRotation(),
+                        false /* forceUpdate */);
+                if (seamless) {
+                    t.onSeamlessRotating(this);
+                }
+            }
+            mWmService.mLatencyTracker.onActionStart(ACTION_ROTATE_SCREEN);
+            controller.mTransitionMetricsReporter.associate(t.getToken(),
+                    startTime -> mWmService.mLatencyTracker.onActionEnd(ACTION_ROTATE_SCREEN));
+            startAsyncRotation(false /* shouldDebounce */);
+        }
+        t.setKnownConfigChanges(this, changes);
     }
 
     private void setSeamlessTransitionForFixedRotation(Transition t) {
@@ -4170,11 +4171,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     void setInputMethodWindowLocked(WindowState win) {
         mInputMethodWindow = win;
-        // Update display configuration for IME process.
-        if (mInputMethodWindow != null) {
-            final int imePid = mInputMethodWindow.mSession.mPid;
-            mAtmService.onImeWindowSetOnDisplayArea(imePid, mImeWindowsContainer);
-        }
         mInsetsStateController.getImeSourceProvider().setWindowContainer(win,
                 mDisplayPolicy.getImeSourceFrameProvider(), null);
         computeImeTarget(true /* updateImeTarget */);
@@ -5456,11 +5452,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             return b;
         }
 
-        // WARNING: it says `mSurfaceControl` below, but this CHANGES meaning after construction!
-        // DisplayAreas are added in `configureSurface()` *before* `mSurfaceControl` gets replaced
-        // with a wrapper or magnification surface so they end up in the right place; however,
-        // anything added or reparented to "the display" *afterwards* needs to be reparented to
-        // `getWindowinglayer()` (unless it's an overlay DisplayArea).
         return b.setName(child.getName())
                 .setParent(mSurfaceControl);
     }
@@ -5723,14 +5714,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     void requestTransitionAndLegacyPrepare(@WindowManager.TransitionType int transit,
             @WindowManager.TransitionFlags int flags) {
-        requestTransitionAndLegacyPrepare(transit, flags, null /* trigger */);
-    }
-
-    /** @see #requestTransitionAndLegacyPrepare(int, int) */
-    void requestTransitionAndLegacyPrepare(@WindowManager.TransitionType int transit,
-            @WindowManager.TransitionFlags int flags, @Nullable WindowContainer trigger) {
         prepareAppTransition(transit, flags);
-        mTransitionController.requestTransitionIfNeeded(transit, flags, trigger, this);
+        mTransitionController.requestTransitionIfNeeded(transit, flags, null /* trigger */, this);
     }
 
     void executeAppTransition() {
@@ -5809,8 +5794,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 || supportsSystemDecorations();
     }
 
+    /**
+     * The direct child layer of the display to put all non-overlay windows. This is also used for
+     * screen rotation animation so that there is a parent layer to put the animation leash.
+     */
     SurfaceControl getWindowingLayer() {
-        return mWindowingLayer;
+        return mDisplayAreaPolicy.getWindowingArea().mSurfaceControl;
     }
 
     DisplayArea.Tokens getImeContainer() {
@@ -6176,7 +6165,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * @param onDisplayChangeApplied callback that is called when the changes are applied
      */
     void requestDisplayUpdate(@NonNull Runnable onDisplayChangeApplied) {
-        mDisplayUpdater.updateDisplayInfo(onDisplayChangeApplied);
+        mAtmService.deferWindowLayout();
+        try {
+            mDisplayUpdater.updateDisplayInfo(onDisplayChangeApplied);
+        } finally {
+            mAtmService.continueWindowLayout();
+        }
     }
 
     void onDisplayInfoUpdated(@NonNull DisplayInfo newDisplayInfo) {
@@ -6373,8 +6367,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (changes != 0) {
             Slog.i(TAG, "Override config changes=" + Integer.toHexString(changes) + " "
                     + mTempConfig + " for displayId=" + mDisplayId);
-            if (isReady() && mTransitionController.isShellTransitionsEnabled()) {
-                requestChangeTransitionIfNeeded(changes, null /* displayChange */);
+            if (isReady() && mTransitionController.isShellTransitionsEnabled() && mLastHasContent) {
+                final Transition transition = mTransitionController.getCollectingTransition();
+                if (transition != null) {
+                    collectDisplayChange(transition);
+                } else {
+                    requestChangeTransition(changes, null /* displayChange */);
+                }
             }
             onRequestedOverrideConfigurationChanged(mTempConfig);
 
@@ -6791,6 +6790,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return mContentRecorder;
     }
 
+    void onMirrorOutputSurfaceOrientationChanged() {
+        if (mContentRecorder != null) {
+            mContentRecorder.onMirrorOutputSurfaceOrientationChanged();
+        }
+    }
+
     /**
      * Pause the recording session.
      */
@@ -6875,10 +6880,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * example, the user has granted consent to token re-use, so we can now start mirroring).
      */
     void updateRecording() {
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
-            && getContentRecorder().updateMirroringIfSurfaceSizeChanged()) {
-            return;
-        }
         if (mContentRecorder == null || !mContentRecorder.isContentRecordingSessionSet()) {
             if (!setDisplayMirroring()) {
                 return;
@@ -6973,9 +6974,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         boolean shouldDeferRotation() {
             ActivityRecord source = null;
             if (mTransitionController.isShellTransitionsEnabled()) {
-                final ActivityRecord r = mFixedRotationLaunchingApp;
-                if (r != null && mTransitionController.isTransientLaunch(r)) {
-                    source = r;
+                if (hasFixedRotationTransientLaunch()) {
+                    source = mFixedRotationLaunchingApp;
                 }
             } else if (mAnimatingRecents != null && !hasTopFixedRotationLaunchingApp()) {
                 source = mAnimatingRecents;
@@ -7203,7 +7203,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     public void replaceContent(SurfaceControl sc) {
         new Transaction().reparent(sc, getSurfaceControl())
-                .reparent(mWindowingLayer, null)
                 .reparent(mOverlayLayer, null)
                 .reparent(mInputOverlayLayer, null)
                 .reparent(mA11yOverlayLayer, null)

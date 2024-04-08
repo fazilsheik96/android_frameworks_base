@@ -22,12 +22,12 @@ package com.android.systemui.keyguard.ui.viewmodel
 import android.view.View
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
+import com.android.compose.animation.scene.ObservableTransitionState
 import com.android.systemui.Flags as AConfigFlags
 import com.android.systemui.Flags.FLAG_NEW_AOD_TRANSITION
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.communal.data.repository.communalRepository
-import com.android.systemui.communal.shared.model.CommunalSceneKey
-import com.android.systemui.communal.shared.model.ObservableCommunalTransitionState
+import com.android.systemui.communal.shared.model.CommunalScenes
 import com.android.systemui.coroutines.collectLastValue
 import com.android.systemui.deviceentry.data.repository.fakeDeviceEntryRepository
 import com.android.systemui.flags.Flags
@@ -84,6 +84,13 @@ class KeyguardRootViewModelTest : SysuiTestCase() {
         mSetFlagsRule.enableFlags(FLAG_NEW_AOD_TRANSITION)
         mSetFlagsRule.disableFlags(AConfigFlags.FLAG_MIGRATE_CLOCKS_TO_BLUEPRINT)
     }
+
+    @Test
+    fun defaultBurnInScaleEqualsOne() =
+        testScope.runTest {
+            val burnInScale by collectLastValue(underTest.scale)
+            assertThat(burnInScale!!.scale).isEqualTo(1f)
+        }
 
     @Test
     fun burnInLayerVisibility() =
@@ -250,6 +257,17 @@ class KeyguardRootViewModelTest : SysuiTestCase() {
 
             keyguardRepository.topClippingBounds.value = 1000
             assertThat(topClippingBounds).isEqualTo(1000)
+
+            // Run at least 1 transition to make sure value remains at 0
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.AOD,
+                to = KeyguardState.GONE,
+                testScope,
+            )
+
+            // Make sure the value hasn't changed since we're GONE
+            keyguardRepository.topClippingBounds.value = 5
+            assertThat(topClippingBounds).isEqualTo(1000)
         }
 
     @Test
@@ -262,7 +280,7 @@ class KeyguardRootViewModelTest : SysuiTestCase() {
 
             // Hub transition state is idle with hub open.
             communalRepository.setTransitionState(
-                flowOf(ObservableCommunalTransitionState.Idle(CommunalSceneKey.Communal))
+                flowOf(ObservableTransitionState.Idle(CommunalScenes.Communal))
             )
             runCurrent()
 
@@ -325,6 +343,86 @@ class KeyguardRootViewModelTest : SysuiTestCase() {
             shadeRepository.setQsExpansion(0f)
             assertThat(alpha).isEqualTo(1f)
 
+            shadeRepository.setQsExpansion(0.5f)
+            assertThat(alpha).isEqualTo(0f)
+        }
+
+    @Test
+    fun alpha_shadeClosedOverLockscreen_isOne() =
+        testScope.runTest {
+            val alpha by collectLastValue(underTest.alpha(viewState))
+
+            // Transition to the lockscreen.
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.AOD,
+                to = KeyguardState.LOCKSCREEN,
+                testScope,
+            )
+
+            // Open the shade.
+            shadeRepository.setQsExpansion(1f)
+            assertThat(alpha).isEqualTo(0f)
+
+            // Close the shade, alpha returns to 1.
+            shadeRepository.setQsExpansion(0f)
+            assertThat(alpha).isEqualTo(1f)
+        }
+
+    @Test
+    fun alpha_shadeClosedOverDream_isZero() =
+        testScope.runTest {
+            val alpha by collectLastValue(underTest.alpha(viewState))
+
+            // Transition to dreaming.
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.LOCKSCREEN,
+                to = KeyguardState.DREAMING,
+                testScope,
+            )
+
+            // Open the shade.
+            shadeRepository.setQsExpansion(1f)
+            assertThat(alpha).isEqualTo(0f)
+
+            // Close the shade, alpha is still 0 since we're not on the lockscreen.
+            shadeRepository.setQsExpansion(0f)
+            assertThat(alpha).isEqualTo(0f)
+        }
+
+    @Test
+    fun alpha_idleOnOccluded_isZero() =
+        testScope.runTest {
+            val alpha by collectLastValue(underTest.alpha(viewState))
+            assertThat(alpha).isEqualTo(1f)
+
+            // Go to OCCLUDED state
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.LOCKSCREEN,
+                to = KeyguardState.OCCLUDED,
+                testScope = testScope,
+            )
+            assertThat(alpha).isEqualTo(0f)
+
+            // Try pulling down shade and ensure the value doesn't change
+            shadeRepository.setQsExpansion(0.5f)
+            assertThat(alpha).isEqualTo(0f)
+        }
+
+    @Test
+    fun alpha_idleOnGone_isZero() =
+        testScope.runTest {
+            val alpha by collectLastValue(underTest.alpha(viewState))
+            assertThat(alpha).isEqualTo(1f)
+
+            // Go to GONE state
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.LOCKSCREEN,
+                to = KeyguardState.GONE,
+                testScope = testScope,
+            )
+            assertThat(alpha).isEqualTo(0f)
+
+            // Try pulling down shade and ensure the value doesn't change
             shadeRepository.setQsExpansion(0.5f)
             assertThat(alpha).isEqualTo(0f)
         }

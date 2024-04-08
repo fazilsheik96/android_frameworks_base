@@ -25,11 +25,12 @@ import android.widget.FrameLayout
 import androidx.test.filters.SmallTest
 import com.android.keyguard.KeyguardViewController
 import com.android.systemui.SysuiTestCase
-import com.android.systemui.communal.domain.interactor.communalInteractor
-import com.android.systemui.communal.shared.model.CommunalSceneKey
+import com.android.systemui.communal.ui.viewmodel.communalTransitionViewModel
 import com.android.systemui.controls.controller.ControlsControllerImplTest.Companion.eq
 import com.android.systemui.dreams.DreamOverlayStateController
 import com.android.systemui.keyguard.WakefulnessLifecycle
+import com.android.systemui.keyguard.data.repository.fakeKeyguardTransitionRepository
+import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.media.controls.domain.pipeline.MediaDataManager
 import com.android.systemui.media.controls.ui.view.MediaCarouselScrollHandler
@@ -113,10 +114,10 @@ class MediaHierarchyManagerTest : SysuiTestCase() {
     private lateinit var isQsBypassingShade: MutableStateFlow<Boolean>
     private lateinit var mediaFrame: ViewGroup
     private val configurationController = FakeConfigurationController()
-    private val communalInteractor = kosmos.communalInteractor
     private val settings = FakeSettings()
     private lateinit var testableLooper: TestableLooper
     private lateinit var fakeHandler: FakeHandler
+    private val keyguardTransitionRepository = kosmos.fakeKeyguardTransitionRepository
 
     @Before
     fun setup() {
@@ -140,7 +141,7 @@ class MediaHierarchyManagerTest : SysuiTestCase() {
                 mediaDataManager,
                 keyguardViewController,
                 dreamOverlayStateController,
-                communalInteractor,
+                kosmos.communalTransitionViewModel,
                 configurationController,
                 wakefulnessLifecycle,
                 shadeInteractor,
@@ -508,8 +509,11 @@ class MediaHierarchyManagerTest : SysuiTestCase() {
     @Test
     fun testCommunalLocation() =
         testScope.runTest {
-            communalInteractor.onSceneChanged(CommunalSceneKey.Communal)
-            runCurrent()
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.LOCKSCREEN,
+                to = KeyguardState.GLANCEABLE_HUB,
+                testScope = testScope,
+            )
             verify(mediaCarouselController)
                 .onDesiredLocationChanged(
                     eq(MediaHierarchyManager.LOCATION_COMMUNAL_HUB),
@@ -520,11 +524,72 @@ class MediaHierarchyManagerTest : SysuiTestCase() {
                 )
             clearInvocations(mediaCarouselController)
 
-            communalInteractor.onSceneChanged(CommunalSceneKey.Blank)
-            runCurrent()
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.GLANCEABLE_HUB,
+                to = KeyguardState.LOCKSCREEN,
+                testScope = testScope,
+            )
             verify(mediaCarouselController)
                 .onDesiredLocationChanged(
                     eq(MediaHierarchyManager.LOCATION_QQS),
+                    any(MediaHostState::class.java),
+                    eq(false),
+                    anyLong(),
+                    anyLong()
+                )
+        }
+
+    @Test
+    fun testCommunalLocation_showsOverLockscreen() =
+        testScope.runTest {
+            // Device is on lock screen.
+            whenever(statusBarStateController.state).thenReturn(StatusBarState.KEYGUARD)
+
+            // UMO goes to communal from the lock screen.
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.LOCKSCREEN,
+                to = KeyguardState.GLANCEABLE_HUB,
+                testScope = testScope,
+            )
+            verify(mediaCarouselController)
+                .onDesiredLocationChanged(
+                    eq(MediaHierarchyManager.LOCATION_COMMUNAL_HUB),
+                    nullable(),
+                    eq(false),
+                    anyLong(),
+                    anyLong()
+                )
+        }
+
+    @Test
+    fun testCommunalLocation_showsUntilQsExpands() =
+        testScope.runTest {
+            // Device is on lock screen.
+            whenever(statusBarStateController.state).thenReturn(StatusBarState.KEYGUARD)
+
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.LOCKSCREEN,
+                to = KeyguardState.GLANCEABLE_HUB,
+                testScope = testScope,
+            )
+            verify(mediaCarouselController)
+                .onDesiredLocationChanged(
+                    eq(MediaHierarchyManager.LOCATION_COMMUNAL_HUB),
+                    nullable(),
+                    eq(false),
+                    anyLong(),
+                    anyLong()
+                )
+            clearInvocations(mediaCarouselController)
+
+            // Start opening the shade.
+            mediaHierarchyManager.qsExpansion = 0.1f
+            runCurrent()
+
+            // UMO goes to the shade instead.
+            verify(mediaCarouselController)
+                .onDesiredLocationChanged(
+                    eq(MediaHierarchyManager.LOCATION_QS),
                     any(MediaHostState::class.java),
                     eq(false),
                     anyLong(),

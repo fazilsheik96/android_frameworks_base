@@ -22,6 +22,7 @@ import static android.Manifest.permission.CAPTURE_SECURE_VIDEO_OUTPUT;
 import static android.Manifest.permission.CAPTURE_VIDEO_OUTPUT;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
 import static android.Manifest.permission.MANAGE_DISPLAYS;
+import static android.Manifest.permission.RESTRICT_DISPLAY_MODES;
 import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED;
 import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_GONE;
 import static android.hardware.display.DisplayManager.EventsMask;
@@ -40,7 +41,6 @@ import static android.hardware.display.DisplayManagerGlobal.DisplayEvent;
 import static android.hardware.display.DisplayViewport.VIEWPORT_EXTERNAL;
 import static android.hardware.display.DisplayViewport.VIEWPORT_INTERNAL;
 import static android.hardware.display.DisplayViewport.VIEWPORT_VIRTUAL;
-import static android.Manifest.permission.MANAGE_CROSS_DEVICE;
 import static android.hardware.display.HdrConversionMode.HDR_CONVERSION_UNSUPPORTED;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_CRITICAL;
 import static android.os.Process.FIRST_APPLICATION_UID;
@@ -57,7 +57,6 @@ import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
 import android.app.compat.CompatChanges;
-import android.app.ICrossDeviceService;
 import android.companion.virtual.IVirtualDevice;
 import android.companion.virtual.VirtualDeviceManager;
 import android.companion.virtual.flags.Flags;
@@ -77,6 +76,7 @@ import android.graphics.Point;
 import android.hardware.OverlayProperties;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
+import android.hardware.devicestate.DeviceState;
 import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.devicestate.DeviceStateManagerInternal;
 import android.hardware.display.AmbientBrightnessDayStats;
@@ -104,7 +104,6 @@ import android.media.projection.IMediaProjection;
 import android.media.projection.IMediaProjectionManager;
 import android.net.Uri;
 import android.os.Binder;
-import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.IBinder;
@@ -288,6 +287,8 @@ public final class DisplayManagerService extends SystemService {
 
     // Display mode chosen by user.
     private Display.Mode mUserPreferredMode;
+    @HdrConversionMode.ConversionMode
+    private final int mDefaultHdrConversionMode;
     // HDR conversion mode chosen by user
     @GuardedBy("mSyncRoot")
     private HdrConversionMode mHdrConversionMode = null;
@@ -593,6 +594,10 @@ public final class DisplayManagerService extends SystemService {
         mDefaultDisplayDefaultColorMode = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_defaultDisplayDefaultColorMode);
         mDefaultDisplayTopInset = SystemProperties.getInt(PROP_DEFAULT_DISPLAY_TOP_INSET, -1);
+        mDefaultHdrConversionMode = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_enableDefaultHdrConversionPassthrough)
+                        ? HdrConversionMode.HDR_CONVERSION_PASSTHROUGH
+                        : HdrConversionMode.HDR_CONVERSION_SYSTEM;
         float[] lux = getFloatArray(resources.obtainTypedArray(
                 com.android.internal.R.array.config_minimumBrightnessCurveLux));
         float[] nits = getFloatArray(resources.obtainTypedArray(
@@ -1567,12 +1572,7 @@ public final class DisplayManagerService extends SystemService {
         }
 
         if (callingUid != Process.SYSTEM_UID && (flags & VIRTUAL_DISPLAY_FLAG_TRUSTED) != 0) {
-            // check MANAGE_CROSS_DEVICE permission
-            boolean manageCrossDeviceGranted = false;
-            if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-                manageCrossDeviceGranted = checkCallingPermission(MANAGE_CROSS_DEVICE, "createVirtualDisplay()");
-            }
-            if (!manageCrossDeviceGranted && !checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
+            if (!checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
                 EventLog.writeEvent(0x534e4554, "162627132", callingUid,
                         "Attempt to create a trusted display without holding permission!");
                 throw new SecurityException("Requires ADD_TRUSTED_DISPLAY permission to "
@@ -2253,7 +2253,7 @@ public final class DisplayManagerService extends SystemService {
     @GuardedBy("mSyncRoot")
     void updateHdrConversionModeSettingsLocked() {
         final int conversionMode = Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.HDR_CONVERSION_MODE, HdrConversionMode.HDR_CONVERSION_SYSTEM);
+                Settings.Global.HDR_CONVERSION_MODE, mDefaultHdrConversionMode);
         final int preferredHdrOutputType = conversionMode == HdrConversionMode.HDR_CONVERSION_FORCE
                 ? Settings.Global.getInt(mContext.getContentResolver(),
                 Settings.Global.HDR_FORCE_CONVERSION_TYPE,
@@ -2478,7 +2478,7 @@ public final class DisplayManagerService extends SystemService {
                 return mHdrConversionMode;
             }
         }
-        return new HdrConversionMode(HdrConversionMode.HDR_CONVERSION_SYSTEM);
+        return new HdrConversionMode(mDefaultHdrConversionMode);
     }
 
     HdrConversionMode getHdrConversionModeInternal() {
@@ -2490,6 +2490,14 @@ public final class DisplayManagerService extends SystemService {
             mode = mOverrideHdrConversionMode != null
                     ? mOverrideHdrConversionMode
                     : mHdrConversionMode;
+            // Handle default: PASSTHROUGH. Don't include the system-preferred type.
+            if (mode == null
+                    && mDefaultHdrConversionMode == HdrConversionMode.HDR_CONVERSION_PASSTHROUGH) {
+                return new HdrConversionMode(HdrConversionMode.HDR_CONVERSION_PASSTHROUGH);
+            }
+            // Handle default or current mode: SYSTEM. Include the system preferred type.
+            // mOverrideHdrConversionMode and mHdrConversionMode do not include the system
+            // preferred type, it is kept separately in mSystemPreferredHdrOutputType.
             if (mode == null
                     || mode.getConversionMode() == HdrConversionMode.HDR_CONVERSION_SYSTEM) {
                 return new HdrConversionMode(
@@ -4544,6 +4552,14 @@ public final class DisplayManagerService extends SystemService {
             disableConnectedDisplay_enforcePermission();
             DisplayManagerService.this.enableConnectedDisplay(displayId, false);
         }
+
+        @EnforcePermission(RESTRICT_DISPLAY_MODES)
+        @Override // Binder call
+        public void requestDisplayModes(IBinder token, int displayId, @Nullable int[] modeIds) {
+            requestDisplayModes_enforcePermission();
+            DisplayManagerService.this.mDisplayModeDirector.requestDisplayModes(
+                    token, displayId, modeIds);
+        }
     }
 
     private static boolean isValidBrightness(float brightness) {
@@ -5048,29 +5064,21 @@ public final class DisplayManagerService extends SystemService {
      * Listens to changes in device state and reports the state to LogicalDisplayMapper.
      */
     class DeviceStateListener implements DeviceStateManager.DeviceStateCallback {
-        // Base state corresponds to the physical state of the device
-        private int mBaseState = DeviceStateManager.INVALID_DEVICE_STATE;
 
         @Override
-        public void onStateChanged(int deviceState) {
-            boolean isDeviceStateOverrideActive = deviceState != mBaseState;
+        public void onDeviceStateChanged(DeviceState deviceState) {
             synchronized (mSyncRoot) {
                 // Notify WindowManager that we are about to handle new device state, this should
                 // be sent before any work related to the device state in DisplayManager, so
                 // WindowManager could do implement that depends on the device state and display
                 // changes (serializes device state update and display change events)
                 Message msg = mHandler.obtainMessage(MSG_RECEIVED_DEVICE_STATE);
-                msg.arg1 = deviceState;
+                msg.arg1 = deviceState.getIdentifier();
                 mHandler.sendMessage(msg);
 
                 mLogicalDisplayMapper
-                        .setDeviceStateLocked(deviceState, isDeviceStateOverrideActive);
+                        .setDeviceStateLocked(deviceState.getIdentifier());
             }
-        }
-
-        @Override
-        public void onBaseStateChanged(int state) {
-            mBaseState = state;
         }
     };
 

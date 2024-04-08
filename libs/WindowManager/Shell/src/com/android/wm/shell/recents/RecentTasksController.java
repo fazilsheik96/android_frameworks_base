@@ -163,14 +163,14 @@ public class RecentTasksController implements TaskStackListenerCallback,
     /**
      * Adds a split pair. This call does not validate the taskIds, only that they are not the same.
      */
-    public void addSplitPair(int taskId1, int taskId2, SplitBounds splitBounds) {
+    public boolean addSplitPair(int taskId1, int taskId2, SplitBounds splitBounds) {
         if (taskId1 == taskId2) {
-            return;
+            return false;
         }
         if (mSplitTasks.get(taskId1, INVALID_TASK_ID) == taskId2
                 && mTaskSplitBoundsMap.get(taskId1).equals(splitBounds)) {
             // If the two tasks are already paired and the bounds are the same, then skip updating
-            return;
+            return false;
         }
         // Remove any previous pairs
         removeSplitPair(taskId1);
@@ -185,6 +185,7 @@ public class RecentTasksController implements TaskStackListenerCallback,
         notifyRecentTasksChanged();
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_RECENT_TASKS, "Add split pair: %d, %d, %s",
                 taskId1, taskId2, splitBounds);
+        return true;
     }
 
     /**
@@ -331,6 +332,8 @@ public class RecentTasksController implements TaskStackListenerCallback,
 
         ArrayList<ActivityManager.RecentTaskInfo> freeformTasks = new ArrayList<>();
 
+        int mostRecentFreeformTaskIndex = Integer.MAX_VALUE;
+
         // Pull out the pairs as we iterate back in the list
         ArrayList<GroupedRecentTaskInfo> recentTasks = new ArrayList<>();
         for (int i = 0; i < rawList.size(); i++) {
@@ -343,6 +346,9 @@ public class RecentTasksController implements TaskStackListenerCallback,
             if (DesktopModeStatus.isEnabled() && mDesktopModeTaskRepository.isPresent()
                     && mDesktopModeTaskRepository.get().isActiveTask(taskInfo.taskId)) {
                 // Freeform tasks will be added as a separate entry
+                if (mostRecentFreeformTaskIndex == Integer.MAX_VALUE) {
+                    mostRecentFreeformTaskIndex = recentTasks.size();
+                }
                 freeformTasks.add(taskInfo);
                 continue;
             }
@@ -361,7 +367,7 @@ public class RecentTasksController implements TaskStackListenerCallback,
 
         // Add a special entry for freeform tasks
         if (!freeformTasks.isEmpty()) {
-            recentTasks.add(0, GroupedRecentTaskInfo.forFreeformTasks(
+            recentTasks.add(mostRecentFreeformTaskIndex, GroupedRecentTaskInfo.forFreeformTasks(
                     freeformTasks.toArray(new ActivityManager.RecentTaskInfo[0])));
         }
 

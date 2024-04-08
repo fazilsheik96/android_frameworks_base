@@ -47,6 +47,19 @@ import java.util.List;
  * {@hide}
  */
 interface IWindowSession {
+
+    /**
+     * Bundle key to store the latest sync seq id for the relayout configuration.
+     * @see #relayout
+     */
+    const String KEY_RELAYOUT_BUNDLE_SEQID = "seqid";
+    /**
+     * Bundle key to store the latest ActivityWindowInfo associated with the relayout configuration.
+     * Will only be set if the relayout window is an activity window.
+     * @see #relayout
+     */
+    const String KEY_RELAYOUT_BUNDLE_ACTIVITY_WINDOW_INFO = "activity_window_info";
+
     int addToDisplay(IWindow window, in WindowManager.LayoutParams attrs,
             in int viewVisibility, in int layerStackId, int requestedVisibleTypes,
             out InputChannel outInputChannel, out InsetsState insetsState,
@@ -92,7 +105,7 @@ interface IWindowSession {
      * @param outSurfaceControl Object in which is placed the new display surface.
      * @param insetsState The current insets state in the system.
      * @param activeControls Objects which allow controlling {@link InsetsSource}s.
-     * @param bundle A temporary object to obtain the latest SyncSeqId.
+     * @param bundle A Bundle to contain the latest SyncSeqId and any extra relayout optional infos.
      * @return int Result flags, defined in {@link WindowManagerGlobal}.
      */
     int relayout(IWindow window, in WindowManager.LayoutParams attrs,
@@ -148,13 +161,13 @@ interface IWindowSession {
             int seqId);
 
     @UnsupportedAppUsage
-    boolean performHapticFeedback(int effectId, boolean always);
+    boolean performHapticFeedback(int effectId, boolean always, boolean fromIme);
 
     /**
      * Called by attached views to perform predefined haptic feedback without requiring VIBRATE
      * permission.
      */
-    oneway void performHapticFeedbackAsync(int effectId, boolean always);
+    oneway void performHapticFeedbackAsync(int effectId, boolean always, boolean fromIme);
 
     /**
      * Initiate the drag operation itself

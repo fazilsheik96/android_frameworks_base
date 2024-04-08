@@ -27,6 +27,7 @@ import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.content.AttributionSource;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
@@ -146,6 +147,16 @@ public class AudioPolicy {
         return mProjection;
     }
 
+    /** @hide */
+    public AttributionSource getAttributionSource() {
+        return getAttributionSource(mContext);
+    }
+
+    private static AttributionSource getAttributionSource(Context context) {
+        return context == null
+                ? AttributionSource.myAttributionSource() : context.getAttributionSource();
+    }
+
     /**
      * The parameters are guaranteed non-null through the Builder
      */
@@ -207,6 +218,9 @@ public class AudioPolicy {
         public Builder addMix(@NonNull AudioMix mix) throws IllegalArgumentException {
             if (mix == null) {
                 throw new IllegalArgumentException("Illegal null AudioMix argument");
+            }
+            if (android.permission.flags.Flags.deviceAwarePermissionApisEnabled()) {
+                mix.setVirtualDeviceId(getAttributionSource(mContext).getDeviceId());
             }
             mMixes.add(mix);
             return this;
@@ -337,7 +351,9 @@ public class AudioPolicy {
 
     /**
      * Update the current configuration of the set of audio mixes by adding new ones, while
-     * keeping the policy registered.
+     * keeping the policy registered. If any of the provided audio mixes is invalid then none of
+     * the passed mixes will be registered.
+     *
      * This method can only be called on a registered policy.
      * @param mixes the list of {@link AudioMix} to add
      * @return {@link AudioManager#SUCCESS} if the change was successful, {@link AudioManager#ERROR}
@@ -356,6 +372,9 @@ public class AudioPolicy {
                 if (mix == null) {
                     throw new IllegalArgumentException("Illegal null AudioMix in attachMixes");
                 } else {
+                    if (android.permission.flags.Flags.deviceAwarePermissionApisEnabled()) {
+                        mix.setVirtualDeviceId(getAttributionSource(mContext).getDeviceId());
+                    }
                     zeMixes.add(mix);
                 }
             }
@@ -375,12 +394,15 @@ public class AudioPolicy {
     }
 
     /**
-     * Update the current configuration of the set of audio mixes by removing some, while
-     * keeping the policy registered.
-     * This method can only be called on a registered policy.
+     * Update the current configuration of the set of audio mixes for this audio policy by
+     * removing some, while keeping the policy registered. Will unregister all provided audio
+     * mixes, if possible.
+     *
+     * This method can only be called on a registered policy and only affects this current policy.
      * @param mixes the list of {@link AudioMix} to remove
      * @return {@link AudioManager#SUCCESS} if the change was successful, {@link AudioManager#ERROR}
-     *    otherwise.
+     *    otherwise. If only some of the provided audio mixes were detached but any one mix
+     *    failed to be detached, this method returns {@link AudioManager#ERROR}.
      */
     public int detachMixes(@NonNull List<AudioMix> mixes) {
         if (mixes == null) {
@@ -394,8 +416,10 @@ public class AudioPolicy {
             for (AudioMix mix : mixes) {
                 if (mix == null) {
                     throw new IllegalArgumentException("Illegal null AudioMix in detachMixes");
-                    // TODO also check mix is currently contained in list of mixes
                 } else {
+                    if (android.permission.flags.Flags.deviceAwarePermissionApisEnabled()) {
+                        mix.setVirtualDeviceId(getAttributionSource(mContext).getDeviceId());
+                    }
                     zeMixes.add(mix);
                 }
             }

@@ -16,26 +16,40 @@
 
 package com.android.compose.animation.scene
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.intermediateLayout
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -527,5 +541,307 @@ class ElementTest {
             at(48) { assertThat(fooCompositions).isEqualTo(1) }
             after { assertThat(fooCompositions).isEqualTo(1) }
         }
+    }
+
+    private fun setupOverscrollScenario(
+        layoutWidth: Dp,
+        layoutHeight: Dp,
+        sceneTransitions: SceneTransitionsBuilder.() -> Unit,
+        firstScroll: Float,
+        animatedFloatRange: ClosedFloatingPointRange<Float>,
+        onAnimatedFloat: (Float) -> Unit,
+    ): MutableSceneTransitionLayoutStateImpl {
+        // The draggable touch slop, i.e. the min px distance a touch pointer must move before it is
+        // detected as a drag event.
+        var touchSlop = 0f
+
+        val state =
+            MutableSceneTransitionLayoutState(
+                initialScene = TestScenes.SceneA,
+                transitions = transitions(sceneTransitions),
+            )
+                as MutableSceneTransitionLayoutStateImpl
+
+        rule.setContent {
+            touchSlop = LocalViewConfiguration.current.touchSlop
+            SceneTransitionLayout(
+                state = state,
+                modifier = Modifier.size(layoutWidth, layoutHeight)
+            ) {
+                scene(
+                    key = TestScenes.SceneA,
+                    userActions = mapOf(Swipe.Down to TestScenes.SceneB)
+                ) {
+                    animateSceneFloatAsState(
+                        value = animatedFloatRange.start,
+                        key = TestValues.Value1,
+                        false
+                    )
+                    Spacer(Modifier.fillMaxSize())
+                }
+                scene(TestScenes.SceneB) {
+                    val animatedFloat by
+                        animateSceneFloatAsState(
+                            value = animatedFloatRange.endInclusive,
+                            key = TestValues.Value1,
+                            canOverflow = false
+                        )
+                    Spacer(Modifier.element(TestElements.Foo).fillMaxSize())
+                    LaunchedEffect(Unit) {
+                        snapshotFlow { animatedFloat }.collect { onAnimatedFloat(it) }
+                    }
+                }
+            }
+        }
+
+        assertThat(state.currentTransition).isNull()
+        assertThat(state.currentTransition?.currentOverscrollSpec).isNull()
+
+        // Swipe by half of verticalSwipeDistance.
+        rule.onRoot().performTouchInput {
+            val middleTop = Offset((layoutWidth / 2).toPx(), 0f)
+            down(middleTop)
+            val firstScrollHeight = layoutHeight.toPx() * firstScroll
+            moveBy(Offset(0f, touchSlop + firstScrollHeight), delayMillis = 1_000)
+        }
+        return state
+    }
+
+    @Test
+    fun elementTransitionDuringOverscroll() {
+        val layoutWidth = 200.dp
+        val layoutHeight = 400.dp
+        val overscrollTranslateY = 10.dp
+        var animatedFloat = 0f
+
+        val state =
+            setupOverscrollScenario(
+                layoutWidth = layoutWidth,
+                layoutHeight = layoutHeight,
+                sceneTransitions = {
+                    overscroll(TestScenes.SceneB, Orientation.Vertical) {
+                        // On overscroll 100% -> Foo should translate by overscrollTranslateY
+                        translate(TestElements.Foo, y = overscrollTranslateY)
+                    }
+                },
+                firstScroll = 0.5f, // Scroll 50%
+                animatedFloatRange = 0f..100f,
+                onAnimatedFloat = { animatedFloat = it },
+            )
+
+        val fooElement = rule.onNodeWithTag(TestElements.Foo.testTag, useUnmergedTree = true)
+        fooElement.assertTopPositionInRootIsEqualTo(0.dp)
+        val transition = state.currentTransition
+        assertThat(transition).isNotNull()
+        assertThat(transition!!.progress).isEqualTo(0.5f)
+        assertThat(animatedFloat).isEqualTo(50f)
+
+        rule.onRoot().performTouchInput {
+            // Scroll another 100%
+            moveBy(Offset(0f, layoutHeight.toPx()), delayMillis = 1_000)
+        }
+
+        // Scroll 150% (Scene B overscroll by 50%)
+        assertThat(transition.progress).isEqualTo(1.5f)
+        assertThat(state.currentTransition?.currentOverscrollSpec).isNotNull()
+        fooElement.assertTopPositionInRootIsEqualTo(overscrollTranslateY * 0.5f)
+        // animatedFloat cannot overflow (canOverflow = false)
+        assertThat(animatedFloat).isEqualTo(100f)
+
+        rule.onRoot().performTouchInput {
+            // Scroll another 100%
+            moveBy(Offset(0f, layoutHeight.toPx()), delayMillis = 1_000)
+        }
+
+        // Scroll 250% (Scene B overscroll by 150%)
+        assertThat(transition.progress).isEqualTo(2.5f)
+        assertThat(state.currentTransition?.currentOverscrollSpec).isNotNull()
+        fooElement.assertTopPositionInRootIsEqualTo(overscrollTranslateY * 1.5f)
+        assertThat(animatedFloat).isEqualTo(100f)
+    }
+
+    @Test
+    fun elementTransitionDuringNestedScrollOverscroll() {
+        // The draggable touch slop, i.e. the min px distance a touch pointer must move before it is
+        // detected as a drag event.
+        var touchSlop = 0f
+        val overscrollTranslateY = 10.dp
+        val layoutWidth = 200.dp
+        val layoutHeight = 400.dp
+
+        val state =
+            MutableSceneTransitionLayoutState(
+                initialScene = TestScenes.SceneB,
+                transitions =
+                    transitions {
+                        overscroll(TestScenes.SceneB, Orientation.Vertical) {
+                            translate(TestElements.Foo, y = overscrollTranslateY)
+                        }
+                    }
+            )
+                as MutableSceneTransitionLayoutStateImpl
+
+        rule.setContent {
+            touchSlop = LocalViewConfiguration.current.touchSlop
+            SceneTransitionLayout(
+                state = state,
+                modifier = Modifier.size(layoutWidth, layoutHeight)
+            ) {
+                scene(TestScenes.SceneA) { Spacer(Modifier.fillMaxSize()) }
+                scene(TestScenes.SceneB, userActions = mapOf(Swipe.Up to TestScenes.SceneA)) {
+                    Box(
+                        Modifier
+                            // Unconsumed scroll gesture will be intercepted by STL
+                            .verticalNestedScrollToScene()
+                            // A scrollable that does not consume the scroll gesture
+                            .scrollable(
+                                rememberScrollableState(consumeScrollDelta = { 0f }),
+                                Orientation.Vertical
+                            )
+                            .fillMaxSize()
+                    ) {
+                        Spacer(Modifier.element(TestElements.Foo).fillMaxSize())
+                    }
+                }
+            }
+        }
+
+        assertThat(state.currentTransition).isNull()
+        assertThat(state.currentTransition?.currentOverscrollSpec).isNull()
+        val fooElement = rule.onNodeWithTag(TestElements.Foo.testTag, useUnmergedTree = true)
+        fooElement.assertTopPositionInRootIsEqualTo(0.dp)
+
+        // Swipe by half of verticalSwipeDistance.
+        rule.onRoot().performTouchInput {
+            val middleTop = Offset((layoutWidth / 2).toPx(), 0f)
+            down(middleTop)
+            // Scroll 50%
+            moveBy(Offset(0f, touchSlop + layoutHeight.toPx() * 0.5f), delayMillis = 1_000)
+        }
+
+        val transition = state.currentTransition
+        assertThat(state.currentTransition?.currentOverscrollSpec).isNotNull()
+        assertThat(transition).isNotNull()
+        assertThat(transition!!.progress).isEqualTo(-0.5f)
+        fooElement.assertTopPositionInRootIsEqualTo(overscrollTranslateY * 0.5f)
+
+        rule.onRoot().performTouchInput {
+            // Scroll another 100%
+            moveBy(Offset(0f, layoutHeight.toPx()), delayMillis = 1_000)
+        }
+
+        // Scroll 150% (Scene B overscroll by 50%)
+        assertThat(transition.progress).isEqualTo(-1.5f)
+        assertThat(state.currentTransition?.currentOverscrollSpec).isNotNull()
+        fooElement.assertTopPositionInRootIsEqualTo(overscrollTranslateY * 1.5f)
+    }
+
+    @Test
+    fun elementTransitionWithDistanceDuringOverscroll() {
+        val layoutWidth = 200.dp
+        val layoutHeight = 400.dp
+        var animatedFloat = 0f
+        val state =
+            setupOverscrollScenario(
+                layoutWidth = layoutWidth,
+                layoutHeight = layoutHeight,
+                sceneTransitions = {
+                    overscroll(TestScenes.SceneB, Orientation.Vertical) {
+                        // On overscroll 100% -> Foo should translate by layoutHeight
+                        translate(TestElements.Foo, y = { absoluteDistance })
+                    }
+                },
+                firstScroll = 1f, // 100% scroll
+                animatedFloatRange = 0f..100f,
+                onAnimatedFloat = { animatedFloat = it },
+            )
+
+        val fooElement = rule.onNodeWithTag(TestElements.Foo.testTag, useUnmergedTree = true)
+        fooElement.assertTopPositionInRootIsEqualTo(0.dp)
+        assertThat(animatedFloat).isEqualTo(100f)
+
+        rule.onRoot().performTouchInput {
+            // Scroll another 50%
+            moveBy(Offset(0f, layoutHeight.toPx() * 0.5f), delayMillis = 1_000)
+        }
+
+        val transition = state.currentTransition
+        assertThat(transition).isNotNull()
+        assertThat(animatedFloat).isEqualTo(100f)
+
+        // Scroll 150% (100% scroll + 50% overscroll)
+        assertThat(transition!!.progress).isEqualTo(1.5f)
+        assertThat(state.currentTransition?.currentOverscrollSpec).isNotNull()
+        fooElement.assertTopPositionInRootIsEqualTo(layoutHeight * 0.5f)
+        assertThat(animatedFloat).isEqualTo(100f)
+
+        rule.onRoot().performTouchInput {
+            // Scroll another 100%
+            moveBy(Offset(0f, layoutHeight.toPx()), delayMillis = 1_000)
+        }
+
+        // Scroll 250% (100% scroll + 150% overscroll)
+        assertThat(transition.progress).isEqualTo(2.5f)
+        assertThat(state.currentTransition?.currentOverscrollSpec).isNotNull()
+        fooElement.assertTopPositionInRootIsEqualTo(layoutHeight * 1.5f)
+        assertThat(animatedFloat).isEqualTo(100f)
+    }
+
+    @Test
+    fun elementTransitionWithDistanceDuringOverscrollBouncing() {
+        val layoutWidth = 200.dp
+        val layoutHeight = 400.dp
+        var animatedFloat = 0f
+        val state =
+            setupOverscrollScenario(
+                layoutWidth = layoutWidth,
+                layoutHeight = layoutHeight,
+                sceneTransitions = {
+                    defaultSwipeSpec =
+                        spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow,
+                        )
+
+                    overscroll(TestScenes.SceneB, Orientation.Vertical) {
+                        // On overscroll 100% -> Foo should translate by layoutHeight
+                        translate(TestElements.Foo, y = { absoluteDistance })
+                    }
+                },
+                firstScroll = 1f, // 100% scroll
+                animatedFloatRange = 0f..100f,
+                onAnimatedFloat = { animatedFloat = it },
+            )
+
+        val fooElement = rule.onNodeWithTag(TestElements.Foo.testTag, useUnmergedTree = true)
+        fooElement.assertTopPositionInRootIsEqualTo(0.dp)
+        assertThat(animatedFloat).isEqualTo(100f)
+
+        rule.onRoot().performTouchInput {
+            // Scroll another 50%
+            moveBy(Offset(0f, layoutHeight.toPx() * 0.5f), delayMillis = 1_000)
+        }
+
+        val transition = state.currentTransition
+        assertThat(transition).isNotNull()
+        transition as TransitionState.HasOverscrollProperties
+
+        // Scroll 150% (100% scroll + 50% overscroll)
+        assertThat(transition.progress).isEqualTo(1.5f)
+        assertThat(state.currentTransition?.currentOverscrollSpec).isNotNull()
+        fooElement.assertTopPositionInRootIsEqualTo(layoutHeight * (transition.progress - 1f))
+        assertThat(animatedFloat).isEqualTo(100f)
+
+        // finger raised
+        rule.onRoot().performTouchInput { up() }
+
+        // The target value is 1f, but the spring (defaultSwipeSpec) allows you to go to a lower
+        // value.
+        rule.waitUntil(timeoutMillis = 10_000) { transition.progress < 1f }
+
+        assertThat(transition.progress).isLessThan(1f)
+        assertThat(state.currentTransition?.currentOverscrollSpec).isNotNull()
+        assertThat(transition.bouncingScene).isEqualTo(transition.toScene)
+        assertThat(animatedFloat).isEqualTo(100f)
     }
 }

@@ -30,13 +30,13 @@ import androidx.annotation.MainThread
 import androidx.annotation.WorkerThread
 import com.android.settingslib.bluetooth.LocalBluetoothLeBroadcast
 import com.android.settingslib.bluetooth.LocalBluetoothManager
+import com.android.settingslib.flags.Flags.enableLeAudioSharing
+import com.android.settingslib.flags.Flags.legacyLeAudioSharing
 import com.android.settingslib.media.LocalMediaManager
 import com.android.settingslib.media.MediaDevice
 import com.android.settingslib.media.PhoneMediaDevice
-import com.android.systemui.Dumpable
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
-import com.android.systemui.dump.DumpManager
 import com.android.systemui.media.controls.shared.model.MediaData
 import com.android.systemui.media.controls.shared.model.MediaDeviceData
 import com.android.systemui.media.controls.util.LocalMediaManagerFactory
@@ -68,15 +68,10 @@ constructor(
     private val localBluetoothManager: Lazy<LocalBluetoothManager?>,
     @Main private val fgExecutor: Executor,
     @Background private val bgExecutor: Executor,
-    dumpManager: DumpManager,
-) : MediaDataManager.Listener, Dumpable {
+) : MediaDataManager.Listener {
 
     private val listeners: MutableSet<Listener> = mutableSetOf()
     private val entries: MutableMap<String, Entry> = mutableMapOf()
-
-    init {
-        dumpManager.registerDumpable(this)
-    }
 
     /** Add a listener for changes to the media route (ie. device). */
     fun addListener(listener: Listener) = listeners.add(listener)
@@ -121,7 +116,7 @@ constructor(
         token?.let { listeners.forEach { it.onKeyRemoved(key) } }
     }
 
-    override fun dump(pw: PrintWriter, args: Array<String>) {
+    fun dump(pw: PrintWriter) {
         with(pw) {
             println("MediaDeviceManager state:")
             entries.forEach { (key, entry) ->
@@ -332,14 +327,28 @@ constructor(
         @WorkerThread
         private fun updateCurrent() {
             if (isLeAudioBroadcastEnabled()) {
-                current =
-                    MediaDeviceData(
-                        /* enabled */ true,
-                        /* icon */ context.getDrawable(R.drawable.settings_input_antenna),
-                        /* name */ broadcastDescription,
-                        /* intent */ null,
-                        /* showBroadcastButton */ showBroadcastButton = true
-                    )
+                if (enableLeAudioSharing()) {
+                    current =
+                        MediaDeviceData(
+                            enabled = false,
+                            icon =
+                                context.getDrawable(
+                                    com.android.settingslib.R.drawable.ic_bt_le_audio_sharing
+                                ),
+                            name = context.getString(R.string.audio_sharing_description),
+                            intent = null,
+                            showBroadcastButton = false
+                        )
+                } else {
+                    current =
+                        MediaDeviceData(
+                            /* enabled */ true,
+                            /* icon */ context.getDrawable(R.drawable.settings_input_antenna),
+                            /* name */ broadcastDescription,
+                            /* intent */ null,
+                            /* showBroadcastButton */ showBroadcastButton = true
+                        )
+                }
             } else {
                 val aboutToConnect = aboutToConnectDeviceOverride
                 if (
@@ -420,6 +429,7 @@ constructor(
 
         @WorkerThread
         private fun isLeAudioBroadcastEnabled(): Boolean {
+            if (!enableLeAudioSharing() && !legacyLeAudioSharing()) return false
             val localBluetoothManager = localBluetoothManager.get()
             if (localBluetoothManager != null) {
                 val profileManager = localBluetoothManager.profileManager

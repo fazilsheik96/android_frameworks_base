@@ -189,6 +189,18 @@ constructor(
                 }
             }
             .launchIn(applicationScope)
+
+        facePropertyRepository.cameraInfo
+            .onEach {
+                if (it != null && isRunning()) {
+                    repository.cancel()
+                    runFaceAuth(
+                        FaceAuthUiEvent.FACE_AUTH_CAMERA_AVAILABLE_CHANGED,
+                        fallbackToDetect = true
+                    )
+                }
+            }
+            .launchIn(applicationScope)
     }
 
     private suspend fun resetLockedOutState(currentUserId: Int) {
@@ -260,6 +272,8 @@ constructor(
 
     /** Provide the status of face detection */
     override val detectionStatus = repository.detectionStatus
+    override val lockedOut: Flow<Boolean> = repository.isLockedOut
+    override val authenticated: Flow<Boolean> = repository.isAuthenticated
 
     private fun runFaceAuth(uiEvent: FaceAuthUiEvent, fallbackToDetect: Boolean) {
         if (repository.isLockedOut.value) {

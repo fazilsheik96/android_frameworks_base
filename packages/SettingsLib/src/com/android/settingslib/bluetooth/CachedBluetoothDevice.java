@@ -1110,15 +1110,17 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     @Override
     public String toString() {
-        return "CachedBluetoothDevice{"
-                + "anonymizedAddress="
-                + mDevice.getAnonymizedAddress()
-                + ", name="
-                + getName()
-                + ", groupId="
-                + mGroupId
-                + ", member=" + mMemberDevices
-                + "}";
+        StringBuilder builder = new StringBuilder("CachedBluetoothDevice{");
+        builder.append("anonymizedAddress=").append(mDevice.getAnonymizedAddress());
+        builder.append(", name=").append(getName());
+        builder.append(", groupId=").append(mGroupId);
+        builder.append(", member=").append(mMemberDevices);
+        if (isHearingAidDevice()) {
+            builder.append(", hearingAidInfo=").append(mHearingAidInfo);
+            builder.append(", subDevice=").append(mSubDevice);
+        }
+        builder.append("}");
+        return builder.toString();
     }
 
     @Override
@@ -1395,8 +1397,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 boolean isActiveAshaHearingAid = mIsActiveDeviceHearingAid;
                 boolean isActiveLeAudioHearingAid = mIsActiveDeviceLeAudio
                         && isConnectedHapClientDevice();
-                if ((isActiveAshaHearingAid || isActiveLeAudioHearingAid)
-                        && stringRes == R.string.bluetooth_active_no_battery_level) {
+                if (isActiveAshaHearingAid || isActiveLeAudioHearingAid) {
                     final Set<CachedBluetoothDevice> memberDevices = getMemberDevice();
                     final CachedBluetoothDevice subDevice = getSubDevice();
                     if (memberDevices.stream().anyMatch(m -> m.isConnected())) {
@@ -1853,42 +1854,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     boolean getUnpairing() {
         return mUnpairing;
-    }
-
-    ListenableFuture<Void> syncProfileForMemberDevice() {
-        return ThreadUtils.getBackgroundExecutor()
-            .submit(
-                () -> {
-                    List<Pair<LocalBluetoothProfile, Boolean>> toSync =
-                        Stream.of(
-                            mProfileManager.getA2dpProfile(),
-                            mProfileManager.getHeadsetProfile(),
-                            mProfileManager.getHearingAidProfile(),
-                            mProfileManager.getLeAudioProfile(),
-                            mProfileManager.getLeAudioBroadcastAssistantProfile())
-                        .filter(Objects::nonNull)
-                        .map(profile -> new Pair<>(profile, profile.isEnabled(mDevice)))
-                        .toList();
-
-                    for (var t : toSync) {
-                        LocalBluetoothProfile profile = t.first;
-                        boolean enabledForMain = t.second;
-
-                        for (var member : mMemberDevices) {
-                            BluetoothDevice btDevice = member.getDevice();
-
-                            if (enabledForMain != profile.isEnabled(btDevice)) {
-                                Log.d(TAG, "Syncing profile " + profile + " to "
-                                        + enabledForMain + " for member device "
-                                        + btDevice.getAnonymizedAddress() + " of main device "
-                                        + mDevice.getAnonymizedAddress());
-                                profile.setEnabled(btDevice, enabledForMain);
-                            }
-                        }
-                    }
-                    return null;
-                }
-            );
     }
 
     void setLeAudioEnabled(){

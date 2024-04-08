@@ -666,24 +666,18 @@
     <string name="fingerprint_authenticated" msgid="2024862866860283100">"আঙ্গুলের ছাপ যাচাই করা হয়েছে"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="8867889115112348167">"ফেস যাচাই করা হয়েছে"</string>
     <string name="face_authenticated_confirmation_required" msgid="6872632732508013755">"ফেস যাচাই করা হয়েছে, \'কনফার্ম করুন\' বোতাম প্রেস করুন"</string>
-    <!-- no translation found for fingerprint_error_hw_not_available (7755729484334001137) -->
-    <skip />
+    <string name="fingerprint_error_hw_not_available" msgid="7755729484334001137">"ফিঙ্গারপ্রিন্ট হার্ডওয়্যার উপলভ্য নেই"</string>
     <string name="fingerprint_error_no_space" msgid="7285481581905967580">"আঙ্গুলের ছাপ সেট-আপ করতে পারছি না"</string>
     <string name="fingerprint_error_timeout" msgid="7361192266621252164">"ফিঙ্গারপ্রিন্ট সেট-আপ করার সময় সীমা পেরিয়ে গেছে। আবার চেষ্টা করুন।"</string>
-    <!-- no translation found for fingerprint_error_canceled (5541771463159727513) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_user_canceled (2017941773466506863) -->
-    <skip />
+    <string name="fingerprint_error_canceled" msgid="5541771463159727513">"ফিঙ্গারপ্রিন্ট অপারেশন বাতিল করা হয়েছে"</string>
+    <string name="fingerprint_error_user_canceled" msgid="2017941773466506863">"ব্যবহারকারী ফিঙ্গারপ্রিন্ট অপারেশন বাতিল করেছেন"</string>
     <string name="fingerprint_error_lockout" msgid="6626753679019351368">"অনেকবার চেষ্টা করেছেন। পরিবর্তে স্ক্রিন লক ব্যবহার করুন।"</string>
     <string name="fingerprint_error_lockout_permanent" msgid="9060651300306264843">"অনেকবার চেষ্টা করেছেন। পরিবর্তে স্ক্রিন লক ব্যবহার করুন।"</string>
     <string name="fingerprint_error_unable_to_process" msgid="2446280592818621224">"ফিঙ্গারপ্রিন্ট প্রসেস করা যায়নি। আবার চেষ্টা করুন।"</string>
-    <!-- no translation found for fingerprint_error_no_fingerprints (3144806556204061862) -->
-    <skip />
+    <string name="fingerprint_error_no_fingerprints" msgid="3144806556204061862">"কোনও ফিঙ্গারপ্রিন্ট নথিভুক্ত করা নেই"</string>
     <string name="fingerprint_error_hw_not_present" msgid="5898827259419366359">"এই ডিভাইসে আঙ্গুলের ছাপের সেন্সর নেই"</string>
-    <!-- no translation found for fingerprint_error_security_update_required (8440349108169661934) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_bad_calibration (6770614925736183528) -->
-    <skip />
+    <string name="fingerprint_error_security_update_required" msgid="8440349108169661934">"সেন্সর অস্থায়ীভাবে বন্ধ আছে"</string>
+    <string name="fingerprint_error_bad_calibration" msgid="6770614925736183528">"ফিঙ্গারপ্রিন্ট সেন্সর ব্যবহার করা যাচ্ছে না। একজন মেরামতি মিস্ত্রির কাছে যান।"</string>
     <string name="fingerprint_error_power_pressed" msgid="5479524500542129414">"পাওয়ার বোতাম প্রেস করা হয়েছে"</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"আঙ্গুল <xliff:g id="FINGERID">%d</xliff:g>"</string>
     <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"আঙ্গুলের ছাপ ব্যবহার করুন"</string>
@@ -1992,6 +1986,9 @@
     <string name="work_mode_off_title" msgid="6367463960165135829">"অফিসের অ্যাপ আনপজ করতে চান?"</string>
     <string name="work_mode_turn_on" msgid="5316648862401307800">"আনপজ করুন"</string>
     <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"জরুরি"</string>
+    <string name="set_up_screen_lock_title" msgid="8346083801616474030">"\'স্ক্রিন লক\' সেট-আপ করুন"</string>
+    <string name="set_up_screen_lock_action_label" msgid="2687634803649209367">"\'স্ক্রিন লক\' ফিচার সেট করুন"</string>
+    <string name="private_space_set_up_screen_lock_message" msgid="1109956797005149814">"নিজের প্রাইভেট স্পেস ব্যবহার করতে এই ডিভাইসে \'স্ক্রিন লক\' সেট করুন"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"অ্যাপ পাওয়া যাচ্ছে না"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"এই মুহূর্তে <xliff:g id="APP_NAME">%1$s</xliff:g> অ্যাপ পাওয়া যাচ্ছে না।"</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> উপলভ্য নেই"</string>
@@ -2396,4 +2393,5 @@
     <string name="satellite_notification_summary" msgid="5207364139430767162">"আপনি কোনও মেবাইল বা ওয়াই-ফাই নেটওয়ার্ক ছাড়াই মেসেজ পাঠাতে ও পেতে পারবেন"</string>
     <string name="satellite_notification_open_message" msgid="4149234979688273729">"Messages খুলুন"</string>
     <string name="satellite_notification_how_it_works" msgid="3132069321977520519">"এটি কীভাবে কাজ করে"</string>
+    <string name="unarchival_session_app_label" msgid="6811856981546348205">"বাকি আছে…"</string>
 </resources>

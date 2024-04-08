@@ -39,6 +39,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PersistableBundle;
 import android.platform.test.annotations.Presubmit;
+import android.window.ActivityWindowInfo;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
@@ -81,7 +82,8 @@ public class ObjectPoolTests {
 
     @Test
     public void testRecycleActivityConfigurationChangeItem() {
-        testRecycle(() -> ActivityConfigurationChangeItem.obtain(mActivityToken, config()));
+        testRecycle(() -> ActivityConfigurationChangeItem.obtain(mActivityToken, config(),
+                new ActivityWindowInfo()));
     }
 
     @Test
@@ -96,7 +98,7 @@ public class ObjectPoolTests {
 
     @Test
     public void testRecycleDestroyActivityItem() {
-        testRecycle(() -> DestroyActivityItem.obtain(mActivityToken, true, 117));
+        testRecycle(() -> DestroyActivityItem.obtain(mActivityToken, true));
     }
 
     @Test
@@ -124,6 +126,7 @@ public class ObjectPoolTests {
         final int deviceId = 3;
         final IBinder taskFragmentToken = new Binder();
         final IBinder initialCallerInfoAccessToken = new Binder();
+        final ActivityWindowInfo activityWindowInfo = new ActivityWindowInfo();
 
         testRecycle(() -> new LaunchActivityItemBuilder(
                 activityToken, intent, activityInfo)
@@ -142,18 +145,21 @@ public class ObjectPoolTests {
                 .setTaskFragmentToken(taskFragmentToken)
                 .setDeviceId(deviceId)
                 .setInitialCallerInfoAccessToken(initialCallerInfoAccessToken)
+                .setActivityWindowInfo(activityWindowInfo)
                 .build());
     }
 
     @Test
     public void testRecycleActivityRelaunchItem() {
         testRecycle(() -> ActivityRelaunchItem.obtain(mActivityToken,
-                resultInfoList(), referrerIntentList(), 42, mergedConfig(), true));
+                resultInfoList(), referrerIntentList(), 42, mergedConfig(), true,
+                new ActivityWindowInfo()));
     }
 
     @Test
     public void testRecycleMoveToDisplayItem() {
-        testRecycle(() -> MoveToDisplayItem.obtain(mActivityToken, 4, config()));
+        testRecycle(() -> MoveToDisplayItem.obtain(mActivityToken, 4, config(),
+                new ActivityWindowInfo()));
     }
 
     @Test
@@ -163,7 +169,7 @@ public class ObjectPoolTests {
 
     @Test
     public void testRecyclePauseActivityItemItem() {
-        testRecycle(() -> PauseActivityItem.obtain(mActivityToken, true, true, 5, true, true));
+        testRecycle(() -> PauseActivityItem.obtain(mActivityToken, true, true, true, true));
     }
 
     @Test
@@ -179,7 +185,7 @@ public class ObjectPoolTests {
 
     @Test
     public void testRecycleStopItem() {
-        testRecycle(() -> StopActivityItem.obtain(mActivityToken, 4));
+        testRecycle(() -> StopActivityItem.obtain(mActivityToken));
     }
 
     @Test

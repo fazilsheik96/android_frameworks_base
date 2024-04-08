@@ -18,18 +18,26 @@ package com.android.systemui.communal.domain.interactor
 
 import android.app.smartspace.SmartspaceTarget
 import android.content.ComponentName
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.UserHandle
+import android.os.UserManager
+import android.provider.Settings
+import com.android.compose.animation.scene.ObservableTransitionState
+import com.android.compose.animation.scene.SceneKey
+import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.communal.data.repository.CommunalMediaRepository
 import com.android.systemui.communal.data.repository.CommunalPrefsRepository
 import com.android.systemui.communal.data.repository.CommunalRepository
 import com.android.systemui.communal.data.repository.CommunalWidgetRepository
 import com.android.systemui.communal.domain.model.CommunalContentModel
+import com.android.systemui.communal.domain.model.CommunalContentModel.WidgetContent
 import com.android.systemui.communal.shared.model.CommunalContentSize
 import com.android.systemui.communal.shared.model.CommunalContentSize.FULL
 import com.android.systemui.communal.shared.model.CommunalContentSize.HALF
 import com.android.systemui.communal.shared.model.CommunalContentSize.THIRD
-import com.android.systemui.communal.shared.model.CommunalSceneKey
-import com.android.systemui.communal.shared.model.ObservableCommunalTransitionState
+import com.android.systemui.communal.shared.model.CommunalScenes
+import com.android.systemui.communal.shared.model.CommunalWidgetContentModel
 import com.android.systemui.communal.widgets.CommunalAppWidgetHost
 import com.android.systemui.communal.widgets.EditWidgetsActivityStarter
 import com.android.systemui.communal.widgets.WidgetConfigurator
@@ -42,23 +50,30 @@ import com.android.systemui.log.dagger.CommunalLog
 import com.android.systemui.log.dagger.CommunalTableLog
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.log.table.logDiffsForTable
+import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.scene.domain.interactor.SceneInteractor
 import com.android.systemui.scene.shared.flag.SceneContainerFlags
-import com.android.systemui.scene.shared.model.SceneKey
+import com.android.systemui.scene.shared.model.Scenes
+import com.android.systemui.settings.UserTracker
 import com.android.systemui.smartspace.data.repository.SmartspaceRepository
 import com.android.systemui.util.kotlin.BooleanFlowOperators.and
 import com.android.systemui.util.kotlin.BooleanFlowOperators.not
 import com.android.systemui.util.kotlin.BooleanFlowOperators.or
+import com.android.systemui.util.kotlin.emitOnStart
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -72,7 +87,8 @@ import kotlinx.coroutines.flow.shareIn
 class CommunalInteractor
 @Inject
 constructor(
-    @Application applicationScope: CoroutineScope,
+    @Application val applicationScope: CoroutineScope,
+    broadcastDispatcher: BroadcastDispatcher,
     private val communalRepository: CommunalRepository,
     private val widgetRepository: CommunalWidgetRepository,
     private val communalPrefsRepository: CommunalPrefsRepository,
@@ -82,6 +98,9 @@ constructor(
     communalSettingsInteractor: CommunalSettingsInteractor,
     private val appWidgetHost: CommunalAppWidgetHost,
     private val editWidgetsActivityStarter: EditWidgetsActivityStarter,
+    private val userTracker: UserTracker,
+    private val activityStarter: ActivityStarter,
+    private val userManager: UserManager,
     sceneInteractor: SceneInteractor,
     sceneContainerFlags: SceneContainerFlags,
     @CommunalLog logBuffer: LogBuffer,
@@ -125,30 +144,42 @@ constructor(
     /**
      * Target scene as requested by the underlying [SceneTransitionLayout] or through
      * [onSceneChanged].
+     *
+     * If [isCommunalAvailable] is false, will return [CommunalScenes.Blank]
      */
-    val desiredScene: StateFlow<CommunalSceneKey> = communalRepository.desiredScene
+    val desiredScene: Flow<SceneKey> =
+        communalRepository.desiredScene.combine(isCommunalAvailable) { scene, available ->
+            if (available) scene else CommunalScenes.Blank
+        }
 
     /** Transition state of the hub mode. */
-    val transitionState: StateFlow<ObservableCommunalTransitionState> =
-        communalRepository.transitionState
+    val transitionState: StateFlow<ObservableTransitionState> = communalRepository.transitionState
+
+    val _userActivity: MutableSharedFlow<Unit> =
+        MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val userActivity: Flow<Unit> = _userActivity.asSharedFlow()
+
+    fun signalUserInteraction() {
+        _userActivity.tryEmit(Unit)
+    }
 
     /**
      * Updates the transition state of the hub [SceneTransitionLayout].
      *
      * Note that you must call is with `null` when the UI is done or risk a memory leak.
      */
-    fun setTransitionState(transitionState: Flow<ObservableCommunalTransitionState>?) {
+    fun setTransitionState(transitionState: Flow<ObservableTransitionState>?) {
         communalRepository.setTransitionState(transitionState)
     }
 
     /** Returns a flow that tracks the progress of transitions to the given scene from 0-1. */
-    fun transitionProgressToScene(targetScene: CommunalSceneKey) =
+    fun transitionProgressToScene(targetScene: SceneKey) =
         transitionState
             .flatMapLatest { state ->
                 when (state) {
-                    is ObservableCommunalTransitionState.Idle ->
+                    is ObservableTransitionState.Idle ->
                         flowOf(CommunalTransitionProgress.Idle(state.scene))
-                    is ObservableCommunalTransitionState.Transition ->
+                    is ObservableTransitionState.Transition ->
                         if (state.toScene == targetScene) {
                             state.progress.map {
                                 CommunalTransitionProgress.Transition(
@@ -166,7 +197,7 @@ constructor(
 
     /**
      * Flow that emits a boolean if the communal UI is the target scene, ie. the [desiredScene] is
-     * the [CommunalSceneKey.Communal].
+     * the [CommunalScenes.Communal].
      *
      * This will be true as soon as the desired scene is set programmatically or at whatever point
      * during a fling that SceneTransitionLayout determines that the end state will be the communal
@@ -181,9 +212,9 @@ constructor(
         flow { emit(sceneContainerFlags.isEnabled()) }
             .flatMapLatest { sceneContainerEnabled ->
                 if (sceneContainerEnabled) {
-                    sceneInteractor.currentScene.map { it == SceneKey.Communal }
+                    sceneInteractor.currentScene.map { it == Scenes.Communal }
                 } else {
-                    desiredScene.map { it == CommunalSceneKey.Communal }
+                    desiredScene.map { it == CommunalScenes.Communal }
                 }
             }
             .distinctUntilChanged()
@@ -210,7 +241,7 @@ constructor(
      */
     val isIdleOnCommunal: Flow<Boolean> =
         communalRepository.transitionState.map {
-            it is ObservableCommunalTransitionState.Idle && it.scene == CommunalSceneKey.Communal
+            it is ObservableTransitionState.Idle && it.scene == CommunalScenes.Communal
         }
 
     /**
@@ -220,11 +251,11 @@ constructor(
      */
     val isCommunalVisible: Flow<Boolean> =
         communalRepository.transitionState.map {
-            !(it is ObservableCommunalTransitionState.Idle && it.scene == CommunalSceneKey.Blank)
+            !(it is ObservableTransitionState.Idle && it.scene == CommunalScenes.Blank)
         }
 
     /** Callback received whenever the [SceneTransitionLayout] finishes a scene transition. */
-    fun onSceneChanged(newScene: CommunalSceneKey) {
+    fun onSceneChanged(newScene: SceneKey) {
         communalRepository.setDesiredScene(newScene)
     }
 
@@ -235,6 +266,18 @@ constructor(
     /** Show the widget editor Activity. */
     fun showWidgetEditor(preselectedKey: String? = null) {
         editWidgetsActivityStarter.startActivity(preselectedKey)
+    }
+
+    /**
+     * Navigates to communal widget setting after user has unlocked the device. Currently, this
+     * setting resides within the Hub Mode settings screen.
+     */
+    fun navigateToCommunalWidgetSettings() {
+        activityStarter.postStartActivityDismissingKeyguard(
+            Intent(Settings.ACTION_COMMUNAL_SETTING)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            /* delay= */ 0,
+        )
     }
 
     /** Dismiss the CTA tile from the hub in view mode. */
@@ -262,15 +305,61 @@ constructor(
     fun updateWidgetOrder(widgetIdToPriorityMap: Map<Int, Int>) =
         widgetRepository.updateWidgetOrder(widgetIdToPriorityMap)
 
+    /** Request to unpause work profile that is currently in quiet mode. */
+    fun unpauseWorkProfile() {
+        userTracker.userProfiles
+            .find { it.isManagedProfile }
+            ?.userHandle
+            ?.let { userHandle ->
+                userManager.requestQuietModeEnabled(/* enableQuietMode */ false, userHandle)
+            }
+    }
+
+    /** Returns true if work profile is in quiet mode (disabled) for user handle. */
+    private fun isQuietModeEnabled(userHandle: UserHandle): Boolean =
+        userManager.isManagedProfile(userHandle.identifier) &&
+            userManager.isQuietModeEnabled(userHandle)
+
+    /** Emits whenever a work profile pause or unpause broadcast is received. */
+    private val updateOnWorkProfileBroadcastReceived: Flow<Unit> =
+        broadcastDispatcher
+            .broadcastFlow(
+                filter =
+                    IntentFilter().apply {
+                        addAction(Intent.ACTION_MANAGED_PROFILE_AVAILABLE)
+                        addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE)
+                    },
+            )
+            .emitOnStart()
+
+    /** All widgets present in db. */
+    val communalWidgets: Flow<List<CommunalWidgetContentModel>> =
+        isCommunalAvailable.flatMapLatest { available ->
+            if (!available) emptyFlow() else widgetRepository.communalWidgets
+        }
+
     /** A list of widget content to be displayed in the communal hub. */
-    val widgetContent: Flow<List<CommunalContentModel.Widget>> =
-        widgetRepository.communalWidgets.map { widgets ->
-            widgets.map Widget@{ widget ->
-                return@Widget CommunalContentModel.Widget(
-                    appWidgetId = widget.appWidgetId,
-                    providerInfo = widget.providerInfo,
-                    appWidgetHost = appWidgetHost,
-                )
+    val widgetContent: Flow<List<WidgetContent>> =
+        combine(
+            widgetRepository.communalWidgets.map { filterWidgetsByExistingUsers(it) },
+            communalSettingsInteractor.communalWidgetCategories,
+            updateOnWorkProfileBroadcastReceived,
+        ) { widgets, allowedCategories, _ ->
+            widgets.map { widget ->
+                if (widget.providerInfo.widgetCategory and allowedCategories != 0) {
+                    // At least one category this widget specified is allowed, so show it
+                    WidgetContent.Widget(
+                        appWidgetId = widget.appWidgetId,
+                        providerInfo = widget.providerInfo,
+                        appWidgetHost = appWidgetHost,
+                        inQuietMode = isQuietModeEnabled(widget.providerInfo.profile)
+                    )
+                } else {
+                    WidgetContent.DisabledWidget(
+                        appWidgetId = widget.appWidgetId,
+                        providerInfo = widget.providerInfo,
+                    )
+                }
             }
         }
 
@@ -345,6 +434,19 @@ constructor(
             return@combine ongoingContent
         }
 
+    /**
+     * Filter and retain widgets associated with an existing user, safeguarding against displaying
+     * stale data following user deletion.
+     */
+    private fun filterWidgetsByExistingUsers(
+        list: List<CommunalWidgetContentModel>,
+    ): List<CommunalWidgetContentModel> {
+        val currentUserIds = userTracker.userProfiles.map { it.id }.toSet()
+        return list.filter { widget ->
+            currentUserIds.contains(widget.providerInfo.profile?.identifier)
+        }
+    }
+
     companion object {
         /**
          * The user activity timeout which should be used when the communal hub is opened. A value
@@ -382,7 +484,7 @@ constructor(
 /** Simplified transition progress data class for tracking a single transition between scenes. */
 sealed class CommunalTransitionProgress {
     /** No transition/animation is currently running. */
-    data class Idle(val scene: CommunalSceneKey) : CommunalTransitionProgress()
+    data class Idle(val scene: SceneKey) : CommunalTransitionProgress()
 
     /** There is a transition animating to the expected scene. */
     data class Transition(

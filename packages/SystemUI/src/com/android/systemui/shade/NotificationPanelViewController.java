@@ -24,8 +24,6 @@ import static com.android.app.animation.Interpolators.EMPHASIZED_ACCELERATE;
 import static com.android.app.animation.Interpolators.EMPHASIZED_DECELERATE;
 import static com.android.keyguard.KeyguardClockSwitch.LARGE;
 import static com.android.keyguard.KeyguardClockSwitch.SMALL;
-import static com.android.systemui.Flags.keyguardBottomAreaRefactor;
-import static com.android.systemui.Flags.migrateClocksToBlueprint;
 import static com.android.systemui.Flags.predictiveBackAnimateShade;
 import static com.android.systemui.Flags.smartspaceRelocateToBottom;
 import static com.android.systemui.classifier.Classifier.BOUNCER_UNLOCK;
@@ -71,6 +69,8 @@ import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.MathUtils;
 import android.view.HapticFeedbackConstants;
+import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -113,8 +113,6 @@ import com.android.keyguard.dagger.KeyguardUserSwitcherComponent;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.Gefingerpoken;
-import com.android.systemui.animation.ActivityTransitionAnimator;
-import com.android.systemui.animation.TransitionAnimator;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.bouncer.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.bouncer.shared.constants.KeyguardBouncerConstants;
@@ -131,8 +129,10 @@ import com.android.systemui.dump.DumpsysTableLogger;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
 import com.android.systemui.fragments.FragmentService;
+import com.android.systemui.keyguard.KeyguardBottomAreaRefactor;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.KeyguardViewConfigurator;
+import com.android.systemui.keyguard.MigrateClocksToBlueprint;
 import com.android.systemui.keyguard.domain.interactor.KeyguardBottomAreaInteractor;
 import com.android.systemui.keyguard.domain.interactor.KeyguardClockInteractor;
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor;
@@ -195,6 +195,7 @@ import com.android.systemui.statusbar.notification.footer.shared.FooterViewRefac
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.ExpandableView;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
+import com.android.systemui.statusbar.notification.shared.NotificationsHeadsUpRefactor;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
@@ -221,7 +222,6 @@ import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.phone.StatusBarTouchableRegionManager;
 import com.android.systemui.statusbar.phone.TapAgainViewController;
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
-import com.android.systemui.statusbar.phone.fragment.CollapsedStatusBarFragment;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.KeyguardQsUserSwitchController;
@@ -251,6 +251,7 @@ import javax.inject.Inject;
 import javax.inject.Provider;
 
 import kotlinx.coroutines.CoroutineDispatcher;
+import kotlinx.coroutines.flow.Flow;
 
 @SysUISingleton
 public final class NotificationPanelViewController implements ShadeSurface, Dumpable {
@@ -261,10 +262,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     private static final boolean DEBUG_DRAWABLE = false;
     /** The parallax amount of the quick settings translation when dragging down the panel. */
     public static final float QS_PARALLAX_AMOUNT = 0.175f;
-    private static final long ANIMATION_DELAY_ICON_FADE_IN =
-            ActivityTransitionAnimator.TIMINGS.getTotalDuration()
-                    - CollapsedStatusBarFragment.FADE_IN_DURATION
-                    - CollapsedStatusBarFragment.FADE_IN_DELAY - 48;
     private static final int NO_FIXED_DURATION = -1;
     private static final long SHADE_OPEN_SPRING_OUT_DURATION = 350L;
     private static final long SHADE_OPEN_SPRING_BACK_DURATION = 400L;
@@ -360,9 +357,10 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     private final AccessibilityDelegate mAccessibilityDelegate = new ShadeAccessibilityDelegate();
     private final NotificationGutsManager mGutsManager;
     private final AlternateBouncerInteractor mAlternateBouncerInteractor;
-    private final QuickSettingsController mQsController;
+    private final QuickSettingsControllerImpl mQsController;
     private final NaturalScrollingSettingObserver mNaturalScrollingSettingObserver;
     private final TouchHandler mTouchHandler = new TouchHandler();
+    private final KeyHandler mKeyHandler = new KeyHandler();
 
     private long mDownTime;
     private boolean mTouchSlopExceededBeforeDown;
@@ -469,7 +467,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
      */
     private float mLinearDarkAmount;
     private boolean mPulsing;
-    private boolean mHideIconsDuringLaunchAnimation = true;
     private int mStackScrollerMeasuringPass;
     /** Non-null if a heads-up notification's position is being tracked. */
     @Nullable
@@ -740,7 +737,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
             TapAgainViewController tapAgainViewController,
             NavigationModeController navigationModeController,
             NavigationBarController navigationBarController,
-            QuickSettingsController quickSettingsController,
+            QuickSettingsControllerImpl quickSettingsController,
             FragmentService fragmentService,
             IStatusBarService statusBarService,
             ContentResolver contentResolver,
@@ -830,6 +827,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
         mView.addOnLayoutChangeListener(new ShadeLayoutChangeListener());
         mView.setOnTouchListener(getTouchHandler());
+        mView.setOnKeyListener(getKeyHandler());
         mView.setOnConfigurationChangedListener(config -> loadDimens());
 
         mResources = mView.getResources();
@@ -1029,7 +1027,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 instantCollapse();
             } else {
                 mView.animate().cancel();
-                if (!migrateClocksToBlueprint()) {
+                if (!MigrateClocksToBlueprint.isEnabled()) {
                     mView.animate()
                             .alpha(0f)
                             .setStartDelay(0)
@@ -1086,7 +1084,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mQsController.init();
         mShadeHeadsUpTracker.addTrackingHeadsUpListener(
                 mNotificationStackScrollLayoutController::setTrackingHeadsUp);
-        if (!keyguardBottomAreaRefactor()) {
+        if (!KeyguardBottomAreaRefactor.isEnabled()) {
             setKeyguardBottomArea(mView.findViewById(R.id.keyguard_bottom_area));
         }
 
@@ -1165,7 +1163,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         // Occluded->Lockscreen
         collectFlow(mView, mKeyguardTransitionInteractor.getOccludedToLockscreenTransition(),
                 mOccludedToLockscreenTransition, mMainDispatcher);
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             collectFlow(mView, mOccludedToLockscreenTransitionViewModel.getLockscreenAlpha(),
                     setTransitionAlpha(mNotificationStackScrollLayoutController), mMainDispatcher);
             collectFlow(mView,
@@ -1176,7 +1174,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         // Lockscreen->Dreaming
         collectFlow(mView, mKeyguardTransitionInteractor.getLockscreenToDreamingTransition(),
                 mLockscreenToDreamingTransition, mMainDispatcher);
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             collectFlow(mView, mLockscreenToDreamingTransitionViewModel.getLockscreenAlpha(),
                     setDreamLockscreenTransitionAlpha(mNotificationStackScrollLayoutController),
                     mMainDispatcher);
@@ -1188,7 +1186,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         // Gone->Dreaming
         collectFlow(mView, mKeyguardTransitionInteractor.getGoneToDreamingTransition(),
                 mGoneToDreamingTransition, mMainDispatcher);
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             collectFlow(mView, mGoneToDreamingTransitionViewModel.getLockscreenAlpha(),
                     setTransitionAlpha(mNotificationStackScrollLayoutController), mMainDispatcher);
         }
@@ -1199,7 +1197,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         // Lockscreen->Occluded
         collectFlow(mView, mKeyguardTransitionInteractor.getLockscreenToOccludedTransition(),
                 mLockscreenToOccludedTransition, mMainDispatcher);
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             collectFlow(mView, mLockscreenToOccludedTransitionViewModel.getLockscreenAlpha(),
                     setTransitionAlpha(mNotificationStackScrollLayoutController), mMainDispatcher);
             collectFlow(mView, mLockscreenToOccludedTransitionViewModel.getLockscreenTranslationY(),
@@ -1207,9 +1205,15 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         }
 
         // Primary bouncer->Gone (ensures lockscreen content is not visible on successful auth)
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             collectFlow(mView, mPrimaryBouncerToGoneTransitionViewModel.getLockscreenAlpha(),
-                    setTransitionAlpha(mNotificationStackScrollLayoutController), mMainDispatcher);
+                    setTransitionAlpha(mNotificationStackScrollLayoutController,
+                            /* excludeNotifications=*/ true), mMainDispatcher);
+            collectFlow(mView, mPrimaryBouncerToGoneTransitionViewModel.getNotificationAlpha(),
+                    (Float alpha) -> {
+                        mNotificationStackScrollLayoutController.setMaxAlphaForKeyguard(alpha,
+                                "mPrimaryBouncerToGoneTransitionViewModel.getNotificationAlpha()");
+                    }, mMainDispatcher);
         }
     }
 
@@ -1285,7 +1289,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
             mKeyguardStatusViewController.onDestroy();
         }
 
-        if (migrateClocksToBlueprint()) {
+        if (MigrateClocksToBlueprint.isEnabled()) {
             // Need a shared controller until mKeyguardStatusViewController can be removed from
             // here, due to important state being set in that controller. Rebind in order to pick
             // up config changes
@@ -1299,10 +1303,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                             mView.getContext().getDisplay());
             mKeyguardStatusViewController = statusViewComponent.getKeyguardStatusViewController();
             mKeyguardStatusViewController.init();
-        }
 
-        mKeyguardStatusViewController.setSplitShadeEnabled(mSplitShadeEnabled);
-        mKeyguardStatusViewController.getView().addOnLayoutChangeListener(
+            mKeyguardStatusViewController.setSplitShadeEnabled(mSplitShadeEnabled);
+            mKeyguardStatusViewController.getView().addOnLayoutChangeListener(
                 (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
                     int oldHeight = oldBottom - oldTop;
                     if (v.getHeight() != oldHeight) {
@@ -1310,7 +1313,8 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                     }
                 });
 
-        updateClockAppearance();
+            updateClockAppearance();
+        }
     }
 
     @Override
@@ -1337,11 +1341,13 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
     private void onSplitShadeEnabledChanged() {
         mShadeLog.logSplitShadeChanged(mSplitShadeEnabled);
-        mKeyguardStatusViewController.setSplitShadeEnabled(mSplitShadeEnabled);
+        if (!MigrateClocksToBlueprint.isEnabled()) {
+            mKeyguardStatusViewController.setSplitShadeEnabled(mSplitShadeEnabled);
+        }
         // Reset any left over overscroll state. It is a rare corner case but can happen.
         mQsController.setOverScrollAmount(0);
         mScrimController.setNotificationsOverScrollAmount(0);
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             mNotificationStackScrollLayoutController.setOverExpansion(0);
             mNotificationStackScrollLayoutController.setOverScrollAmount(0);
         }
@@ -1362,7 +1368,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         }
         updateClockAppearance();
         mQsController.updateQsState();
-        if (!migrateClocksToBlueprint() && !FooterViewRefactor.isEnabled()) {
+        if (!MigrateClocksToBlueprint.isEnabled() && !FooterViewRefactor.isEnabled()) {
             mNotificationStackScrollLayoutController.updateFooter();
         }
     }
@@ -1394,7 +1400,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     void reInflateViews() {
         debugLog("reInflateViews");
         // Re-inflate the status view group.
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             KeyguardStatusView keyguardStatusView =
                     mNotificationContainerParent.findViewById(R.id.keyguard_status_view);
             int statusIndex = mNotificationContainerParent.indexOfChild(keyguardStatusView);
@@ -1433,7 +1439,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
         updateViewControllers(userAvatarView, keyguardUserSwitcherView);
 
-        if (!keyguardBottomAreaRefactor()) {
+        if (!KeyguardBottomAreaRefactor.isEnabled()) {
             // Update keyguard bottom area
             int index = mView.indexOfChild(mKeyguardBottomArea);
             mView.removeView(mKeyguardBottomArea);
@@ -1452,11 +1458,13 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mStatusBarStateListener.onDozeAmountChanged(mStatusBarStateController.getDozeAmount(),
                 mStatusBarStateController.getInterpolatedDozeAmount());
 
-        mKeyguardStatusViewController.setKeyguardStatusViewVisibility(
-                mBarState,
-                false,
-                false,
-                mBarState);
+        if (!MigrateClocksToBlueprint.isEnabled()) {
+            mKeyguardStatusViewController.setKeyguardStatusViewVisibility(
+                    mBarState,
+                    false,
+                    false,
+                    mBarState);
+        }
         if (mKeyguardQsUserSwitchController != null) {
             mKeyguardQsUserSwitchController.setKeyguardQsUserSwitchVisibility(
                     mBarState,
@@ -1472,7 +1480,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                     mBarState);
         }
 
-        if (!keyguardBottomAreaRefactor()) {
+        if (!KeyguardBottomAreaRefactor.isEnabled()) {
             setKeyguardBottomAreaVisibility(mBarState, false);
         }
 
@@ -1481,14 +1489,14 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     }
 
     private void attachSplitShadeMediaPlayerContainer(FrameLayout container) {
-        if (migrateClocksToBlueprint()) {
+        if (MigrateClocksToBlueprint.isEnabled()) {
             return;
         }
         mKeyguardMediaController.attachSplitShadeContainer(container);
     }
 
     private void initBottomArea() {
-        if (!keyguardBottomAreaRefactor()) {
+        if (!KeyguardBottomAreaRefactor.isEnabled()) {
             mKeyguardBottomArea.init(
                 mKeyguardBottomAreaViewModel,
                 mFalsingManager,
@@ -1518,7 +1526,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     }
 
     private void updateMaxDisplayedNotifications(boolean recompute) {
-        if (migrateClocksToBlueprint()) {
+        if (MigrateClocksToBlueprint.isEnabled()) {
             return;
         }
 
@@ -1549,12 +1557,13 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mKeyguardBottomArea = keyguardBottomArea;
     }
 
-    @Override
+    /** Sets a listener to be notified when the shade starts opening or finishes closing. */
     public void setOpenCloseListener(OpenCloseListener openCloseListener) {
+        SceneContainerFlag.assertInLegacyMode();
         mOpenCloseListener = openCloseListener;
     }
 
-    @Override
+    /** Sets a listener to be notified when touch tracking begins. */
     public void setTrackingStartedListener(TrackingStartedListener trackingStartedListener) {
         mTrackingStartedListener = trackingStartedListener;
     }
@@ -1634,7 +1643,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         int userSwitcherPreferredY = mStatusBarHeaderHeightKeyguard;
         boolean bypassEnabled = mKeyguardBypassController.getBypassEnabled();
         boolean shouldAnimateClockChange = mScreenOffAnimationController.shouldAnimateClockChange();
-        if (migrateClocksToBlueprint()) {
+        if (MigrateClocksToBlueprint.isEnabled()) {
             mKeyguardClockInteractor.setClockSize(computeDesiredClockSize());
         } else {
             mKeyguardStatusViewController.displayClock(computeDesiredClockSize(),
@@ -1675,21 +1684,19 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 mKeyguardStatusViewController.getClockBottom(mStatusBarHeaderHeightKeyguard),
                 mKeyguardStatusViewController.isClockTopAligned());
         mClockPositionAlgorithm.run(mClockPositionResult);
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             mKeyguardStatusViewController.setLockscreenClockY(
                     mClockPositionAlgorithm.getExpandedPreferredClockY());
         }
-        if (keyguardBottomAreaRefactor()) {
-            mKeyguardInteractor.setClockPosition(
-                mClockPositionResult.clockX, mClockPositionResult.clockY);
-        } else {
+        if (!(MigrateClocksToBlueprint.isEnabled() || KeyguardBottomAreaRefactor.isEnabled())) {
             mKeyguardBottomAreaInteractor.setClockPosition(
                 mClockPositionResult.clockX, mClockPositionResult.clockY);
         }
+
         boolean animate = mNotificationStackScrollLayoutController.isAddOrRemoveAnimationPending();
         boolean animateClock = (animate || mAnimateNextPositionUpdate) && shouldAnimateClockChange;
 
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             mKeyguardStatusViewController.updatePosition(
                     mClockPositionResult.clockX, mClockPositionResult.clockY,
                     mClockPositionResult.clockScale, animateClock);
@@ -1746,7 +1753,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         // To prevent the weather clock from overlapping with the notification shelf on AOD, we use
         // the small clock here
         // With migrateClocksToBlueprint, weather clock will have behaviors similar to other clocks
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             if (mKeyguardStatusViewController.isLargeClockBlockingNotificationShelf()
                     && hasVisibleNotifications() && isOnAod()) {
                 return SMALL;
@@ -1764,12 +1771,11 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
     private void updateKeyguardStatusViewAlignment(boolean animate) {
         boolean shouldBeCentered = shouldKeyguardStatusViewBeCentered();
-        ConstraintLayout layout;
-        if (migrateClocksToBlueprint()) {
-            layout = mKeyguardViewConfigurator.getKeyguardRootView();
-        } else {
-            layout = mNotificationContainerParent;
+        if (MigrateClocksToBlueprint.isEnabled()) {
+            mKeyguardInteractor.setClockShouldBeCentered(shouldBeCentered);
+            return;
         }
+        ConstraintLayout layout = mNotificationContainerParent;
         mKeyguardStatusViewController.updateAlignment(
                 layout, mSplitShadeEnabled, shouldBeCentered, animate);
         mKeyguardUnfoldTransition.ifPresent(t -> t.setStatusViewCentered(shouldBeCentered));
@@ -1948,7 +1954,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         }
         float alpha = mClockPositionResult.clockAlpha * mKeyguardOnlyContentAlpha;
         mKeyguardStatusViewController.setAlpha(alpha);
-        if (migrateClocksToBlueprint()) {
+        if (MigrateClocksToBlueprint.isEnabled()) {
             // TODO (b/296373478) This is for split shade media movement.
         } else {
             mKeyguardStatusViewController
@@ -1993,7 +1999,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mNotificationStackScrollLayoutController.resetScrollPosition();
     }
 
-    @Override
     public void collapse(boolean animate, boolean delayed, float speedUpFactor) {
         boolean waiting = false;
         if (animate && !isFullyCollapsed()) {
@@ -2011,7 +2016,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         }
     }
 
-    @Override
     public void collapse(boolean delayed, float speedUpFactor) {
         if (!canBeCollapsed()) {
             return;
@@ -2059,7 +2063,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mView.animate().cancel();
     }
 
-    @Override
     public void expandToQs() {
         if (mQsController.isExpansionEnabled()) {
             mQsController.setExpandImmediate(true);
@@ -2508,7 +2511,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         }
 
         if (!mKeyguardBypassController.getBypassEnabled()) {
-            if (migrateClocksToBlueprint() && !mSplitShadeEnabled) {
+            if (MigrateClocksToBlueprint.isEnabled() && !mSplitShadeEnabled) {
                 return (int) mKeyguardInteractor.getNotificationContainerBounds()
                         .getValue().getTop();
             }
@@ -2541,7 +2544,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     void requestScrollerTopPaddingUpdate(boolean animate) {
         float padding = mQsController.calculateNotificationsTopPadding(mIsExpandingOrCollapsing,
                 getKeyguardNotificationStaticPadding(), mExpandedFraction);
-        if (migrateClocksToBlueprint()) {
+        if (MigrateClocksToBlueprint.isEnabled()) {
             mSharedNotificationContainerInteractor.setTopPosition(padding);
         } else {
             mNotificationStackScrollLayoutController.updateTopPadding(padding, animate);
@@ -2618,7 +2621,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         return maxHeight;
     }
 
-    @Override
     public boolean isExpandingOrCollapsing() {
         float lockscreenExpansionProgress = mQsController.getLockscreenShadeDragProgress();
         return mIsExpandingOrCollapsing
@@ -2723,7 +2725,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
             return;
         }
 
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             float alpha = 1f;
             if (mClosingWithAlphaFadeOut && !mExpandingFromHeadsUp
                 && !mHeadsUpManager.hasPinnedHeadsUp()) {
@@ -2734,7 +2736,8 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 && !mQsController.getFullyExpanded()) {
                 alpha *= mClockPositionResult.clockAlpha;
             }
-            mNotificationStackScrollLayoutController.setMaxAlphaForExpansion(alpha);
+            mNotificationStackScrollLayoutController.setMaxAlphaForKeyguard(alpha,
+                    "NPVC.updateNotificationTranslucency()");
         }
     }
 
@@ -2758,7 +2761,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     }
 
     private void updateKeyguardBottomAreaAlpha() {
-        if (migrateClocksToBlueprint()) {
+        if (MigrateClocksToBlueprint.isEnabled()) {
             return;
         }
         if (mIsOcclusionTransitionRunning) {
@@ -2776,7 +2779,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
         float alpha = Math.min(expansionAlpha, 1 - mQsController.computeExpansionFraction());
         alpha *= mBottomAreaShadeAlpha;
-        if (keyguardBottomAreaRefactor()) {
+        if (KeyguardBottomAreaRefactor.isEnabled()) {
             mKeyguardInteractor.setAlpha(alpha);
         } else {
             mKeyguardBottomAreaInteractor.setAlpha(alpha);
@@ -2785,7 +2788,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     }
 
     private void onExpandingFinished() {
-        mNotificationStackScrollLayoutController.onExpansionStopped();
+        if (!SceneContainerFlag.isEnabled()) {
+            mNotificationStackScrollLayoutController.onExpansionStopped();
+        }
         mHeadsUpManager.onExpandingFinished();
         mConversationNotificationManager.onNotificationPanelExpandStateChanged(isFullyCollapsed());
         mIsExpandingOrCollapsing = false;
@@ -2826,7 +2831,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mQsController.setListening(listening);
     }
 
-    @Override
     public void expand(boolean animate) {
         if (isFullyCollapsed() || isCollapsing()) {
             mInstantExpanding = true;
@@ -2987,7 +2991,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     }
 
     private void updateDozingVisibilities(boolean animate) {
-        if (keyguardBottomAreaRefactor()) {
+        if (KeyguardBottomAreaRefactor.isEnabled()) {
             mKeyguardInteractor.setAnimateDozingTransitions(animate);
         } else {
             mKeyguardBottomAreaInteractor.setAnimateDozingTransitions(animate);
@@ -2999,7 +3003,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
     @Override
     public void onScreenTurningOn() {
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             mKeyguardStatusViewController.dozeTimeTick();
         }
     }
@@ -3080,7 +3084,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     }
 
     private void onClosingFinished() {
-        mOpenCloseListener.onClosingFinished();
+        if (mOpenCloseListener != null) {
+            mOpenCloseListener.onClosingFinished();
+        }
         setClosingWithAlphaFadeout(false);
         mMediaHierarchyManager.closeGuts();
     }
@@ -3099,7 +3105,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
             // The expandedHeight is always the full panel Height when bypassing
             expandedHeight = getMaxPanelHeight();
         }
-        mNotificationStackScrollLayoutController.setExpandedHeight(expandedHeight);
+        if (!SceneContainerFlag.isEnabled()) {
+            mNotificationStackScrollLayoutController.setExpandedHeight(expandedHeight);
+        }
         updateKeyguardBottomAreaAlpha();
         updateStatusBarIcons();
     }
@@ -3163,10 +3171,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         return mUnlockedScreenOffAnimationController.isAnimationPlaying();
     }
 
-    @Override
     public boolean shouldHideStatusBarIconsWhenExpanded() {
         if (isLaunchingActivity()) {
-            return mHideIconsDuringLaunchAnimation;
+            return false;
         }
         if (mHeadsUpAppearanceController != null
                 && mHeadsUpAppearanceController.shouldBeVisible()) {
@@ -3195,7 +3202,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mDozing = dozing;
         // TODO (b/) make listeners for this
         mNotificationStackScrollLayoutController.setDozing(mDozing, animate);
-        if (keyguardBottomAreaRefactor()) {
+        if (KeyguardBottomAreaRefactor.isEnabled()) {
             mKeyguardInteractor.setAnimateDozingTransitions(animate);
         } else {
             mKeyguardBottomAreaInteractor.setAnimateDozingTransitions(animate);
@@ -3251,7 +3258,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
     public void dozeTimeTick() {
         mLockIconViewController.dozeTimeTick();
-        if (!migrateClocksToBlueprint()) {
+        if (!MigrateClocksToBlueprint.isEnabled()) {
             mKeyguardStatusViewController.dozeTimeTick();
         }
         if (mInterpolatedDarkAmount > 0) {
@@ -3263,19 +3270,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mKeyguardStatusViewController.setStatusAccessibilityImportance(mode);
     }
 
-    @Override
-    public void applyLaunchAnimationProgress(float linearProgress) {
-        boolean hideIcons = TransitionAnimator.getProgress(ActivityTransitionAnimator.TIMINGS,
-                linearProgress, ANIMATION_DELAY_ICON_FADE_IN, 100) == 0.0f;
-        if (hideIcons != mHideIconsDuringLaunchAnimation) {
-            mHideIconsDuringLaunchAnimation = hideIcons;
-            if (!hideIcons) {
-                mCommandQueue.recomputeDisableFlags(mDisplayId, true /* animate */);
-            }
-        }
-    }
-
-    @Override
     public void performHapticFeedback(int constant) {
         mVibratorHelper.performHapticFeedback(mView, constant);
     }
@@ -3343,6 +3337,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         /** Updates the views to the initial state for the fold to AOD animation. */
         @Override
         public void prepareFoldToAodAnimation() {
+            if (MigrateClocksToBlueprint.isEnabled()) {
+                return;
+            }
             // Force show AOD UI even if we are not locked
             showAodUi();
 
@@ -3364,6 +3361,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         @Override
         public void startFoldToAodAnimation(Runnable startAction, Runnable endAction,
                 Runnable cancelAction) {
+            if (MigrateClocksToBlueprint.isEnabled()) {
+                return;
+            }
             final ViewPropertyAnimator viewAnimator = mView.animate();
             viewAnimator.cancel();
             viewAnimator
@@ -3399,6 +3399,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         /** Cancels fold to AOD transition and resets view state. */
         @Override
         public void cancelFoldToAodAnimation() {
+            if (MigrateClocksToBlueprint.isEnabled()) {
+                return;
+            }
             cancelAnimation();
             resetAlpha();
             resetTranslation();
@@ -3477,7 +3480,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         ipw.print("mInterpolatedDarkAmount="); ipw.println(mInterpolatedDarkAmount);
         ipw.print("mLinearDarkAmount="); ipw.println(mLinearDarkAmount);
         ipw.print("mPulsing="); ipw.println(mPulsing);
-        ipw.print("mHideIconsDuringLaunchAnimation="); ipw.println(mHideIconsDuringLaunchAnimation);
         ipw.print("mStackScrollerMeasuringPass="); ipw.println(mStackScrollerMeasuringPass);
         ipw.print("mPanelAlpha="); ipw.println(mPanelAlpha);
         ipw.print("mBottomAreaShadeAlpha="); ipw.println(mBottomAreaShadeAlpha);
@@ -3584,12 +3586,10 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         ViewGroupFadeHelper.reset(mView);
     }
 
-    @Override
     public void addOnGlobalLayoutListener(ViewTreeObserver.OnGlobalLayoutListener listener) {
         mView.getViewTreeObserver().addOnGlobalLayoutListener(listener);
     }
 
-    @Override
     public void removeOnGlobalLayoutListener(ViewTreeObserver.OnGlobalLayoutListener listener) {
         mView.getViewTreeObserver().removeOnGlobalLayoutListener(listener);
     }
@@ -3602,6 +3602,11 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     @VisibleForTesting
     TouchHandler getTouchHandler() {
         return mTouchHandler;
+    }
+
+    @VisibleForTesting
+    KeyHandler getKeyHandler() {
+        return mKeyHandler;
     }
 
     @Override
@@ -4019,11 +4024,15 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     }
 
     @Override
+    public Flow<Float> getLegacyPanelExpansion() {
+        return  mShadeRepository.getLegacyShadeExpansion();
+    }
+
+    @Override
     public boolean isFullyExpanded() {
         return mExpandedHeight >= getMaxPanelTransitionDistance();
     }
 
-    @Override
     public boolean isShadeFullyExpanded() {
         if (mBarState == SHADE) {
             return isFullyExpanded();
@@ -4054,7 +4063,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         return !isFullyCollapsed() && !isTracking() && !isClosing();
     }
 
-    @Override
     public void instantCollapse() {
         abortAnimations();
         setExpandedFraction(0f);
@@ -4169,7 +4177,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         return mShadeRepository.getLegacyIsClosing().getValue();
     }
 
-    @Override
     public void collapseWithDuration(int animationDuration) {
         mFixedDuration = animationDuration;
         collapse(false /* delayed */, 1.0f /* speedUpFactor */);
@@ -4387,6 +4394,10 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
         @Override
         public void onHeadsUpPinned(NotificationEntry entry) {
+            if (NotificationsHeadsUpRefactor.isEnabled()) {
+                return;
+            }
+
             if (!isKeyguardShowing()) {
                 mNotificationStackScrollLayoutController.generateHeadsUpAnimation(entry, true);
             }
@@ -4394,6 +4405,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
         @Override
         public void onHeadsUpUnPinned(NotificationEntry entry) {
+            if (NotificationsHeadsUpRefactor.isEnabled()) {
+                return;
+            }
 
             // When we're unpinning the notification via active edge they remain heads-upped,
             // we need to make sure that an animation happens in this case, otherwise the
@@ -4466,7 +4480,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                     && statusBarState == KEYGUARD) {
                 // This means we're doing the screen off animation - position the keyguard status
                 // view where it'll be on AOD, so we can animate it in.
-                if (!migrateClocksToBlueprint()) {
+                if (!MigrateClocksToBlueprint.isEnabled()) {
                     mKeyguardStatusViewController.updatePosition(
                             mClockPositionResult.clockX,
                             mClockPositionResult.clockYFullyDozing,
@@ -4475,13 +4489,15 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 }
             }
 
-            mKeyguardStatusViewController.setKeyguardStatusViewVisibility(
-                    statusBarState,
-                    keyguardFadingAway,
-                    goingToFullShade,
-                    mBarState);
+            if (!MigrateClocksToBlueprint.isEnabled()) {
+                mKeyguardStatusViewController.setKeyguardStatusViewVisibility(
+                        statusBarState,
+                        keyguardFadingAway,
+                        goingToFullShade,
+                        mBarState);
+            }
 
-            if (!keyguardBottomAreaRefactor()) {
+            if (!KeyguardBottomAreaRefactor.isEnabled()) {
                 setKeyguardBottomAreaVisibility(statusBarState, goingToFullShade);
             }
 
@@ -4586,7 +4602,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         setDozing(true /* dozing */, false /* animate */);
         mStatusBarStateController.setUpcomingState(KEYGUARD);
 
-        if (migrateClocksToBlueprint()) {
+        if (MigrateClocksToBlueprint.isEnabled()) {
             mStatusBarStateController.setState(KEYGUARD);
         } else {
             mStatusBarStateListener.onStateChanged(KEYGUARD);
@@ -4649,7 +4665,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
             setIsFullWidth(mNotificationStackScrollLayoutController.getWidth() == mView.getWidth());
 
             // Update Clock Pivot (used by anti-burnin transformations)
-            if (!migrateClocksToBlueprint()) {
+            if (!MigrateClocksToBlueprint.isEnabled()) {
                 mKeyguardStatusViewController.updatePivot(mView.getWidth(), mView.getHeight());
             }
 
@@ -4711,7 +4727,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
             if (mSplitShadeEnabled && !isKeyguardShowing()) {
                 mQsController.setExpandImmediate(true);
             }
-            mOpenCloseListener.onOpenStarted();
+            if (mOpenCloseListener != null) {
+                mOpenCloseListener.onOpenStarted();
+            }
         }
         if (state == STATE_CLOSED) {
             mQsController.setExpandImmediate(false);
@@ -4736,11 +4754,19 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
     private Consumer<Float> setTransitionAlpha(
             NotificationStackScrollLayoutController stackScroller) {
+        return setTransitionAlpha(stackScroller, /* excludeNotifications= */ false);
+    }
+
+    private Consumer<Float> setTransitionAlpha(
+            NotificationStackScrollLayoutController stackScroller,
+            boolean excludeNotifications) {
         return (Float alpha) -> {
             mKeyguardStatusViewController.setAlpha(alpha);
-            stackScroller.setMaxAlphaForExpansion(alpha);
+            if (!excludeNotifications) {
+                stackScroller.setMaxAlphaForKeyguard(alpha, "NPVC.setTransitionAlpha()");
+            }
 
-            if (keyguardBottomAreaRefactor()) {
+            if (KeyguardBottomAreaRefactor.isEnabled()) {
                 mKeyguardInteractor.setAlpha(alpha);
             } else {
                 mKeyguardBottomAreaInteractor.setAlpha(alpha);
@@ -4759,7 +4785,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     private Consumer<Float> setTransitionY(
                 NotificationStackScrollLayoutController stackScroller) {
         return (Float translationY) -> {
-            if (!migrateClocksToBlueprint()) {
+            if (!MigrateClocksToBlueprint.isEnabled()) {
                 mKeyguardStatusViewController.setTranslationY(translationY,
                         /* excludeMedia= */false);
                 stackScroller.setTranslationY(translationY);
@@ -4801,7 +4827,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
          */
         @Override
         public boolean onInterceptTouchEvent(MotionEvent event) {
-            if (migrateClocksToBlueprint() && !mUseExternalTouch) {
+            if (MigrateClocksToBlueprint.isEnabled() && !mUseExternalTouch) {
                 return false;
             }
 
@@ -4872,7 +4898,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    if (!migrateClocksToBlueprint()) {
+                    if (!MigrateClocksToBlueprint.isEnabled()) {
                         mCentralSurfaces.userActivity();
                     }
                     mAnimatingOnDown = mHeightAnimator != null && !mIsSpringBackAnimation;
@@ -4973,7 +4999,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
          */
         @Override
         public boolean onTouchEvent(MotionEvent event) {
-            if (migrateClocksToBlueprint() && !mUseExternalTouch) {
+            if (MigrateClocksToBlueprint.isEnabled() && !mUseExternalTouch) {
                 return false;
             }
 
@@ -5239,6 +5265,21 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                     break;
             }
             return !mGestureWaitForTouchSlop || isTracking();
+        }
+    }
+
+    /** Handles KeyEvents for the Shade. */
+    public final class KeyHandler implements View.OnKeyListener {
+        @Override
+        public boolean onKey(View v, int keyCode, KeyEvent event) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                final InputDevice d = event.getDevice();
+                // Trigger user activity if the event comes from a full external keyboard
+                if (d != null && d.isFullKeyboard() && d.isExternal()) {
+                    mCentralSurfaces.userActivity();
+                }
+            }
+            return false;
         }
     }
 

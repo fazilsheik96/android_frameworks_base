@@ -19,10 +19,10 @@ package com.android.server.wm.flicker
 import android.app.Instrumentation
 import android.content.Intent
 import android.platform.test.annotations.Presubmit
-import android.tools.common.traces.component.ComponentNameMatcher
-import android.tools.device.flicker.junit.FlickerBuilderProvider
-import android.tools.device.flicker.legacy.FlickerBuilder
-import android.tools.device.flicker.legacy.LegacyFlickerTest
+import android.tools.flicker.junit.FlickerBuilderProvider
+import android.tools.flicker.legacy.FlickerBuilder
+import android.tools.flicker.legacy.LegacyFlickerTest
+import android.tools.traces.component.ComponentNameMatcher
 import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.launcher3.tapl.LauncherInstrumentation
@@ -40,9 +40,10 @@ abstract class BaseTest
 constructor(
     protected val flicker: LegacyFlickerTest,
     protected val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation(),
+    protected val tapl: LauncherInstrumentation = LauncherInstrumentation()
 ) {
-    protected val tapl: LauncherInstrumentation by lazy {
-        LauncherInstrumentation().also { it.expectedRotationCheckEnabled = true }
+    init {
+        tapl.setExpectedRotationCheckEnabled(true)
     }
 
     private val logTag = this::class.java.simpleName

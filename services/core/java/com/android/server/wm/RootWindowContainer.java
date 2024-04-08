@@ -84,7 +84,6 @@ import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE
 import static com.android.server.wm.WindowManagerService.WINDOWS_FREEZING_SCREENS_NONE;
 import static com.android.server.wm.WindowSurfacePlacer.SET_UPDATE_ROTATION;
 import static com.android.server.wm.WindowSurfacePlacer.SET_WALLPAPER_ACTION_PENDING;
-import static com.android.systemui.shared.Flags.enableHomeDelay;
 
 import static java.lang.Integer.MAX_VALUE;
 
@@ -112,7 +111,6 @@ import android.hardware.power.Mode;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Debug;
-import android.os.DeviceIntegrationUtils;
 import android.os.FactoryTest;
 import android.os.Handler;
 import android.os.IBinder;
@@ -1461,8 +1459,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             return false;
         }
 
-        if (enableHomeDelay() && !mService.mAmInternal.isThemeOverlayReady(userId)) {
-            Slog.d(TAG, "ThemeHomeDelay: Home launch was deferred.");
+        if (mService.mAmInternal.shouldDelayHomeLaunch(userId)) {
+            Slog.d(TAG, "ThemeHomeDelay: Home launch was deferred with user " + userId);
             return false;
         }
 
@@ -1751,30 +1749,21 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
      *
      * @param starting                  The currently starting activity or {@code null} if there is
      *                                  none.
-     * @param displayId                 The id of the display where operation is executed.
+     * @param displayContent            The display where the operation is executed.
      * @param deferResume               Whether to defer resume while updating config.
-     * @return 'true' if starting activity was kept or wasn't provided, 'false' if it was relaunched
-     * because of configuration update.
      */
-    boolean ensureVisibilityAndConfig(ActivityRecord starting, int displayId, boolean deferResume) {
+    void ensureVisibilityAndConfig(@Nullable ActivityRecord starting,
+            @NonNull DisplayContent displayContent, boolean deferResume) {
         // First ensure visibility without updating the config just yet. We need this to know what
         // activities are affecting configuration now.
         // Passing null here for 'starting' param value, so that visibility of actual starting
         // activity will be properly updated.
         ensureActivitiesVisible(null /* starting */, false /* notifyClients */);
 
-        if (displayId == INVALID_DISPLAY) {
-            // The caller didn't provide a valid display id, skip updating config.
-            return true;
-        }
-
         // Force-update the orientation from the WindowManager, since we need the true configuration
         // to send to the client now.
-        final DisplayContent displayContent = getDisplayContent(displayId);
-        Configuration config = null;
-        if (displayContent != null) {
-            config = displayContent.updateOrientation(starting, true /* forceUpdate */);
-        }
+        final Configuration config =
+                displayContent.updateOrientation(starting, true /* forceUpdate */);
         // Visibilities may change so let the starting activity have a chance to report. Can't do it
         // when visibility is changed in each AppWindowToken because it may trigger wrong
         // configuration push because the visibility of some activities may not be updated yet.
@@ -1782,13 +1771,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             starting.reportDescendantOrientationChangeIfNeeded();
         }
 
-        if (displayContent != null) {
-            // Update the configuration of the activities on the display.
-            return displayContent.updateDisplayOverrideConfigurationLocked(config, starting,
-                    deferResume);
-        } else {
-            return true;
-        }
+        // Update the configuration of the activities on the display.
+        displayContent.updateDisplayOverrideConfigurationLocked(config, starting, deferResume);
     }
 
     /**
@@ -2167,7 +2151,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     organizedTf.mClearedTaskFragmentForPip = true;
                 }
 
-                transitionController.collect(rootTask);
+                if (isPip2ExperimentEnabled()) {
+                    transitionController.collectExistenceChange(rootTask);
+                } else {
+                    transitionController.collect(rootTask);
+                }
 
                 if (transitionController.isShellTransitionsEnabled()) {
                     // set mode NOW so that when we reparent the activity, it won't be resumed.
@@ -2439,14 +2427,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             mTmpFindTaskResult.process(taskDisplayArea);
             if (mTmpFindTaskResult.mIdealRecord != null) {
                 return mTmpFindTaskResult.mIdealRecord;
-            } else if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
-                       && mTmpFindTaskResult.mCandidateRecord != null
-                       && mService.getRemoteTaskManager().
-                            findTaskOnlyForLaunch(
-                                    intent,
-                                    taskAffinity,
-                                    mTmpFindTaskResult.mCandidateRecord.getTask().mTaskId)) {
-                return mTmpFindTaskResult.mCandidateRecord;
             }
             return null;
         });
@@ -2461,7 +2441,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     /**
-     * Finish the topmost activities in all root tasks that belong to the crashed app.
+     * Finish the topmost activities in all leaf tasks that belong to the crashed app.
      *
      * @param app    The app that crashed.
      * @param reason Reason to perform this action.
@@ -2472,14 +2452,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     Task finishTopCrashedActivities(WindowProcessController app, String reason) {
         Task focusedRootTask = getTopDisplayFocusedRootTask();
         final Task[] finishedTask = new Task[1];
-        forAllRootTasks(rootTask -> {
+        forAllLeafTasks(leafTask -> {
             final boolean recordTopOrVisible = finishedTask[0] == null
-                    && (focusedRootTask == rootTask || rootTask.isVisibleRequested());
-            final Task t = rootTask.finishTopCrashedActivityLocked(app, reason);
+                    && (focusedRootTask == leafTask.getRootTask() || leafTask.isVisibleRequested());
+            final Task t = leafTask.finishTopCrashedActivityLocked(app, reason);
             if (recordTopOrVisible) {
                 finishedTask[0] = t;
             }
-        });
+        }, true);
         return finishedTask[0];
     }
 

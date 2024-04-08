@@ -16,6 +16,7 @@
 
 package android.nfc.cardemulation;
 
+import android.annotation.DurationMillisLong;
 import android.annotation.FlaggedApi;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -133,12 +134,24 @@ public final class PollingFrame implements Parcelable{
     @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     public static final String KEY_POLLING_LOOP_TIMESTAMP = "android.nfc.cardemulation.TIMESTAMP";
 
+    /**
+     * KEY_POLLING_LOOP_TIMESTAMP is the Bundle key for whether this polling frame triggered
+     * autoTransact in the Bundle included in MSG_POLLING_LOOP.
+     *
+     * @hide
+     */
+    @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
+    public static final String KEY_POLLING_LOOP_TRIGGERED_AUTOTRANSACT =
+            "android.nfc.cardemulation.TRIGGERED_AUTOTRANSACT";
+
 
     @PollingFrameType
     private final int mType;
     private final byte[] mData;
     private final int mGain;
-    private final int mTimestamp;
+    @DurationMillisLong
+    private final long mTimestamp;
+    private final boolean mTriggeredAutoTransact;
 
     public static final @NonNull Parcelable.Creator<PollingFrame> CREATOR =
             new Parcelable.Creator<>() {
@@ -157,16 +170,31 @@ public final class PollingFrame implements Parcelable{
         mType = frame.getInt(KEY_POLLING_LOOP_TYPE);
         byte[] data = frame.getByteArray(KEY_POLLING_LOOP_DATA);
         mData = (data == null) ? new byte[0] : data;
-        mGain = frame.getByte(KEY_POLLING_LOOP_GAIN);
+        mGain = frame.getInt(KEY_POLLING_LOOP_GAIN, -1);
         mTimestamp = frame.getInt(KEY_POLLING_LOOP_TIMESTAMP);
+        mTriggeredAutoTransact = frame.containsKey(KEY_POLLING_LOOP_TRIGGERED_AUTOTRANSACT)
+                && frame.getBoolean(KEY_POLLING_LOOP_TRIGGERED_AUTOTRANSACT);
     }
 
+    /**
+     * Constructor for Polling Frames.
+     *
+     * @param type the type of the frame
+     * @param data a byte array of the data contained in the frame
+     * @param gain the vendor-specific gain of the field
+     * @param timestampMillis the timestamp in millisecones
+     * @param triggeredAutoTransact whether or not this frame triggered the device to start a
+     * transaction automatically
+     *
+     * @hide
+     */
     public PollingFrame(@PollingFrameType int type, @Nullable byte[] data,
-            int gain, int timestamp) {
+            int gain, @DurationMillisLong long timestampMillis, boolean triggeredAutoTransact) {
         mType = type;
         mData = data == null ? new byte[0] : data;
         mGain = gain;
-        mTimestamp = timestamp;
+        mTimestamp = timestampMillis;
+        mTriggeredAutoTransact = triggeredAutoTransact;
     }
 
     /**
@@ -194,19 +222,28 @@ public final class PollingFrame implements Parcelable{
     /**
      * Returns the gain representing the field strength of the NFC field when this polling loop
      * frame was observed.
+     * @return the gain or -1 if there is no gain measurement associated with this frame.
      */
-    public int getGain() {
+    public int getVendorSpecificGain() {
         return mGain;
     }
 
     /**
      * Returns the timestamp of when the polling loop frame was observed in milliseconds. These
-     * timestamps are relative and not absolute and should only be used fro comparing the timing of
+     * timestamps are relative and not absolute and should only be used for comparing the timing of
      * frames relative to each other.
      * @return the timestamp in milliseconds
      */
-    public int getTimestamp() {
+    public @DurationMillisLong long getTimestamp() {
         return mTimestamp;
+    }
+
+    /**
+     * Returns whether this frame triggered the device to automatically disable observe mode and
+     * allow one transaction.
+     */
+    public boolean getTriggeredAutoTransact() {
+        return mTriggeredAutoTransact;
     }
 
     @Override
@@ -227,17 +264,20 @@ public final class PollingFrame implements Parcelable{
     public Bundle toBundle() {
         Bundle frame = new Bundle();
         frame.putInt(KEY_POLLING_LOOP_TYPE, getType());
-        frame.putByte(KEY_POLLING_LOOP_GAIN, (byte) getGain());
+        if (getVendorSpecificGain() != -1) {
+            frame.putInt(KEY_POLLING_LOOP_GAIN, (byte) getVendorSpecificGain());
+        }
         frame.putByteArray(KEY_POLLING_LOOP_DATA, getData());
-        frame.putInt(KEY_POLLING_LOOP_TIMESTAMP, getTimestamp());
+        frame.putLong(KEY_POLLING_LOOP_TIMESTAMP, getTimestamp());
+        frame.putBoolean(KEY_POLLING_LOOP_TRIGGERED_AUTOTRANSACT, getTriggeredAutoTransact());
         return frame;
     }
 
     @Override
     public String toString() {
         return "PollingFrame { Type: " + (char) getType()
-                + ", gain: " + getGain()
-                + ", timestamp: " + Integer.toUnsignedString(getTimestamp())
+                + ", gain: " + getVendorSpecificGain()
+                + ", timestamp: " + Long.toUnsignedString(getTimestamp())
                 + ", data: [" + HexFormat.ofDelimiter(" ").formatHex(getData()) + "] }";
     }
 }

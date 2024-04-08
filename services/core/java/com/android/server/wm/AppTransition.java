@@ -137,7 +137,6 @@ import android.view.animation.TranslateAnimation;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.TransitionAnimation;
-import com.android.internal.protolog.ProtoLogImpl;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.DumpUtils.Dump;
 import com.android.internal.util.function.pooled.PooledLambda;
@@ -229,10 +228,7 @@ public class AppTransition implements Dump {
     private int mAppTransitionState = APP_STATE_IDLE;
 
     private final ArrayList<AppTransitionListener> mListeners = new ArrayList<>();
-    private KeyguardExitAnimationStartListener mKeyguardExitAnimationStartListener;
     private final ExecutorService mDefaultExecutor = Executors.newSingleThreadExecutor();
-
-    private final boolean mGridLayoutRecentsEnabled;
 
     private final int mDefaultWindowAnimationStyleResId;
     private boolean mOverrideTaskTransition;
@@ -248,9 +244,7 @@ public class AppTransition implements Dump {
         mHandler = new Handler(service.mH.getLooper());
         mDisplayContent = displayContent;
         mTransitionAnimation = new TransitionAnimation(
-                context, ProtoLogImpl.isEnabled(WM_DEBUG_ANIM), TAG);
-
-        mGridLayoutRecentsEnabled = SystemProperties.getBoolean("ro.recents.grid", false);
+                context, ProtoLog.isEnabled(WM_DEBUG_ANIM), TAG);
 
         final TypedArray windowStyle = mContext.getTheme().obtainStyledAttributes(
                 com.android.internal.R.styleable.Window);
@@ -492,11 +486,6 @@ public class AppTransition implements Dump {
 
     void unregisterListener(AppTransitionListener listener) {
         mListeners.remove(listener);
-    }
-
-    void registerKeygaurdExitAnimationStartListener(
-            KeyguardExitAnimationStartListener listener) {
-        mKeyguardExitAnimationStartListener = listener;
     }
 
     public void notifyAppTransitionFinishedLocked(IBinder token) {
@@ -1594,14 +1583,6 @@ public class AppTransition implements Dump {
 
     boolean containsTransitRequest(@TransitionType int transit) {
         return mNextAppTransitionRequests.contains(transit);
-    }
-
-    /**
-     * @return whether the transition should show the thumbnail being scaled down.
-     */
-    private boolean shouldScaleDownThumbnailTransition(int uiMode, int orientation) {
-        return mGridLayoutRecentsEnabled
-                || orientation == Configuration.ORIENTATION_PORTRAIT;
     }
 
     private void handleAppTransitionTimeout() {

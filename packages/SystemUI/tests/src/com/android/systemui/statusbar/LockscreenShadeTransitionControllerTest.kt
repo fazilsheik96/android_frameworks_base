@@ -9,6 +9,7 @@ import com.android.systemui.ExpandHelper
 import com.android.systemui.SysUITestModule
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.TestMocksModule
+import com.android.systemui.biometrics.domain.BiometricsDomainLayerModule
 import com.android.systemui.classifier.FalsingCollectorFake
 import com.android.systemui.classifier.FalsingManagerFake
 import com.android.systemui.dagger.SysUISingleton
@@ -18,8 +19,9 @@ import com.android.systemui.keyguard.domain.interactor.NaturalScrollingSettingOb
 import com.android.systemui.media.controls.ui.controller.MediaHierarchyManager
 import com.android.systemui.plugins.qs.QS
 import com.android.systemui.power.domain.interactor.PowerInteractor
+import com.android.systemui.qs.ui.adapter.FakeQSSceneAdapter
 import com.android.systemui.res.R
-import com.android.systemui.shade.ShadeLockscreenInteractor
+import com.android.systemui.shade.domain.interactor.ShadeLockscreenInteractor
 import com.android.systemui.shade.data.repository.FakeShadeRepository
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
 import com.android.systemui.statusbar.disableflags.data.model.DisableFlagsModel
@@ -34,6 +36,8 @@ import com.android.systemui.statusbar.phone.ScrimController
 import com.android.systemui.statusbar.policy.FakeConfigurationController
 import com.android.systemui.statusbar.policy.ResourcesSplitShadeStateController
 import com.android.systemui.user.domain.UserDomainLayerModule
+import com.android.systemui.util.mockito.any
+import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.mockito.mock
 import dagger.BindsInstance
 import dagger.Component
@@ -54,6 +58,7 @@ import org.mockito.ArgumentMatchers.anyFloat
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.ArgumentMatchers.eq
+import org.mockito.ArgumentMatchers.isNull
 import org.mockito.Mock
 import org.mockito.Mockito
 import org.mockito.Mockito.clearInvocations
@@ -81,6 +86,8 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
         get() = testComponent.disableFlagsRepository
     private val testScope
         get() = testComponent.testScope
+
+    private val qsSceneAdapter = FakeQSSceneAdapter({ mock() })
 
     lateinit var row: ExpandableNotificationRow
 
@@ -189,6 +196,7 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
                 splitShadeStateController = ResourcesSplitShadeStateController(),
                 shadeLockscreenInteractorLazy = {shadeLockscreenInteractor},
                 naturalScrollingSettingObserver = naturalScrollingSettingObserver,
+                lazyQSSceneAdapter = { qsSceneAdapter }
             )
 
         transitionController.addCallback(transitionControllerCallback)
@@ -303,6 +311,17 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
         transitionController.goToLockedShade(null, needsQSAnimation = true)
         verify(shadeLockscreenInteractor).transitionToExpandedShade(anyLong())
         assertNotNull(transitionController.dragDownAnimator)
+    }
+
+    @Test
+    fun testGoToLockedShadeCancelDoesntLeaveShadeOpenOnKeyguardHide() {
+        whenever(lockScreenUserManager.shouldShowLockscreenNotifications()).thenReturn(false)
+        whenever(lockScreenUserManager.isLockscreenPublicMode(any())).thenReturn(true)
+        transitionController.goToLockedShade(null)
+        val captor = argumentCaptor<Runnable>()
+        verify(centralSurfaces).showBouncerWithDimissAndCancelIfKeyguard(isNull(), captor.capture())
+        captor.value.run()
+        verify(statusbarStateController).setLeaveOpenOnKeyguardHide(false)
     }
 
     @Test
@@ -567,6 +586,16 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
         verify(shadeLockscreenInteractor).setKeyguardStatusBarAlpha(-1f)
     }
 
+    @Test
+    fun nullQs_canDragDownFromAdapter() {
+        transitionController.qS = null
+
+        qsSceneAdapter.isQsFullyCollapsed = true
+        assertTrue("Can't drag down on keyguard", transitionController.canDragDown())
+        qsSceneAdapter.isQsFullyCollapsed = false
+        assertFalse("Can drag down when QS is expanded", transitionController.canDragDown())
+    }
+
     private fun enableSplitShade() {
         setSplitShadeEnabled(true)
     }
@@ -597,6 +626,7 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
             [
                 SysUITestModule::class,
                 UserDomainLayerModule::class,
+                BiometricsDomainLayerModule::class,
             ]
     )
     interface TestComponent {

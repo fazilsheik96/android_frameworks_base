@@ -31,6 +31,8 @@
     <string name="battery_saver_confirmation_ok" msgid="5042136476802816494">"ONにする"</string>
     <string name="battery_saver_start_action" msgid="8353766979886287140">"ON にする"</string>
     <string name="battery_saver_dismiss_action" msgid="7199342621040014738">"いいえ"</string>
+    <string name="standard_battery_saver_text" msgid="6855876746552374119">"標準"</string>
+    <string name="extreme_battery_saver_text" msgid="8455810156739865335">"スーパー"</string>
     <string name="status_bar_settings_auto_rotation" msgid="8329080442278431708">"自動回転画面"</string>
     <string name="usb_device_permission_prompt" msgid="4414719028369181772">"<xliff:g id="APPLICATION">%1$s</xliff:g> に <xliff:g id="USB_DEVICE">%2$s</xliff:g> へのアクセスを許可しますか？"</string>
     <string name="usb_device_permission_prompt_warn" msgid="2309129784984063656">"<xliff:g id="APPLICATION">%1$s</xliff:g> に <xliff:g id="USB_DEVICE">%2$s</xliff:g>へのアクセスを許可しますか？\nこのアプリに録音権限は付与されていませんが、アクセスを許可すると、この USB デバイスから音声を収集できるようになります。"</string>
@@ -269,7 +271,8 @@
     <string name="accessibility_quick_settings_bluetooth_device_tap_to_disconnect" msgid="415980329093277342">"接続を解除"</string>
     <string name="accessibility_quick_settings_bluetooth_device_tap_to_activate" msgid="3724301751036877403">"有効化"</string>
     <string name="turn_on_bluetooth_auto_tomorrow" msgid="414836329962473906">"明日自動的に ON に戻す"</string>
-    <string name="turn_on_bluetooth_auto_info" msgid="8831410009251539988">"クイック共有、デバイスを探す、デバイスの位置情報などの機能は Bluetooth を使用します"</string>
+    <string name="turn_on_bluetooth_auto_info_disabled" msgid="8267380591344023327">"クイック共有、デバイスを探す、デバイスの位置情報などの機能は Bluetooth を使用します"</string>
+    <string name="turn_on_bluetooth_auto_info_enabled" msgid="4802071533678400330">"午前 5 時に Bluetooth が ON になります"</string>
     <string name="quick_settings_bluetooth_secondary_label_battery_level" msgid="4182034939479344093">"バッテリー <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%s</xliff:g>"</string>
     <string name="quick_settings_bluetooth_secondary_label_audio" msgid="780333390310051161">"オーディオ"</string>
     <string name="quick_settings_bluetooth_secondary_label_headset" msgid="2332093067553000852">"ヘッドセット"</string>
@@ -429,10 +432,15 @@
     <string name="cta_label_to_open_widget_picker" msgid="3874946756976360699">"ウィジェットの追加"</string>
     <string name="popup_on_dismiss_cta_tile_text" msgid="8292501780996070019">"長押ししてウィジェットをカスタマイズ"</string>
     <string name="button_to_configure_widgets_text" msgid="4191862850185256901">"ウィジェットのカスタマイズ"</string>
+    <string name="icon_description_for_disabled_widget" msgid="4693151565003206943">"無効なウィジェットのアプリアイコン"</string>
     <string name="edit_widget" msgid="9030848101135393954">"ウィジェットを編集"</string>
     <string name="button_to_remove_widget" msgid="3948204829181214098">"削除"</string>
     <string name="hub_mode_add_widget_button_text" msgid="4831464661209971729">"ウィジェットを追加"</string>
     <string name="hub_mode_editing_exit_button_text" msgid="3704686734192264771">"完了"</string>
+    <string name="dialog_title_to_allow_any_widget" msgid="1004820948962675644">"ロック画面でのウィジェットを許可しますか？"</string>
+    <string name="button_text_to_open_settings" msgid="1987729256950941628">"設定を開く"</string>
+    <string name="work_mode_off_title" msgid="5794818421357835873">"仕事用アプリの停止解除"</string>
+    <string name="work_mode_turn_on" msgid="907813741770247267">"停止解除"</string>
     <string name="accessibility_multi_user_switch_switcher" msgid="5330448341251092660">"ユーザーを切り替える"</string>
     <string name="accessibility_multi_user_list_switcher" msgid="8574105376229857407">"プルダウン メニュー"</string>
     <string name="guest_exit_guest_dialog_message" msgid="8183450985628495709">"このセッションでのアプリとデータはすべて削除されます。"</string>
@@ -530,6 +538,7 @@
     <string name="monitoring_description_parental_controls" msgid="8184693528917051626">"このデバイスは保護者によって管理されています。保護者は、あなたが使用するアプリ、あなたの現在地、デバイスの利用時間などの情報を確認したり、管理したりできます。"</string>
     <string name="legacy_vpn_name" msgid="4174223520162559145">"VPN"</string>
     <string name="keyguard_indication_trust_unlocked" msgid="7395154975733744547">"信頼エージェントがロック解除を管理"</string>
+    <string name="kg_prompt_after_adaptive_auth_lock" msgid="1265107698772588299">"盗難防止\nデバイスをロック - ロック解除に繰り返し失敗"</string>
     <string name="zen_mode_and_condition" msgid="5043165189511223718">"<xliff:g id="ZEN_MODE">%1$s</xliff:g>。<xliff:g id="EXIT_CONDITION">%2$s</xliff:g>"</string>
     <string name="accessibility_volume_settings" msgid="1458961116951564784">"音声の設定"</string>
     <string name="volume_odi_captions_tip" msgid="8825655463280990941">"メディアの自動字幕起こし"</string>
@@ -572,17 +581,33 @@
     <string name="volume_ringer_status_normal" msgid="1339039682222461143">"着信音"</string>
     <string name="volume_ringer_status_vibrate" msgid="6970078708957857825">"バイブレーション"</string>
     <string name="volume_ringer_status_silent" msgid="3691324657849880883">"ミュート"</string>
+    <string name="media_device_cast" msgid="4786241789687569892">"キャスト"</string>
+    <string name="stream_notification_unavailable" msgid="4313854556205836435">"着信音がミュートされているため利用できません"</string>
+    <string name="stream_alarm_unavailable" msgid="4059817189292197839">"サイレント モードが ON のため利用できません"</string>
+    <string name="stream_media_unavailable" msgid="6823020894438959853">"サイレント モードが ON のため利用できません"</string>
     <string name="volume_stream_content_description_unmute" msgid="7729576371406792977">"%1$s。タップしてミュートを解除します。"</string>
     <string name="volume_stream_content_description_vibrate" msgid="4858111994183089761">"%1$s。タップしてバイブレーションに設定します。ユーザー補助機能サービスがミュートされる場合があります。"</string>
     <string name="volume_stream_content_description_mute" msgid="4079046784917920984">"%1$s。タップしてミュートします。ユーザー補助機能サービスがミュートされる場合があります。"</string>
     <string name="volume_stream_content_description_vibrate_a11y" msgid="2742330052979397471">"%1$s。タップしてバイブレーションに設定します。"</string>
     <string name="volume_stream_content_description_mute_a11y" msgid="5743548478357238156">"%1$s。タップしてミュートします。"</string>
+    <string name="volume_panel_noise_control_title" msgid="7413949943872304474">"ノイズ コントロール"</string>
+    <string name="volume_panel_spatial_audio_title" msgid="3367048857932040660">"空間オーディオ"</string>
+    <string name="volume_panel_spatial_audio_off" msgid="4177490084606772989">"OFF"</string>
+    <string name="volume_panel_spatial_audio_fixed" msgid="3136080137827746046">"固定"</string>
+    <string name="volume_panel_spatial_audio_tracking" msgid="5711115234001762974">"ヘッド トラッキング"</string>
     <string name="volume_ringer_change" msgid="3574969197796055532">"タップすると、着信音のモードを変更できます"</string>
     <string name="volume_ringer_hint_mute" msgid="4263821214125126614">"ミュート"</string>
     <string name="volume_ringer_hint_unmute" msgid="6119086890306456976">"ミュートを解除"</string>
     <string name="volume_ringer_hint_vibrate" msgid="6211609047099337509">"バイブレーション"</string>
     <string name="volume_dialog_title" msgid="6502703403483577940">"%s の音量調節"</string>
     <string name="volume_dialog_ringer_guidance_ring" msgid="9143194270463146858">"着信音と通知音が鳴ります（<xliff:g id="VOLUME_LEVEL">%1$s</xliff:g>）"</string>
+    <string name="volume_panel_enter_media_output_settings" msgid="8824244246272552669">"出力の設定を入力してください"</string>
+    <string name="volume_panel_expanded_sliders" msgid="1885750987768506271">"音量スライダーを開きました"</string>
+    <string name="volume_panel_collapsed_sliders" msgid="1413383759434791450">"音量スライダーを閉じました"</string>
+    <string name="volume_panel_hint_mute" msgid="6962563028495243738">"%s をミュート"</string>
+    <string name="volume_panel_hint_unmute" msgid="7489063242934477382">"%s のミュートを解除"</string>
+    <string name="media_output_label_title" msgid="872824698593182505">"<xliff:g id="LABEL">%s</xliff:g> を再生:"</string>
+    <string name="media_output_title_without_playing" msgid="3825663683169305013">"音声の再生形式:"</string>
     <string name="system_ui_tuner" msgid="1471348823289954729">"システムUI調整ツール"</string>
     <string name="status_bar" msgid="4357390266055077437">"ステータスバー"</string>
     <string name="demo_mode" msgid="263484519766901593">"システム UI デモモード"</string>
@@ -829,6 +854,8 @@
     <string name="accessibility_quick_settings_power_menu" msgid="6820426108301758412">"電源ボタン メニュー"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"ページ <xliff:g id="ID_1">%1$d</xliff:g>/<xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"ロック画面"</string>
+    <string name="finder_active" msgid="7907846989716941952">"「デバイスを探す」を使うと、電源が OFF の状態でもこのスマートフォンの現在地を確認できます"</string>
+    <string name="shutdown_progress" msgid="5464239146561542178">"シャットダウン中…"</string>
     <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"取り扱いに関する手順をご覧ください"</string>
     <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"取り扱いに関する手順をご覧ください"</string>
     <string name="high_temp_alarm_title" msgid="8654754369605452169">"デバイスを電源から外します"</string>
@@ -1183,6 +1210,7 @@
     <string name="dream_overlay_weather_complication_desc" msgid="824503662089783824">"<xliff:g id="WEATHER_CONDITION">%1$s</xliff:g>、<xliff:g id="TEMPERATURE">%2$s</xliff:g>"</string>
     <string name="note_task_button_label" msgid="230135078402003532">"メモ"</string>
     <string name="note_task_shortcut_long_label" msgid="7729325091147319409">"メモ、<xliff:g id="NOTE_TAKING_APP">%1$s</xliff:g>"</string>
+    <string name="audio_sharing_description" msgid="8849060142768870004">"音声を共有中"</string>
     <string name="broadcasting_description_is_broadcasting" msgid="765627502786404290">"ブロードキャスト"</string>
     <string name="bt_le_audio_broadcast_dialog_title" msgid="3605428497924077811">"<xliff:g id="APP_NAME">%1$s</xliff:g> のブロードキャストを停止しますか？"</string>
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="7889684551194225793">"<xliff:g id="SWITCHAPP">%1$s</xliff:g> をブロードキャストしたり、出力を変更したりすると、現在のブロードキャストが停止します。"</string>
@@ -1213,6 +1241,9 @@
     <string name="rear_display_unfolded_bottom_sheet_description" msgid="7229961336309960201">"高解像度で撮るにはスマートフォンを裏返してください"</string>
     <string name="rear_display_accessibility_folded_animation" msgid="1538121649587978179">"折りたたみ式デバイスが広げられている"</string>
     <string name="rear_display_accessibility_unfolded_animation" msgid="1946153682258289040">"折りたたみ式デバイスがひっくり返されている"</string>
+    <string name="quick_settings_rotation_posture_folded" msgid="2430280856312528289">"折りたたんだ状態"</string>
+    <string name="quick_settings_rotation_posture_unfolded" msgid="6372316273574167114">"広げた状態"</string>
+    <string name="rotation_tile_with_posture_secondary_label_template" msgid="7648496484163318886">"%1$s/%2$s"</string>
     <string name="stylus_battery_low_percentage" msgid="1620068112350141558">"バッテリー残量 <xliff:g id="PERCENTAGE">%s</xliff:g>"</string>
     <string name="stylus_battery_low_subtitle" msgid="3583843128908823273">"タッチペンを充電器に接続してください"</string>
     <string name="stylus_battery_low" msgid="7134370101603167096">"タッチペンのバッテリー残量が少なくなっています"</string>
@@ -1228,7 +1259,8 @@
     <string name="camera_blocked_dream_overlay_content_description" msgid="4074759493559418130">"カメラはブロックされています"</string>
     <string name="camera_and_microphone_blocked_dream_overlay_content_description" msgid="7891078093416249764">"カメラとマイクはブロックされています"</string>
     <string name="microphone_blocked_dream_overlay_content_description" msgid="5466897982130007033">"マイクはブロックされています"</string>
-    <string name="priority_mode_dream_overlay_content_description" msgid="6044561000253314632">"優先モードは ON です"</string>
+    <!-- no translation found for priority_mode_dream_overlay_content_description (3361628029609329182) -->
+    <skip />
     <string name="assistant_attention_content_description" msgid="4166330881435263596">"会話を始められます"</string>
     <string name="set_default_notes_app_toast_content" msgid="2812374329662610753">"[設定] でデフォルトのメモアプリを設定してください"</string>
     <string name="install_app" msgid="5066668100199613936">"アプリをインストール"</string>

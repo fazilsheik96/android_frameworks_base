@@ -3398,6 +3398,18 @@ public class CarrierConfigManager {
             "support_no_reply_timer_for_cfnry_bool";
 
     /**
+     * No reply time value to be sent to network for call forwarding on no reply
+     * (CFNRy 3GPP TS 24.082 version 17.0 section 3).
+     * Controls time in seconds for the no reply condition on in the call forwarding
+     * settings UI.
+     * This is available when {@link #KEY_SUPPORT_NO_REPLY_TIMER_FOR_CFNRY_BOOL} is true.
+     *
+     * @hide
+     */
+    public static final String KEY_NO_REPLY_TIMER_FOR_CFNRY_SEC_INT =
+            "no_reply_timer_for_cfnry_sec_int";
+
+    /**
      * List of the FAC (feature access codes) to dial as a normal call.
      * @hide
      */
@@ -5390,6 +5402,19 @@ public class CarrierConfigManager {
                 KEY_PREFIX + "enable_presence_group_subscribe_bool";
 
         /**
+         * SIP SUBSCRIBE retry duration used when device doesn't receive a response to SIP
+         * SUBSCRIBE request.
+         * If this value is not defined or defined as negative value, the device does not retry
+         * the SIP SUBSCRIBE.
+         * If the value is 0 then device retries immediately upon timeout.
+         * If the value is > 0 then device waits for configured duration and retries after timeout
+         * is detected
+         * @hide
+         */
+        public static final String KEY_SUBSCRIBE_RETRY_DURATION_MILLIS_LONG =
+                KEY_PREFIX + "subscribe_retry_duration_millis_long";
+
+        /**
          * Flag indicating whether or not to use SIP URI when send a presence subscribe.
          * When {@code true}, the device sets the To and Contact header to be SIP URI using
          * the TelephonyManager#getIsimDomain" API.
@@ -6065,6 +6090,7 @@ public class CarrierConfigManager {
             defaults.putBoolean(KEY_ENABLE_PRESENCE_CAPABILITY_EXCHANGE_BOOL, false);
             defaults.putBoolean(KEY_RCS_BULK_CAPABILITY_EXCHANGE_BOOL, false);
             defaults.putBoolean(KEY_ENABLE_PRESENCE_GROUP_SUBSCRIBE_BOOL, false);
+            defaults.putInt(KEY_SUBSCRIBE_RETRY_DURATION_MILLIS_LONG, -1);
             defaults.putBoolean(KEY_USE_SIP_URI_FOR_PRESENCE_SUBSCRIBE_BOOL, false);
             defaults.putInt(KEY_NON_RCS_CAPABILITIES_CACHE_EXPIRATION_SEC_INT, 30 * 24 * 60 * 60);
             defaults.putBoolean(KEY_RCS_REQUEST_FORBIDDEN_BY_SIP_489_BOOL, false);
@@ -10448,6 +10474,31 @@ public class CarrierConfigManager {
     @FlaggedApi(Flags.FLAG_DATA_ONLY_CELLULAR_SERVICE)
     public static final String KEY_CELLULAR_SERVICE_CAPABILITIES_INT_ARRAY =
             "cellular_service_capabilities_int_array";
+   /**
+     * Transition delay from BT to Cellular on Wear.
+     * Specifies delay when transitioning away from BT.
+     * This minimizes the duration of the netTransitionWakelock held by ConnectivityService
+     * whenever the primary/default network disappears, while still allowing some amount of time
+     * for BT to reconnect before we enable cell.
+     *
+     * If set as -1 then value from resources will be used
+     *
+     * @hide
+     */
+    public static final String KEY_WEAR_CONNECTIVITY_BT_TO_CELL_DELAY_MS_INT =
+            "proxy_connectivity_delay_cell";
+
+    /**
+     * Transition delay from BT to Cellular on Wear.
+     * If wifi connected it extends delay that has been started for BT to Cellular transition
+     * to avoid Wifi thrashing turning Cell radio and causing higher battery drain.
+     *
+     * If set as -1 then value from resources will be used
+     *
+     * @hide
+     */
+    public static final String KEY_WEAR_CONNECTIVITY_EXTEND_BT_TO_CELL_DELAY_ON_WIFI_MS_INT =
+            "wifi_connectivity_extend_cell_delay";
 
     /** The default value for every variable. */
     private static final PersistableBundle sDefaults;
@@ -10839,6 +10890,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_VT_UPGRADE_SUPPORTED_FOR_DOWNGRADED_RTT_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_DISABLE_CHARGE_INDICATION_BOOL, false);
         sDefaults.putBoolean(KEY_SUPPORT_NO_REPLY_TIMER_FOR_CFNRY_BOOL, true);
+        sDefaults.putInt(KEY_NO_REPLY_TIMER_FOR_CFNRY_SEC_INT, 20);
         sDefaults.putStringArray(KEY_FEATURE_ACCESS_CODES_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_IDENTIFY_HIGH_DEFINITION_CALLS_IN_CALL_LOG_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_PRECISE_FAILED_CAUSE_BOOL, false);
@@ -11283,6 +11335,8 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_CARRIER_SERVICE_NAME_STRING_ARRAY, new String[0]);
         sDefaults.putStringArray(KEY_CARRIER_SERVICE_NUMBER_STRING_ARRAY, new String[0]);
         sDefaults.putIntArray(KEY_CELLULAR_SERVICE_CAPABILITIES_INT_ARRAY, new int[]{1, 2, 3});
+        sDefaults.putInt(KEY_WEAR_CONNECTIVITY_BT_TO_CELL_DELAY_MS_INT, -1);
+        sDefaults.putInt(KEY_WEAR_CONNECTIVITY_EXTEND_BT_TO_CELL_DELAY_ON_WIFI_MS_INT, -1);
     }
 
     /**

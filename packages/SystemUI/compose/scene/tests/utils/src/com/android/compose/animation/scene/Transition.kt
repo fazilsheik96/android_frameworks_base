@@ -16,6 +16,9 @@
 
 package com.android.compose.animation.scene
 
+import androidx.compose.foundation.gestures.Orientation
+import kotlinx.coroutines.Job
+
 /** A utility to easily create a [TransitionState.Transition] in tests. */
 fun transition(
     from: SceneKey,
@@ -23,11 +26,34 @@ fun transition(
     progress: () -> Float = { 0f },
     isInitiatedByUserInput: Boolean = false,
     isUserInputOngoing: Boolean = false,
+    isUpOrLeft: Boolean = false,
+    bouncingScene: SceneKey? = null,
+    orientation: Orientation = Orientation.Horizontal,
+    onFinish: ((TransitionState.Transition) -> Job)? = null,
 ): TransitionState.Transition {
-    return object : TransitionState.Transition(from, to) {
+    return object : TransitionState.Transition(from, to), TransitionState.HasOverscrollProperties {
         override val currentScene: SceneKey = from
-        override val progress: Float = progress()
+        override val progress: Float
+            get() = progress()
+
         override val isInitiatedByUserInput: Boolean = isInitiatedByUserInput
         override val isUserInputOngoing: Boolean = isUserInputOngoing
+        override val isUpOrLeft: Boolean = isUpOrLeft
+        override val bouncingScene: SceneKey? = bouncingScene
+        override val orientation: Orientation = orientation
+        override val overscrollScope: OverscrollScope =
+            object : OverscrollScope {
+                override val absoluteDistance = 0f
+            }
+
+        override fun finish(): Job {
+            val onFinish =
+                onFinish
+                    ?: error(
+                        "onFinish() must be provided if finish() is called on test transitions"
+                    )
+
+            return onFinish(this)
+        }
     }
 }

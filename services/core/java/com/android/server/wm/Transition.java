@@ -512,6 +512,8 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             }
             mConfigAtEndActivities.add(ar);
             ar.pauseConfigurationDispatch();
+            snapshotStartState(ar);
+            mChanges.get(ar).mFlags |= ChangeInfo.FLAG_CHANGE_CONFIG_AT_END;
         });
         snapshotStartState(wc);
         mChanges.get(wc).mFlags |= ChangeInfo.FLAG_CHANGE_CONFIG_AT_END;
@@ -632,7 +634,8 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             throw new IllegalStateException("Attempting to re-use a transition");
         }
         mState = STATE_COLLECTING;
-        mSyncId = mSyncEngine.startSyncSet(this, timeoutMs, TAG,
+        mSyncId = mSyncEngine.startSyncSet(this, timeoutMs,
+                TAG + "-" + transitTypeToString(mType),
                 mParallelCollectType != PARALLEL_TYPE_NONE);
         mSyncEngine.setSyncMethod(mSyncId, TransitionController.SYNC_METHOD);
 
@@ -868,6 +871,19 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             ancestor = ancestor.getParent();
         }
         change.mCommonAncestor = ancestor;
+    }
+
+    /**
+     * Collects a window container which will be removed or invisible.
+     */
+    void collectClose(@NonNull WindowContainer<?> wc) {
+        if (wc.isVisibleRequested()) {
+            collectExistenceChange(wc);
+        } else {
+            // Removing a non-visible window doesn't require a transition, but if there is one
+            // collecting, this should be a member just in case.
+            collect(wc);
+        }
     }
 
     /**
@@ -2400,9 +2416,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             } else {
                 parentChange.mFlags |= ChangeInfo.FLAG_CHANGE_YES_ANIMATION;
             }
-            final ActivityRecord ar = targetChange.mContainer.asActivityRecord();
-            if ((ar != null && ar.isConfigurationDispatchPaused())
-                    || ((targetChange.mFlags & ChangeInfo.FLAG_CHANGE_CONFIG_AT_END) != 0)) {
+            if ((targetChange.mFlags & ChangeInfo.FLAG_CHANGE_CONFIG_AT_END) != 0) {
                 parentChange.mFlags |= ChangeInfo.FLAG_CHANGE_CONFIG_AT_END;
             }
         }
@@ -2473,7 +2487,15 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             for (WindowContainer<?> p = getAnimatableParent(wc); p != null;
                     p = getAnimatableParent(p)) {
                 final ChangeInfo parentChange = changes.get(p);
-                if (parentChange == null || !parentChange.hasChanged()) break;
+                if (parentChange == null) {
+                    break;
+                }
+                if (!parentChange.hasChanged()) {
+                    // In case the target is collected after the parent has been changed, it could
+                    // be too late to snapshot the parent change. Skip to see if there is any
+                    // parent window further up to be considered as change parent.
+                    continue;
+                }
                 if (p.mRemoteToken == null) {
                     // Intermediate parents must be those that has window to be managed by Shell.
                     continue;
@@ -2488,6 +2510,14 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                         targetChange.mEndParent = p;
                     } else {
                         intermediates.add(parentChange);
+                    }
+                    // for config-at-end, we want to promote the flag based on the end-state even
+                    // if the activity was reparented because it operates after the animation. So,
+                    // check that here since the promote code skips reparents.
+                    if ((targetChange.mFlags & ChangeInfo.FLAG_CHANGE_CONFIG_AT_END) != 0
+                            && targetChange.mContainer.asActivityRecord() != null
+                            && targetChange.mContainer.getParent() == p) {
+                        parentChange.mFlags |= ChangeInfo.FLAG_CHANGE_CONFIG_AT_END;
                     }
                     foundParentInTargets = true;
                     break;
@@ -2539,12 +2569,6 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             // DisplayContent is the "root", so we reinterpret it's wc as the window layer
             // making the parent surface the displaycontent's surface.
             return wc.getSurfaceControl();
-        } else if (wc.getParent().asDisplayContent() != null) {
-            // DisplayContent is kinda split into 2 pieces, the "real root" and the
-            // "windowing layer". So if the parent of the window is DC, then it really belongs on
-            // the windowing layer (unless it's an overlay display area, but those can't be in
-            // transitions anyways).
-            return wc.getParent().asDisplayContent().getWindowingLayer();
         }
         return wc.getParent().getSurfaceControl();
     }

@@ -256,8 +256,13 @@ public final class WMShell implements
         });
         mCommandQueue.addCallback(new CommandQueue.Callbacks() {
             @Override
-            public void goToFullscreenFromSplit() {
+            public void moveFocusedTaskToFullscreen(int displayId) {
                 splitScreen.goToFullscreenFromSplit();
+            }
+
+            @Override
+            public void setSplitscreenFocus(boolean leftOrTop) {
+                splitScreen.setSplitscreenFocus(leftOrTop);
             }
         });
     }
@@ -358,8 +363,16 @@ public final class WMShell implements
                 }, mSysUiMainExecutor);
         mCommandQueue.addCallback(new CommandQueue.Callbacks() {
             @Override
-            public void enterDesktop(int displayId) {
-                desktopMode.enterDesktop(displayId);
+            public void moveFocusedTaskToDesktop(int displayId) {
+                desktopMode.moveFocusedTaskToDesktop(displayId);
+            }
+            @Override
+            public void moveFocusedTaskToFullscreen(int displayId) {
+                desktopMode.moveFocusedTaskToFullscreen(displayId);
+            }
+            @Override
+            public void moveFocusedTaskToStageSplit(int displayId, boolean leftOrTop) {
+                desktopMode.moveFocusedTaskToStageSplit(displayId, leftOrTop);
             }
         });
     }

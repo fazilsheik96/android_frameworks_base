@@ -35,6 +35,7 @@ import android.view.MotionEvent
 import androidx.test.filters.SmallTest
 import com.android.internal.widget.LockPatternUtils
 import com.android.systemui.Flags.FLAG_BP_TALKBACK
+import com.android.systemui.Flags.FLAG_CONSTRAINT_BP
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.biometrics.AuthController
 import com.android.systemui.biometrics.UdfpsUtils
@@ -241,19 +242,27 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
 
             viewModel.showAuthenticated(testCase.authenticatedModality, 1_000L)
 
-            val confirmConstant by collectLastValue(viewModel.hapticsToPlay)
-            assertThat(confirmConstant)
+            val confirmHaptics by collectLastValue(viewModel.hapticsToPlay)
+            assertThat(confirmHaptics?.hapticFeedbackConstant)
                 .isEqualTo(
                     if (expectConfirmation) HapticFeedbackConstants.NO_HAPTICS
                     else HapticFeedbackConstants.CONFIRM
+                )
+            assertThat(confirmHaptics?.flag)
+                .isEqualTo(
+                    if (expectConfirmation) null
+                    else HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
                 )
 
             if (expectConfirmation) {
                 viewModel.confirmAuthenticated()
             }
 
-            val confirmedConstant by collectLastValue(viewModel.hapticsToPlay)
-            assertThat(confirmedConstant).isEqualTo(HapticFeedbackConstants.CONFIRM)
+            val confirmedHaptics by collectLastValue(viewModel.hapticsToPlay)
+            assertThat(confirmedHaptics?.hapticFeedbackConstant)
+                .isEqualTo(HapticFeedbackConstants.CONFIRM)
+            assertThat(confirmedHaptics?.flag)
+                .isEqualTo(HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
         }
 
     @Test
@@ -265,16 +274,21 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
             viewModel.confirmAuthenticated()
         }
 
-        val currentConstant by collectLastValue(viewModel.hapticsToPlay)
-        assertThat(currentConstant).isEqualTo(HapticFeedbackConstants.CONFIRM)
+        val currentHaptics by collectLastValue(viewModel.hapticsToPlay)
+        assertThat(currentHaptics?.hapticFeedbackConstant)
+            .isEqualTo(HapticFeedbackConstants.CONFIRM)
+        assertThat(currentHaptics?.flag)
+            .isEqualTo(HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
     }
 
     @Test
     fun playErrorHaptic_SetsRejectConstant() = runGenericTest {
         viewModel.showTemporaryError("test", "messageAfterError", false)
 
-        val currentConstant by collectLastValue(viewModel.hapticsToPlay)
-        assertThat(currentConstant).isEqualTo(HapticFeedbackConstants.REJECT)
+        val currentHaptics by collectLastValue(viewModel.hapticsToPlay)
+        assertThat(currentHaptics?.hapticFeedbackConstant).isEqualTo(HapticFeedbackConstants.REJECT)
+        assertThat(currentHaptics?.flag)
+            .isEqualTo(HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
     }
 
     @Test
@@ -800,8 +814,9 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
             hapticFeedback = true,
         )
 
-        val constant by collectLastValue(viewModel.hapticsToPlay)
-        assertThat(constant).isEqualTo(HapticFeedbackConstants.REJECT)
+        val haptics by collectLastValue(viewModel.hapticsToPlay)
+        assertThat(haptics?.hapticFeedbackConstant).isEqualTo(HapticFeedbackConstants.REJECT)
+        assertThat(haptics?.flag).isEqualTo(HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
     }
 
     @Test
@@ -813,8 +828,8 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
             hapticFeedback = false,
         )
 
-        val constant by collectLastValue(viewModel.hapticsToPlay)
-        assertThat(constant).isEqualTo(HapticFeedbackConstants.NO_HAPTICS)
+        val haptics by collectLastValue(viewModel.hapticsToPlay)
+        assertThat(haptics?.hapticFeedbackConstant).isEqualTo(HapticFeedbackConstants.NO_HAPTICS)
     }
 
     private suspend fun TestScope.showTemporaryErrors(
@@ -1242,6 +1257,7 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
     fun descriptionOverriddenByContentView() =
         runGenericTest(contentView = promptContentView, description = "test description") {
             mSetFlagsRule.enableFlags(FLAG_CUSTOM_BIOMETRIC_PROMPT)
+            mSetFlagsRule.enableFlags(FLAG_CONSTRAINT_BP)
             val contentView by collectLastValue(viewModel.contentView)
             val description by collectLastValue(viewModel.description)
 
@@ -1253,6 +1269,7 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
     fun descriptionWithoutContentView() =
         runGenericTest(description = "test description") {
             mSetFlagsRule.enableFlags(FLAG_CUSTOM_BIOMETRIC_PROMPT)
+            mSetFlagsRule.enableFlags(FLAG_CONSTRAINT_BP)
             val contentView by collectLastValue(viewModel.contentView)
             val description by collectLastValue(viewModel.description)
 
@@ -1264,6 +1281,7 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
     fun logoIsNullIfPackageNameNotFound() =
         runGenericTest(packageName = OP_PACKAGE_NAME_NO_ICON) {
             mSetFlagsRule.enableFlags(FLAG_CUSTOM_BIOMETRIC_PROMPT)
+            mSetFlagsRule.enableFlags(FLAG_CONSTRAINT_BP)
             val logo by collectLastValue(viewModel.logo)
             assertThat(logo).isNull()
         }
@@ -1271,6 +1289,7 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
     @Test
     fun defaultLogoIfNoLogoSet() = runGenericTest {
         mSetFlagsRule.enableFlags(FLAG_CUSTOM_BIOMETRIC_PROMPT)
+        mSetFlagsRule.enableFlags(FLAG_CONSTRAINT_BP)
         val logo by collectLastValue(viewModel.logo)
         assertThat(logo).isEqualTo(defaultLogoIcon)
     }
@@ -1279,6 +1298,7 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
     fun logoResSetByApp() =
         runGenericTest(logoRes = logoResFromApp) {
             mSetFlagsRule.enableFlags(FLAG_CUSTOM_BIOMETRIC_PROMPT)
+            mSetFlagsRule.enableFlags(FLAG_CONSTRAINT_BP)
             val logo by collectLastValue(viewModel.logo)
             assertThat(logo).isEqualTo(logoFromApp)
         }
@@ -1287,6 +1307,7 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
     fun logoBitmapSetByApp() =
         runGenericTest(logoBitmap = logoBitmapFromApp) {
             mSetFlagsRule.enableFlags(FLAG_CUSTOM_BIOMETRIC_PROMPT)
+            mSetFlagsRule.enableFlags(FLAG_CONSTRAINT_BP)
             val logo by collectLastValue(viewModel.logo)
             assertThat((logo as BitmapDrawable).bitmap).isEqualTo(logoBitmapFromApp)
         }
@@ -1295,6 +1316,7 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
     fun logoDescriptionIsEmptyIfPackageNameNotFound() =
         runGenericTest(packageName = OP_PACKAGE_NAME_NO_ICON) {
             mSetFlagsRule.enableFlags(FLAG_CUSTOM_BIOMETRIC_PROMPT)
+            mSetFlagsRule.enableFlags(FLAG_CONSTRAINT_BP)
             val logoDescription by collectLastValue(viewModel.logoDescription)
             assertThat(logoDescription).isEqualTo("")
         }
@@ -1302,6 +1324,7 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
     @Test
     fun defaultLogoDescriptionIfNoLogoDescriptionSet() = runGenericTest {
         mSetFlagsRule.enableFlags(FLAG_CUSTOM_BIOMETRIC_PROMPT)
+        mSetFlagsRule.enableFlags(FLAG_CONSTRAINT_BP)
         val logoDescription by collectLastValue(viewModel.logoDescription)
         assertThat(logoDescription).isEqualTo(defaultLogoDescription)
     }
@@ -1310,9 +1333,21 @@ internal class PromptViewModelTest(private val testCase: TestCase) : SysuiTestCa
     fun logoDescriptionSetByApp() =
         runGenericTest(logoDescription = logoDescriptionFromApp) {
             mSetFlagsRule.enableFlags(FLAG_CUSTOM_BIOMETRIC_PROMPT)
+            mSetFlagsRule.enableFlags(FLAG_CONSTRAINT_BP)
             val logoDescription by collectLastValue(viewModel.logoDescription)
             assertThat(logoDescription).isEqualTo(logoDescriptionFromApp)
         }
+
+    @Test
+    fun iconViewLoaded() = runGenericTest {
+        val isIconViewLoaded by collectLastValue(viewModel.isIconViewLoaded)
+        // TODO(b/328677869): Add test for noIcon logic.
+        assertThat(isIconViewLoaded).isFalse()
+
+        viewModel.setIsIconViewLoaded(true)
+
+        assertThat(isIconViewLoaded).isTrue()
+    }
 
     /** Asserts that the selected buttons are visible now. */
     private suspend fun TestScope.assertButtonsVisible(

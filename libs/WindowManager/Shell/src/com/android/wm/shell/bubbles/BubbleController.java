@@ -103,6 +103,7 @@ import com.android.wm.shell.common.TaskStackListenerCallback;
 import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.annotations.ShellBackgroundThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
+import com.android.wm.shell.common.bubbles.BubbleBarLocation;
 import com.android.wm.shell.common.bubbles.BubbleBarUpdate;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.onehanded.OneHandedController;
@@ -122,6 +123,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -246,6 +248,9 @@ public class BubbleController implements ConfigurationChangeListener,
 
     /** Saved font scale, used to detect font size changes in {@link #onConfigurationChanged}. */
     private float mFontScale = 0;
+
+    /** Saved locale, used to detect local changes in {@link #onConfigurationChanged}. */
+    private Locale mLocale = null;
 
     /** Saved direction, used to detect layout direction changes @link #onConfigChanged}. */
     private int mLayoutDirection = View.LAYOUT_DIRECTION_UNDEFINED;
@@ -683,6 +688,17 @@ public class BubbleController implements ConfigurationChangeListener,
         mDataRepository.removeBubblesForUser(removedUserId, parentUserId);
     }
 
+    /** Called when sensitive notification state has changed */
+    public void onSensitiveNotificationProtectionStateChanged(
+            boolean sensitiveNotificationProtectionActive) {
+        if (mStackView != null) {
+            mStackView.onSensitiveNotificationProtectionStateChanged(
+                    sensitiveNotificationProtectionActive);
+            ProtoLog.d(WM_SHELL_BUBBLES, "onSensitiveNotificationProtectionStateChanged=%b",
+                    sensitiveNotificationProtectionActive);
+        }
+    }
+
     /** Whether bubbles are showing in the bubble bar. */
     public boolean isShowingAsBubbleBar() {
         return canShowAsBubbleBar() && mBubbleStateListener != null;
@@ -691,6 +707,30 @@ public class BubbleController implements ConfigurationChangeListener,
     /** Whether the current configuration supports showing as bubble bar. */
     private boolean canShowAsBubbleBar() {
         return mBubbleProperties.isBubbleBarEnabled() && mBubblePositioner.isLargeScreen();
+    }
+
+    /**
+     * Returns current {@link BubbleBarLocation} if bubble bar is being used.
+     * Otherwise returns <code>null</code>
+     */
+    @Nullable
+    public BubbleBarLocation getBubbleBarLocation() {
+        if (canShowAsBubbleBar()) {
+            return mBubblePositioner.getBubbleBarLocation();
+        }
+        return null;
+    }
+
+    /**
+     * Update bubble bar location and trigger and update to listeners
+     */
+    public void setBubbleBarLocation(BubbleBarLocation bubbleBarLocation) {
+        if (canShowAsBubbleBar()) {
+            mBubblePositioner.setBubbleBarLocation(bubbleBarLocation);
+            BubbleBarUpdate bubbleBarUpdate = new BubbleBarUpdate();
+            bubbleBarUpdate.bubbleBarLocation = bubbleBarLocation;
+            mBubbleStateListener.onBubbleStateChange(bubbleBarUpdate);
+        }
     }
 
     /** Whether this userId belongs to the current user. */
@@ -1057,6 +1097,11 @@ public class BubbleController implements ConfigurationChangeListener,
                 mLayoutDirection = newConfig.getLayoutDirection();
                 mStackView.onLayoutDirectionChanged(mLayoutDirection);
             }
+            Locale newLocale = newConfig.locale;
+            if (newLocale != null && !newLocale.equals(mLocale)) {
+                mLocale = newLocale;
+                mStackView.updateLocale();
+            }
         }
     }
 
@@ -1159,7 +1204,7 @@ public class BubbleController implements ConfigurationChangeListener,
      */
     @VisibleForTesting
     public void expandStackAndSelectBubbleFromLauncher(String key, Rect bubbleBarBounds) {
-        mBubblePositioner.setBubbleBarPosition(bubbleBarBounds);
+        mBubblePositioner.setBubbleBarBounds(bubbleBarBounds);
 
         if (BubbleOverflow.KEY.equals(key)) {
             mBubbleData.setSelectedBubbleFromLauncher(mBubbleData.getOverflow());
@@ -1214,12 +1259,14 @@ public class BubbleController implements ConfigurationChangeListener,
      * Expands and selects a bubble based on the provided {@link BubbleEntry}. If no bubble
      * exists for this entry, and it is able to bubble, a new bubble will be created.
      *
-     * This is the method to use when opening a bubble via a notification or in a state where
+     * <p>This is the method to use when opening a bubble via a notification or in a state where
      * the device might not be unlocked.
      *
      * @param entry the entry to use for the bubble.
      */
     public void expandStackAndSelectBubble(BubbleEntry entry) {
+        ProtoLog.d(WM_SHELL_BUBBLES, "opening bubble from notification key=%s mIsStatusBarShade=%b",
+                entry.getKey(), mIsStatusBarShade);
         if (mIsStatusBarShade) {
             mNotifEntryToExpandOnShadeUnlock = null;
 
@@ -1779,11 +1826,12 @@ public class BubbleController implements ConfigurationChangeListener,
         @Override
         public void removeBubble(Bubble removedBubble) {
             if (mLayerView != null) {
-                mLayerView.removeBubble(removedBubble);
-                if (!mBubbleData.hasBubbles() && !isStackExpanded()) {
-                    mLayerView.setVisibility(INVISIBLE);
-                    removeFromWindowManagerMaybe();
-                }
+                mLayerView.removeBubble(removedBubble, () -> {
+                    if (!mBubbleData.hasBubbles() && !isStackExpanded()) {
+                        mLayerView.setVisibility(INVISIBLE);
+                        removeFromWindowManagerMaybe();
+                    }
+                });
             }
         }
 
@@ -2582,6 +2630,14 @@ public class BubbleController implements ConfigurationChangeListener,
         public void onNotificationPanelExpandedChanged(boolean expanded) {
             mMainExecutor.execute(
                     () -> BubbleController.this.onNotificationPanelExpandedChanged(expanded));
+        }
+
+        @Override
+        public void onSensitiveNotificationProtectionStateChanged(
+                boolean sensitiveNotificationProtectionActive) {
+            mMainExecutor.execute(
+                    () -> BubbleController.this.onSensitiveNotificationProtectionStateChanged(
+                            sensitiveNotificationProtectionActive));
         }
     }
 

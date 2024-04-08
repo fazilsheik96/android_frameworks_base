@@ -471,6 +471,21 @@ public final class Settings {
             "android.settings.ACCESSIBILITY_COLOR_MOTION_SETTINGS";
 
     /**
+     * Activity Action: Show settings to allow configuration of accessibility color contrast.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_ACCESSIBILITY_COLOR_CONTRAST_SETTINGS =
+            "android.settings.ACCESSIBILITY_COLOR_CONTRAST_SETTINGS";
+
+    /**
      * Activity Action: Show settings to allow configuration of Reduce Bright Colors.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -3568,6 +3583,12 @@ public final class Settings {
                                                     + " and user:" + userHandle
                                                     + " with index:" + index);
                                         }
+                                        // Always make sure to close any pre-existing tracker before
+                                        // replacing it, to prevent memory leaks
+                                        var oldTracker = mGenerationTrackers.get(name);
+                                        if (oldTracker != null) {
+                                            oldTracker.destroy();
+                                        }
                                         mGenerationTrackers.put(name, new GenerationTracker(name,
                                                 array, index, generation,
                                                 mGenerationTrackerErrorHandler));
@@ -3789,6 +3810,12 @@ public final class Settings {
                                         + " type:" + mUri.getPath()
                                         + " in package:" + cr.getPackageName()
                                         + " with index:" + index);
+                            }
+                            // Always make sure to close any pre-existing tracker before
+                            // replacing it, to prevent memory leaks
+                            var oldTracker = mGenerationTrackers.get(prefix);
+                            if (oldTracker != null) {
+                                oldTracker.destroy();
                             }
                             mGenerationTrackers.put(prefix,
                                     new GenerationTracker(prefix, array, index, generation,
@@ -8486,6 +8513,19 @@ public final class Settings {
         public static final String ACCESSIBILITY_BUTTON_TARGETS = "accessibility_button_targets";
 
         /**
+         * Setting specifying the accessibility services, shortcut targets or features
+         * to be toggled via the floating accessibility menu
+         *
+         * <p> This is a colon-separated string list which contains the flattened
+         * {@link ComponentName} and the class name of a system class
+         * implementing a supported accessibility feature.
+         * @hide
+         */
+        @Readable
+        public static final String ACCESSIBILITY_FLOATING_MENU_TARGETS =
+                "accessibility_floating_menu_targets";
+
+        /**
          * Setting specifying the accessibility services, accessibility shortcut targets,
          * or features to be toggled via a tile in the quick settings panel.
          *
@@ -11074,21 +11114,12 @@ public final class Settings {
                 "assist_long_press_home_enabled";
 
         /**
-         * Whether press and hold on nav handle can trigger search.
+         * Whether all entrypoints can trigger search. Replaces individual settings.
          *
          * @hide
          */
-        public static final String SEARCH_PRESS_HOLD_NAV_HANDLE_ENABLED =
-                "search_press_hold_nav_handle_enabled";
-
-        /**
-         * Whether long-pressing on the home button can trigger search.
-         *
-         * @hide
-         */
-        public static final String SEARCH_LONG_PRESS_HOME_ENABLED =
-                "search_long_press_home_enabled";
-
+        public static final String SEARCH_ALL_ENTRYPOINTS_ENABLED =
+                "search_all_entrypoints_enabled";
 
         /**
          * Whether or not the accessibility data streaming is enbled for the
@@ -11572,6 +11603,15 @@ public final class Settings {
                 "extra_low_power_warning_acknowledged";
 
         /**
+         * Whether the emergency thermal alert would be disabled
+         * (0: default) or not (1).
+         *
+         * @hide
+         */
+        public static final String EMERGENCY_THERMAL_ALERT_DISABLED =
+                "emergency_thermal_alert_disabled";
+
+        /**
          * 0 (default) Auto battery saver suggestion has not been suppressed. 1) it has been
          * suppressed.
          * @hide
@@ -11980,6 +12020,16 @@ public final class Settings {
                 "accessibility_pinch_to_zoom_anywhere_enabled";
 
         /**
+         * For magnification feature where panning can be controlled with a single finger.
+         *
+         * If true, you can pan using a single finger gesture.
+         *
+         * @hide
+         */
+        public static final String ACCESSIBILITY_SINGLE_FINGER_PANNING_ENABLED =
+                "accessibility_single_finger_panning_enabled";
+
+        /**
          * Controls magnification capability. Accessibility magnification is capable of at least one
          * of the magnification modes.
          *
@@ -12360,6 +12410,17 @@ public final class Settings {
          */
         public static final String HIDE_PRIVATESPACE_ENTRY_POINT = "hide_privatespace_entry_point";
 
+        /**
+         * Whether or not secure windows should be disabled. This only works on debuggable builds.
+         *
+         * <p>When this setting is set to a non-zero value, all windows are treated as non-secure.
+         * Content in windows with {@link android.view.WindowManager.LayoutParams#FLAG_SECURE} will
+         * appear in screenshots and recordings.
+         *
+         * @hide
+         */
+        public static final String DISABLE_SECURE_WINDOWS = "disable_secure_windows";
+
         /** @hide */
         public static final int PRIVATE_SPACE_AUTO_LOCK_ON_DEVICE_LOCK = 0;
         /** @hide */
@@ -12492,6 +12553,24 @@ public final class Settings {
         public static void setLocationProviderEnabled(ContentResolver cr,
                 String provider, boolean enabled) {
         }
+
+        /**
+         * List of system components that support restore in a  V-> U OS downgrade but do not have
+         * RestoreAnyVersion set to true. Value set before system restore.
+         * This setting is not B&Rd
+         * List is stored as a comma-separated string of package names e.g. "a,b,c"
+         * @hide
+         */
+        public static final String V_TO_U_RESTORE_ALLOWLIST = "v_to_u_restore_allowlist";
+
+        /**
+         * List of system components that have RestoreAnyVersion set to true but do not support
+         * restore in a  V-> U OS downgrade. Value set before system restore.
+         * This setting is not B&Rd
+         * List is stored as a comma-separated string of package names e.g. "a,b,c"
+         * @hide
+         */
+        public static final String V_TO_U_RESTORE_DENYLIST = "v_to_u_restore_denylist";
     }
 
     /**
@@ -19971,6 +20050,13 @@ public final class Settings {
             @Readable
             public static final String CONSISTENT_NOTIFICATION_BLOCKING_ENABLED =
                     "consistent_notification_blocking_enabled";
+
+            /**
+             * Whether the Auto Bedtime Mode experience is enabled.
+             *
+             * @hide
+             */
+            public static final String AUTO_BEDTIME_MODE = "auto_bedtime_mode";
         }
     }
 

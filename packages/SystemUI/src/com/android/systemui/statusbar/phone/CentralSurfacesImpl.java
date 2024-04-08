@@ -27,7 +27,6 @@ import static androidx.lifecycle.Lifecycle.State.RESUMED;
 
 import static com.android.systemui.Dependency.TIME_TICK_HANDLER_NAME;
 import static com.android.systemui.Flags.lightRevealMigration;
-import static com.android.systemui.Flags.migrateClocksToBlueprint;
 import static com.android.systemui.Flags.newAodTransition;
 import static com.android.systemui.Flags.predictiveBackSysui;
 import static com.android.systemui.Flags.truncatedStatusBarIconsFix;
@@ -142,6 +141,7 @@ import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.KeyguardViewMediator;
+import com.android.systemui.keyguard.MigrateClocksToBlueprint;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.keyguard.ui.binder.LightRevealScrimViewBinder;
@@ -1375,7 +1375,10 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 || !mKeyguardStateController.canDismissLockScreen()
                 || mKeyguardViewMediator.isAnySimPinSecure()
                 || (mQsController.getExpanded() && trackingTouch)
-                || mShadeSurface.getBarState() == StatusBarState.SHADE_LOCKED) {
+                || mShadeSurface.getBarState() == StatusBarState.SHADE_LOCKED
+                // This last one causes a race condition when the shade resets. Don't send a 0
+                // and let StatusBarStateController process a keyguard state change instead
+                || 1f - fraction == 0f) {
             return;
         }
 
@@ -1467,7 +1470,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         return (v, event) -> {
             mAutoHideController.checkUserAutoHide(event);
             mRemoteInputManager.checkRemoteInputOutside(event);
-            if (!migrateClocksToBlueprint()) {
+            if (!MigrateClocksToBlueprint.isEnabled()) {
                 mShadeController.onStatusBarTouch(event);
             }
             return getNotificationShadeWindowView().onTouchEvent(event);
@@ -2504,7 +2507,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             mNotificationShadeWindowController.batchApplyWindowLayoutParams(()-> {
                 mDeviceInteractive = true;
 
-                boolean isFlaggedOff = newAodTransition() && migrateClocksToBlueprint();
+                boolean isFlaggedOff = newAodTransition() && MigrateClocksToBlueprint.isEnabled();
                 if (!isFlaggedOff && shouldAnimateDozeWakeup()) {
                     // If this is false, the power button must be physically pressed in order to
                     // trigger fingerprint authentication.
@@ -2803,6 +2806,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                         || mKeyguardStateController.isKeyguardGoingAway()
                         || mKeyguardViewMediator.requestedShowSurfaceBehindKeyguard()
                         || mKeyguardViewMediator.isAnimatingBetweenKeyguardAndSurfaceBehind());
+        boolean dreaming =
+                mKeyguardStateController.isShowing() && mKeyguardUpdateMonitor.isDreaming()
+                        && !unlocking;
 
         mScrimController.setExpansionAffectsAlpha(!unlocking);
 
@@ -2847,13 +2853,16 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             // this as otherwise it can remain pending and leave keyguard in a weird state.
             mUnlockScrimCallback.onCancelled();
         } else if (mIsIdleOnCommunal) {
-            mScrimController.transitionTo(ScrimState.GLANCEABLE_HUB);
+            if (dreaming) {
+                mScrimController.transitionTo(ScrimState.GLANCEABLE_HUB_OVER_DREAM);
+            } else {
+                mScrimController.transitionTo(ScrimState.GLANCEABLE_HUB);
+            }
         } else if (mKeyguardStateController.isShowing()
                 && !mKeyguardStateController.isOccluded()
                 && !unlocking) {
             mScrimController.transitionTo(ScrimState.KEYGUARD);
-        } else if (mKeyguardStateController.isShowing() && mKeyguardUpdateMonitor.isDreaming()
-                && !unlocking) {
+        } else if (dreaming) {
             mScrimController.transitionTo(ScrimState.DREAMING);
         } else {
             mScrimController.transitionTo(ScrimState.UNLOCKED, mUnlockScrimCallback);
@@ -3056,8 +3065,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             if (userSetup != mUserSetup) {
                 mUserSetup = userSetup;
                 if (!mUserSetup && mState == StatusBarState.SHADE) {
-                    mShadeSurface.collapse(true /* animate */, false  /* delayed */,
-                            1.0f  /* speedUpFactor */);
+                    mShadeController.animateCollapseShade();
                 }
             }
         }
@@ -3155,7 +3163,14 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 public void onDozeAmountChanged(float linear, float eased) {
                     if (!lightRevealMigration()
                             && !(mLightRevealScrim.getRevealEffect() instanceof CircleReveal)) {
-                        mLightRevealScrim.setRevealAmount(1f - linear);
+                        if (DeviceEntryUdfpsRefactor.isEnabled()) {
+                            // If wakeAndUnlocking, this is handled in AuthRippleInteractor
+                            if (!mBiometricUnlockController.isWakeAndUnlock()) {
+                                mLightRevealScrim.setRevealAmount(1f - linear);
+                            }
+                        } else {
+                            mLightRevealScrim.setRevealAmount(1f - linear);
+                        }
                     }
                 }
 

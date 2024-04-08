@@ -48,6 +48,7 @@ import android.hardware.camera2.params.StreamConfiguration;
 import android.hardware.camera2.utils.CameraIdAndSessionConfiguration;
 import android.hardware.camera2.utils.ConcurrentCameraIdCombination;
 import android.hardware.camera2.utils.ExceptionUtils;
+import android.hardware.devicestate.DeviceState;
 import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.display.DisplayManager;
 import android.os.Binder;
@@ -207,14 +208,12 @@ public final class CameraManager {
             mDeviceStateListeners.add(new WeakReference<>(listener));
         }
 
+        @SuppressWarnings("FlaggedApi")
         @Override
-        public final void onBaseStateChanged(int state) {
-            handleStateChange(state);
-        }
-
-        @Override
-        public final void onStateChanged(int state) {
-            handleStateChange(state);
+        public void onDeviceStateChanged(DeviceState state) {
+            // Suppressing the FlaggedAPI warning as this specific API isn't new, just moved to
+            // system API which requires it to be flagged.
+            handleStateChange(state.getIdentifier());
         }
     }
 
@@ -756,25 +755,22 @@ public final class CameraManager {
     @FlaggedApi(Flags.FLAG_CAMERA_DEVICE_SETUP)
     public CameraDevice.CameraDeviceSetup getCameraDeviceSetup(@NonNull String cameraId)
             throws CameraAccessException {
-        if (cameraId == null) {
-            throw new IllegalArgumentException("cameraId was null");
-        }
-
-        if (CameraManagerGlobal.sCameraServiceDisabled) {
-            throw new CameraAccessException(CameraAccessException.CAMERA_DISABLED,
-                    "No cameras available on device");
-        }
-
-        if (!Arrays.asList(CameraManagerGlobal.get().getCameraIdList()).contains(cameraId)) {
-            throw new IllegalArgumentException(
-                    "Camera ID '" + cameraId + "' not available on device.");
-        }
-
+        // isCameraDeviceSetup does all the error checking we need.
         if (!isCameraDeviceSetupSupported(cameraId)) {
             throw new UnsupportedOperationException(
                     "CameraDeviceSetup is not supported for Camera ID: " + cameraId);
         }
 
+        return getCameraDeviceSetupUnsafe(cameraId);
+
+    }
+
+    /**
+     * Creates and returns a {@link CameraDeviceSetup} instance without any error checking. To
+     * be used (carefully) by callers who are sure that CameraDeviceSetup instance can be legally
+     * created and don't want to pay the latency cost of calling {@link #getCameraDeviceSetup}.
+     */
+    private CameraDevice.CameraDeviceSetup getCameraDeviceSetupUnsafe(@NonNull String cameraId) {
         return new CameraDeviceSetupImpl(cameraId, /*cameraManager=*/ this, mContext);
     }
 
@@ -812,12 +808,8 @@ public final class CameraManager {
             throw new IllegalArgumentException("Camera ID was null");
         }
 
-        if (CameraManagerGlobal.sCameraServiceDisabled) {
-            throw new CameraAccessException(CameraAccessException.CAMERA_DISABLED,
-                    "No cameras available on device");
-        }
-
-        if (!Arrays.asList(CameraManagerGlobal.get().getCameraIdList()).contains(cameraId)) {
+        if (CameraManagerGlobal.sCameraServiceDisabled
+                || !Arrays.asList(CameraManagerGlobal.get().getCameraIdList()).contains(cameraId)) {
             throw new IllegalArgumentException(
                     "Camera ID '" + cameraId + "' not available on device.");
         }
@@ -860,8 +852,9 @@ public final class CameraManager {
 
             ICameraDeviceUser cameraUser = null;
             CameraDevice.CameraDeviceSetup cameraDeviceSetup = null;
-            if (Flags.cameraDeviceSetup() && isCameraDeviceSetupSupported(cameraId)) {
-                cameraDeviceSetup = getCameraDeviceSetup(cameraId);
+            if (Flags.cameraDeviceSetup()
+                    && CameraDeviceSetupImpl.isCameraDeviceSetupSupported(characteristics)) {
+                cameraDeviceSetup = getCameraDeviceSetupUnsafe(cameraId);
             }
 
             android.hardware.camera2.impl.CameraDeviceImpl deviceImpl =

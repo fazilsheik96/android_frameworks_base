@@ -35,6 +35,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -49,6 +50,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.graphics.Insets;
@@ -61,6 +63,7 @@ import android.platform.test.annotations.EnableFlags;
 import android.provider.Settings;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
+import android.util.ArraySet;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
@@ -71,6 +74,7 @@ import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.test.filters.SmallTest;
 
+import com.android.internal.accessibility.common.ShortcutConstants;
 import com.android.internal.accessibility.dialog.AccessibilityTarget;
 import com.android.internal.messages.nano.SystemMessageProto;
 import com.android.systemui.Flags;
@@ -134,6 +138,8 @@ public class MenuViewLayerTest extends SysuiTestCase {
     private WindowManager mStubWindowManager;
     @Mock
     private AccessibilityManager mStubAccessibilityManager;
+    @Mock
+    private PackageManager mMockPackageManager;
     private final SecureSettings mSecureSettings = TestUtils.mockSecureSettings();
 
     private final NotificationManager mMockNotificationManager = mock(NotificationManager.class);
@@ -164,8 +170,10 @@ public class MenuViewLayerTest extends SysuiTestCase {
         mMenuViewLayer = spy(new MenuViewLayer(mSpyContext, mStubWindowManager,
                 mStubAccessibilityManager, mMenuViewModel, menuViewAppearance, mMenuView,
                 mFloatingMenu, mSecureSettings));
-        mMenuView = (MenuView) mMenuViewLayer.getChildAt(LayerIndex.MENU_VIEW);
         mMenuAnimationController = mMenuView.getMenuAnimationController();
+
+        doNothing().when(mSpyContext).startActivity(any());
+        when(mSpyContext.getPackageManager()).thenReturn(mMockPackageManager);
 
         mLastAccessibilityButtonTargets =
                 Settings.Secure.getStringForUser(mSpyContext.getContentResolver(),
@@ -219,6 +227,24 @@ public class MenuViewLayerTest extends SysuiTestCase {
     }
 
     @Test
+    @EnableFlags(android.view.accessibility.Flags.FLAG_A11Y_QS_SHORTCUT)
+    public void triggerDismissMenuAction_callsA11yManagerEnableShortcutsForTargets() {
+        final List<String> stubShortcutTargets = new ArrayList<>();
+        stubShortcutTargets.add(TEST_SELECT_TO_SPEAK_COMPONENT_NAME.flattenToString());
+        when(mStubAccessibilityManager.getAccessibilityShortcutTargets(
+                AccessibilityManager.ACCESSIBILITY_BUTTON)).thenReturn(stubShortcutTargets);
+
+        mMenuViewLayer.mDismissMenuAction.run();
+
+        verify(mStubAccessibilityManager).enableShortcutsForTargets(
+                /* enable= */ false,
+                ShortcutConstants.UserShortcutType.SOFTWARE,
+                new ArraySet<>(stubShortcutTargets),
+                mSecureSettings.getRealUserHandle(UserHandle.USER_CURRENT));
+    }
+
+    @Test
+    @DisableFlags(android.view.accessibility.Flags.FLAG_A11Y_QS_SHORTCUT)
     public void triggerDismissMenuAction_matchA11yButtonTargetsResult() {
         mMenuViewLayer.mDismissMenuAction.run();
         verify(mSecureSettings).putStringForUser(
@@ -227,6 +253,7 @@ public class MenuViewLayerTest extends SysuiTestCase {
     }
 
     @Test
+    @DisableFlags(android.view.accessibility.Flags.FLAG_A11Y_QS_SHORTCUT)
     public void triggerDismissMenuAction_matchEnabledA11yServicesResult() {
         setupEnabledAccessibilityServiceList();
 
@@ -238,6 +265,7 @@ public class MenuViewLayerTest extends SysuiTestCase {
     }
 
     @Test
+    @DisableFlags(android.view.accessibility.Flags.FLAG_A11Y_QS_SHORTCUT)
     public void triggerDismissMenuAction_hasHardwareKeyShortcut_keepEnabledStatus() {
         setupEnabledAccessibilityServiceList();
         final List<String> stubShortcutTargets = new ArrayList<>();
@@ -254,9 +282,31 @@ public class MenuViewLayerTest extends SysuiTestCase {
 
     @Test
     @EnableFlags(Flags.FLAG_FLOATING_MENU_DRAG_TO_EDIT)
-    public void onEditAction_gotoEditScreen_isCalled() {
+    public void onEditAction_startsActivity() {
+        mockActivityQuery(true);
         mMenuViewLayer.dispatchAccessibilityAction(R.id.action_edit);
-        verify(mMenuView).gotoEditScreen();
+        ArgumentCaptor<Intent> intentCaptor = ArgumentCaptor.forClass(Intent.class);
+        verify(mSpyContext).startActivity(intentCaptor.capture());
+        assertThat(intentCaptor.getValue().getAction()).isEqualTo(
+                mMenuViewLayer.getIntentForEditScreen().getAction());
+    }
+
+    @Test
+    @EnableFlags(Flags.FLAG_FLOATING_MENU_DRAG_TO_EDIT)
+    public void onEditAction_noResolve_doesNotStart() {
+        mockActivityQuery(false);
+        mMenuViewLayer.dispatchAccessibilityAction(R.id.action_edit);
+        verify(mSpyContext, never()).startActivity(any());
+    }
+
+    @Test
+    public void getIntentForEditScreen_validate() {
+        Intent intent = mMenuViewLayer.getIntentForEditScreen();
+        String[] targets = intent.getBundleExtra(
+                ":settings:show_fragment_args").getStringArray("targets");
+
+        assertThat(intent.getAction()).isEqualTo(Settings.ACTION_ACCESSIBILITY_SHORTCUT_SETTINGS);
+        assertThat(targets).asList().containsExactlyElementsIn(TestUtils.TEST_BUTTON_TARGETS);
     }
 
     @Test
@@ -285,20 +335,6 @@ public class MenuViewLayerTest extends SysuiTestCase {
     }
 
     @Test
-    @DisableFlags(Flags.FLAG_FLOATING_MENU_IME_DISPLACEMENT_ANIMATION)
-    public void showingImeInsetsChange_overlapOnIme_menuShownAboveIme_old() {
-        mMenuAnimationController.moveAndPersistPosition(new PointF(0, IME_TOP + 100));
-        final PointF beforePosition = mMenuView.getMenuPosition();
-
-        dispatchShowingImeInsets();
-
-        final float menuBottom = mMenuView.getTranslationY() + mMenuView.getMenuHeight();
-        assertThat(mMenuView.getTranslationX()).isEqualTo(beforePosition.x);
-        assertThat(menuBottom).isLessThan(beforePosition.y);
-    }
-
-    @Test
-    @EnableFlags(Flags.FLAG_FLOATING_MENU_IME_DISPLACEMENT_ANIMATION)
     public void showingImeInsetsChange_overlapOnIme_menuShownAboveIme() {
         mMenuAnimationController.moveAndPersistPosition(new PointF(0, IME_TOP + 100));
         final PointF beforePosition = mMenuView.getMenuPosition();
@@ -314,19 +350,6 @@ public class MenuViewLayerTest extends SysuiTestCase {
     }
 
     @Test
-    @DisableFlags(Flags.FLAG_FLOATING_MENU_IME_DISPLACEMENT_ANIMATION)
-    public void hidingImeInsetsChange_overlapOnIme_menuBackToOriginalPosition_old() {
-        mMenuAnimationController.moveAndPersistPosition(new PointF(0, IME_TOP + 200));
-        final PointF beforePosition = mMenuView.getMenuPosition();
-
-        dispatchHidingImeInsets();
-
-        assertThat(mMenuView.getTranslationX()).isEqualTo(beforePosition.x);
-        assertThat(mMenuView.getTranslationY()).isEqualTo(beforePosition.y);
-    }
-
-    @Test
-    @EnableFlags(Flags.FLAG_FLOATING_MENU_IME_DISPLACEMENT_ANIMATION)
     public void hidingImeInsetsChange_overlapOnIme_menuBackToOriginalPosition() {
         mMenuAnimationController.moveAndPersistPosition(new PointF(0, IME_TOP + 200));
         final PointF beforePosition = mMenuView.getMenuPosition();
@@ -504,4 +527,15 @@ public class MenuViewLayerTest extends SysuiTestCase {
         magnetListener.onReleasedInTarget(
                 new MagnetizedObject.MagneticTarget(view, 200), mock(MagnetizedObject.class));
     }
+
+    private void mockActivityQuery(boolean successfulQuery) {
+        // Query just needs to return a non-empty set to be successful.
+        ArrayList<ResolveInfo> resolveInfos = new ArrayList<>();
+        if (successfulQuery) {
+            resolveInfos.add(new ResolveInfo());
+        }
+        when(mMockPackageManager.queryIntentActivities(
+                any(), any(PackageManager.ResolveInfoFlags.class))).thenReturn(resolveInfos);
+    }
+
 }

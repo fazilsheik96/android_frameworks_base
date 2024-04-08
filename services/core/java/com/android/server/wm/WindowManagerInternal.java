@@ -620,14 +620,6 @@ public abstract class WindowManagerInternal {
     public abstract void unregisterTaskSystemBarsListener(TaskSystemBarsListener listener);
 
     /**
-     * Registers a listener to be notified to start the keyguard exit animation.
-     *
-     * @param listener The listener to register.
-     */
-    public abstract void registerKeyguardExitAnimationStartListener(
-            KeyguardExitAnimationStartListener listener);
-
-    /**
      * Reports that the password for the given user has changed.
      */
     public abstract void reportPasswordChanged(int userId);
@@ -829,20 +821,20 @@ public abstract class WindowManagerInternal {
      * Show IME on imeTargetWindow once IME has finished layout.
      *
      * @param imeTargetWindowToken token of the (IME target) window which IME should be shown.
-     * @param statsToken the token tracking the current IME show request or {@code null} otherwise.
+     * @param statsToken the token tracking the current IME request.
      */
     public abstract void showImePostLayout(IBinder imeTargetWindowToken,
-            @Nullable ImeTracker.Token statsToken);
+            @NonNull ImeTracker.Token statsToken);
 
     /**
      * Hide IME using imeTargetWindow when requested.
      *
-     * @param imeTargetWindowToken token of the (IME target) window on which requests hiding IME.
+     * @param imeTargetWindowToken token of the (IME target) window which requests hiding IME.
      * @param displayId the id of the display the IME is on.
-     * @param statsToken the token tracking the current IME hide request or {@code null} otherwise.
+     * @param statsToken the token tracking the current IME request.
      */
     public abstract void hideIme(IBinder imeTargetWindowToken, int displayId,
-            @Nullable ImeTracker.Token statsToken);
+            @NonNull ImeTracker.Token statsToken);
 
     /**
      * Tell window manager about a package that should be running with a restricted range of
@@ -1076,7 +1068,13 @@ public abstract class WindowManagerInternal {
     public abstract void clearBlockedApps();
 
     /**
-     * Moves the current focus to the top activity window if the top activity is embedded.
+     * Moves the current focus to the adjacent activity if it has the latest created window.
      */
-    public abstract boolean moveFocusToTopEmbeddedWindowIfNeeded();
+    public abstract boolean moveFocusToAdjacentEmbeddedActivityIfNeeded();
+
+    /**
+     * Returns an instance of {@link ScreenCapture.ScreenshotHardwareBuffer} containing the current
+     * screenshot.
+     */
+    public abstract ScreenCapture.ScreenshotHardwareBuffer takeAssistScreenshot();
 }

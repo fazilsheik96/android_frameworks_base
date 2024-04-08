@@ -2634,7 +2634,10 @@ public final class SurfaceControl implements Parcelable {
      * Threshold values that are sent with
      * {@link Transaction#setTrustedPresentationCallback(SurfaceControl,
      * TrustedPresentationThresholds, Executor, Consumer)}
+     *
+     * @deprecated Use {@link android.window.TrustedPresentationThresholds} instead.
      */
+    @Deprecated
     public static final class TrustedPresentationThresholds {
         private final float mMinAlpha;
         private final float mMinFractionRendered;
@@ -4102,7 +4105,7 @@ public final class SurfaceControl implements Parcelable {
          * whose dataspace has RANGE_EXTENDED.
          *
          * @param sc The layer whose extended range brightness is being specified
-         * @param currentBufferRatio The current hdr/sdr ratio of the current buffer. For example
+         * @param currentBufferRatio The current HDR/SDR ratio of the current buffer. For example
          *                           if the buffer was rendered with a target SDR whitepoint of
          *                           100 nits and a max display brightness of 200 nits, this should
          *                           be set to 2.0f.
@@ -4116,7 +4119,7 @@ public final class SurfaceControl implements Parcelable {
          *
          *                           <p>Must be finite && >= 1.0f
          *
-         * @param desiredRatio The desired hdr/sdr ratio. This can be used to communicate the max
+         * @param desiredRatio The desired HDR/SDR ratio. This can be used to communicate the max
          *                     desired brightness range. This is similar to the "max luminance"
          *                     value in other HDR metadata formats, but represented as a ratio of
          *                     the target SDR whitepoint to the max display brightness. The system
@@ -4153,15 +4156,15 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
-         * Sets the desired hdr headroom for the layer.
+         * Sets the desired HDR headroom for the layer.
          *
          * <p>Prefer using this API over {@link #setExtendedRangeBrightness} for formats that
          *. conform to HDR video standards like HLG or HDR10 which do not communicate a HDR/SDR
          * ratio as part of generating the buffer.
          *
-         * @param sc The layer whose desired hdr headroom is being specified
+         * @param sc The layer whose desired HDR headroom is being specified
          *
-         * @param desiredRatio The desired hdr/sdr ratio. This can be used to communicate the max
+         * @param desiredRatio The desired HDR/SDR ratio. This can be used to communicate the max
          *                     desired brightness range. This is similar to the "max luminance"
          *                     value in other HDR metadata formats, but represented as a ratio of
          *                     the target SDR whitepoint to the max display brightness. The system
@@ -4454,8 +4457,7 @@ public final class SurfaceControl implements Parcelable {
          *   <tr><td>o</td><td>x</td><td>x</td><td>x</td></tr>
          * </table>
          * </blockquote>
-         *
-         *<p>
+         * <p>
          * We first start by computing fr=xscale*yscale=0.9*0.9=0.81, indicating
          * that "81%" of the pixels were rendered. This corresponds to what was 100
          * pixels being displayed in 81 pixels. This is somewhat of an abuse of
@@ -4472,6 +4474,7 @@ public final class SurfaceControl implements Parcelable {
          * be somewhat arbitrary, and so there are some somewhat arbitrary decisions in
          * this API as well.
          * <p>
+         *
          * @param sc         The {@link SurfaceControl} to set the callback on
          * @param thresholds The {@link TrustedPresentationThresholds} that will specify when the to
          *                   invoke the callback.
@@ -4480,7 +4483,11 @@ public final class SurfaceControl implements Parcelable {
          *                   exited the threshold.
          * @return This transaction
          * @see TrustedPresentationThresholds
+         * @deprecated Use
+         * {@link WindowManager#registerTrustedPresentationListener(IBinder,
+         * android.window.TrustedPresentationThresholds, Executor, Consumer)} instead.
          */
+        @Deprecated
         @NonNull
         public Transaction setTrustedPresentationCallback(@NonNull SurfaceControl sc,
                 @NonNull TrustedPresentationThresholds thresholds, @NonNull Executor executor,
@@ -4509,7 +4516,10 @@ public final class SurfaceControl implements Parcelable {
          *
          * @param sc The SurfaceControl that the callback should be cleared from
          * @return This transaction
+         * @deprecated Use {@link WindowManager#unregisterTrustedPresentationListener(Consumer)}
+         * instead.
          */
+        @Deprecated
         @NonNull
         public Transaction clearTrustedPresentationCallback(@NonNull SurfaceControl sc) {
             checkPreconditions(sc);

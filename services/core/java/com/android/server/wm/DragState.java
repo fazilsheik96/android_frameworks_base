@@ -20,6 +20,7 @@ import static android.content.ClipDescription.MIMETYPE_APPLICATION_ACTIVITY;
 import static android.content.ClipDescription.MIMETYPE_APPLICATION_SHORTCUT;
 import static android.content.ClipDescription.MIMETYPE_APPLICATION_TASK;
 import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
+import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_INTERCEPT_GLOBAL_DRAG_AND_DROP;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
@@ -49,6 +50,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.Slog;
@@ -216,8 +218,7 @@ class DragState {
         mIsClosing = true;
         // Unregister the input interceptor.
         if (mInputInterceptor != null) {
-            if (DEBUG_DRAG)
-                Slog.d(TAG_WM, "unregistering drag input channel");
+            if (DEBUG_DRAG) Slog.d(TAG_WM, "Unregistering drag input channel");
 
             // Input channel should be disposed on the thread where the input is being handled.
             mDragDropController.sendHandlerMessage(
@@ -227,9 +228,7 @@ class DragState {
 
         // Send drag end broadcast if drag start has been sent.
         if (mDragInProgress) {
-            if (DEBUG_DRAG) {
-                Slog.d(TAG_WM, "broadcasting DRAG_ENDED");
-            }
+            if (DEBUG_DRAG) Slog.d(TAG_WM, "Broadcasting DRAG_ENDED");
             for (WindowState ws : mNotifiedWindows) {
                 float x = 0;
                 float y = 0;
@@ -248,6 +247,7 @@ class DragState {
                         x, y, mThumbOffsetX, mThumbOffsetY, null, null, null, dragSurface, null,
                         mDragResult);
                 try {
+                    if (DEBUG_DRAG) Slog.d(TAG_WM, "Sending DRAG_ENDED to " + ws);
                     ws.mClient.dispatchDragEvent(event);
                 } catch (RemoteException e) {
                     Slog.w(TAG_WM, "Unable to drag-end window " + ws);
@@ -260,6 +260,7 @@ class DragState {
             }
             mNotifiedWindows.clear();
             mDragInProgress = false;
+            Trace.instant(TRACE_TAG_WINDOW_MANAGER, "DragDropController#DRAG_ENDED");
         }
 
         // Take the cursor back if it has been changed.
@@ -345,6 +346,18 @@ class DragState {
         if (mAnimator != null) {
             return false;
         }
+        try {
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "DragDropController#DROP");
+            return reportDropWindowLockInner(token, x, y);
+        } finally {
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+        }
+    }
+
+    private boolean reportDropWindowLockInner(IBinder token, float x, float y) {
+        if (mAnimator != null) {
+            return false;
+        }
 
         final WindowState touchedWin = mService.mInputToWindowMap.get(token);
         final DragEvent unhandledDropEvent = createDropEvent(x, y, null /* touchedWin */,
@@ -357,18 +370,21 @@ class DragState {
                 return true;
             }
 
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "DragDropController#noWindow");
             // "drop" outside a valid window -- no recipient to apply a timeout to, and we can send
             // the drag-ended message immediately.
             endDragLocked(false /* consumed */, false /* relinquishDragSurfaceToDropTarget */);
             if (DEBUG_DRAG) Slog.d(TAG_WM, "Drop outside a valid window " + touchedWin);
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
             return false;
         }
 
-        if (DEBUG_DRAG) Slog.d(TAG_WM, "sending DROP to " + touchedWin);
+        if (DEBUG_DRAG) Slog.d(TAG_WM, "Sending DROP to " + touchedWin);
 
         final IBinder clientToken = touchedWin.mClient.asBinder();
         final DragEvent event = createDropEvent(x, y, touchedWin, false /* includePrivateInfo */);
         try {
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "DragDropController#dispatchDrop");
             touchedWin.mClient.dispatchDragEvent(event);
 
             // 5 second timeout for this window to respond to the drop
@@ -382,6 +398,7 @@ class DragState {
             if (MY_PID != touchedWin.mSession.mPid) {
                 event.recycle();
             }
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
         mToken = clientToken;
         mUnhandledDropEvent = unhandledDropEvent;
@@ -460,7 +477,7 @@ class DragState {
      */
     CompletableFuture<Void> register(Display display) {
         display.getRealSize(mDisplaySize);
-        if (DEBUG_DRAG) Slog.d(TAG_WM, "registering drag input channel");
+        if (DEBUG_DRAG) Slog.d(TAG_WM, "Registering drag input channel");
         if (mInputInterceptor != null) {
             Slog.e(TAG_WM, "Duplicate register of drag input channel");
             return completedFuture(null);
@@ -473,6 +490,7 @@ class DragState {
     /* call out to each visible window/session informing it about the drag
      */
     void broadcastDragStartedLocked(final float touchX, final float touchY) {
+        Trace.instant(TRACE_TAG_WINDOW_MANAGER, "DragDropController#DRAG_STARTED");
         mOriginalX = mCurrentX = touchX;
         mOriginalY = mCurrentY = touchY;
 
@@ -489,7 +507,7 @@ class DragState {
                 mSourceUserId, UserManager.DISALLOW_CROSS_PROFILE_COPY_PASTE);
 
         if (DEBUG_DRAG) {
-            Slog.d(TAG_WM, "broadcasting DRAG_STARTED at (" + touchX + ", " + touchY + ")");
+            Slog.d(TAG_WM, "Broadcasting DRAG_STARTED at (" + touchX + ", " + touchY + ")");
         }
 
         final boolean containsAppExtras = containsApplicationExtras(mDataDescription);

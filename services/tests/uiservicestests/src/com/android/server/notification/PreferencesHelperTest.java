@@ -115,7 +115,6 @@ import android.provider.Settings.Global;
 import android.provider.Settings.Secure;
 import android.service.notification.ConversationChannelWrapper;
 import android.service.notification.nano.RankingHelperProto;
-import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.TestableContentResolver;
 import android.text.format.DateUtils;
 import android.util.ArrayMap;
@@ -128,6 +127,7 @@ import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
 
 import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.config.sysui.SystemUiSystemPropertiesFlags;
@@ -324,7 +324,11 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         when(mPermissionHelper.getNotificationPermissionValues(USER_SYSTEM))
                 .thenReturn(appPermissions);
 
-        when(mUserProfiles.getCurrentProfileIds()).thenReturn(IntArray.wrap(new int[] {0}));
+        IntArray currentProfileIds = IntArray.wrap(new int[]{0});
+        if (UserManager.isHeadlessSystemUserMode()) {
+            currentProfileIds.add(UserHandle.getUserId(UID_HEADLESS));
+        }
+        when(mUserProfiles.getCurrentProfileIds()).thenReturn(currentProfileIds);
 
         mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper,
                 mPermissionHelper, mPermissionManager, mLogger, mAppOpsManager, mUserProfiles,
@@ -3955,6 +3959,20 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         assertEquals(mXmlHelper.getBubblePreference(PKG_O, UID_O), BUBBLE_PREFERENCE_NONE);
         assertEquals(PreferencesHelper.LockableAppFields.USER_LOCKED_BUBBLE,
                 mXmlHelper.getAppLockedFields(PKG_O, UID_O));
+    }
+
+    @Test
+    public void testReadXml_existingPackage_bubblePrefsRestored() throws Exception {
+        mHelper.setBubblesAllowed(PKG_O, UID_O, BUBBLE_PREFERENCE_ALL);
+        assertEquals(BUBBLE_PREFERENCE_ALL, mHelper.getBubblePreference(PKG_O, UID_O));
+
+        mXmlHelper.setBubblesAllowed(PKG_O, UID_O, BUBBLE_PREFERENCE_NONE);
+        assertEquals(BUBBLE_PREFERENCE_NONE, mXmlHelper.getBubblePreference(PKG_O, UID_O));
+
+        ByteArrayOutputStream stream = writeXmlAndPurge(PKG_O, UID_O, false, UserHandle.USER_ALL);
+        loadStreamXml(stream, true, UserHandle.USER_ALL);
+
+        assertEquals(BUBBLE_PREFERENCE_ALL, mXmlHelper.getBubblePreference(PKG_O, UID_O));
     }
 
     @Test

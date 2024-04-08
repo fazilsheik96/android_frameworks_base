@@ -17,10 +17,9 @@
 package com.android.wm.shell.flicker.service.splitscreen.scenarios
 
 import android.app.Instrumentation
-import android.tools.common.NavBar
-import android.tools.common.Rotation
-import android.tools.device.AndroidLoggerSetupRule
-import android.tools.device.traces.parsers.WindowManagerStateHelper
+import android.tools.NavBar
+import android.tools.Rotation
+import android.tools.traces.parsers.WindowManagerStateHelper
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.android.launcher3.tapl.LauncherInstrumentation
@@ -28,7 +27,6 @@ import com.android.wm.shell.flicker.service.common.Utils
 import com.android.wm.shell.flicker.utils.SplitScreenUtils
 import org.junit.After
 import org.junit.Before
-import org.junit.ClassRule
 import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
@@ -67,9 +65,5 @@ abstract class UnlockKeyguardToSplitScreen {
     fun teardown() {
         primaryApp.exit(wmHelper)
         secondaryApp.exit(wmHelper)
-    }
-
-    companion object {
-        @ClassRule @JvmField val setupLoggerRule = AndroidLoggerSetupRule()
     }
 }

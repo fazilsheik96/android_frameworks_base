@@ -71,6 +71,7 @@ import android.media.MediaRouter2Manager;
 import android.media.projection.IMediaProjectionManager;
 import android.media.projection.MediaProjectionManager;
 import android.media.session.MediaSessionManager;
+import android.nearby.NearbyManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkScoreManager;
 import android.net.wifi.WifiManager;
@@ -118,6 +119,8 @@ import com.android.systemui.dagger.qualifiers.DisplayId;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dagger.qualifiers.TestHarness;
 import com.android.systemui.shared.system.PackageManagerWrapper;
+import com.android.systemui.user.utils.UserScopedService;
+import com.android.systemui.user.utils.UserScopedServiceImpl;
 
 import dagger.Module;
 import dagger.Provides;
@@ -441,6 +444,12 @@ public class FrameworkServicesModule {
 
     @Provides
     @Singleton
+    static NearbyManager provideNearbyManager(Context context) {
+        return context.getSystemService(NearbyManager.class);
+    }
+
+    @Provides
+    @Singleton
     static NetworkScoreManager provideNetworkScoreManager(Context context) {
         return context.getSystemService(NetworkScoreManager.class);
     }
@@ -617,6 +626,12 @@ public class FrameworkServicesModule {
     }
 
     @Provides
+    @Singleton
+    static UserScopedService<UserManager> provideScopedUserManager(@Application Context context) {
+        return new UserScopedServiceImpl<>(context, UserManager.class);
+    }
+
+    @Provides
     static WallpaperManager provideWallpaperManager(Context context) {
         return context.getSystemService(WallpaperManager.class);
     }
@@ -636,6 +651,7 @@ public class FrameworkServicesModule {
 
     @Provides
     @Singleton
+    @Nullable
     static CarrierConfigManager provideCarrierConfigManager(Context context) {
         return context.getSystemService(CarrierConfigManager.class);
     }

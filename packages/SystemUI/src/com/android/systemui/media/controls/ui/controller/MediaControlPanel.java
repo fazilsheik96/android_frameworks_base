@@ -18,7 +18,7 @@ package com.android.systemui.media.controls.ui.controller;
 
 import static android.provider.Settings.ACTION_MEDIA_CONTROLS_SETTINGS;
 
-import static com.android.systemui.Flags.legacyLeAudioSharing;
+import static com.android.settingslib.flags.Flags.legacyLeAudioSharing;
 import static com.android.systemui.media.controls.shared.model.SmartspaceMediaDataKt.NUM_REQUIRED_RECOMMENDATIONS;
 
 import android.animation.Animator;
@@ -109,7 +109,7 @@ import com.android.systemui.media.controls.util.MediaDataUtils;
 import com.android.systemui.media.controls.util.MediaFlags;
 import com.android.systemui.media.controls.util.MediaUiEventLogger;
 import com.android.systemui.media.controls.util.SmallHash;
-import com.android.systemui.media.dialog.MediaOutputDialogFactory;
+import com.android.systemui.media.dialog.MediaOutputDialogManager;
 import com.android.systemui.monet.ColorScheme;
 import com.android.systemui.monet.Style;
 import com.android.systemui.plugins.ActivityStarter;
@@ -223,7 +223,7 @@ public class MediaControlPanel {
     protected int mUid = Process.INVALID_UID;
     private int mSmartspaceMediaItemsCount;
     private MediaCarouselController mMediaCarouselController;
-    private final MediaOutputDialogFactory mMediaOutputDialogFactory;
+    private final MediaOutputDialogManager mMediaOutputDialogManager;
     private final FalsingManager mFalsingManager;
     private MetadataAnimationHandler mMetadataAnimationHandler;
     private ColorSchemeTransition mColorSchemeTransition;
@@ -260,7 +260,6 @@ public class MediaControlPanel {
     private TurbulenceNoiseController mTurbulenceNoiseController;
     private LoadingEffect mLoadingEffect;
     private final GlobalSettings mGlobalSettings;
-    private final Random mRandom = new Random();
     private TurbulenceNoiseAnimationConfig mTurbulenceNoiseAnimationConfig;
     private boolean mWasPlaying = false;
     private boolean mButtonClicked = false;
@@ -305,7 +304,7 @@ public class MediaControlPanel {
             MediaViewController mediaViewController,
             SeekBarViewModel seekBarViewModel,
             Lazy<MediaDataManager> lazyMediaDataManager,
-            MediaOutputDialogFactory mediaOutputDialogFactory,
+            MediaOutputDialogManager mediaOutputDialogManager,
             MediaCarouselController mediaCarouselController,
             FalsingManager falsingManager,
             SystemClock systemClock,
@@ -325,7 +324,7 @@ public class MediaControlPanel {
         mSeekBarViewModel = seekBarViewModel;
         mMediaViewController = mediaViewController;
         mMediaDataManagerLazy = lazyMediaDataManager;
-        mMediaOutputDialogFactory = mediaOutputDialogFactory;
+        mMediaOutputDialogManager = mediaOutputDialogManager;
         mMediaCarouselController = mediaCarouselController;
         mFalsingManager = falsingManager;
         mSystemClock = systemClock;
@@ -738,7 +737,7 @@ public class MediaControlPanel {
                                     mPackageName, mMediaViewHolder.getSeamlessButton());
                         } else {
                             mLogger.logOpenOutputSwitcher(mUid, mPackageName, mInstanceId);
-                            mMediaOutputDialogFactory.create(mPackageName, true,
+                            mMediaOutputDialogManager.createAndShow(mPackageName, true,
                                     mMediaViewHolder.getSeamlessButton());
                         }
                     } else {
@@ -762,7 +761,7 @@ public class MediaControlPanel {
                                 }
                             }
                         } else {
-                            mMediaOutputDialogFactory.create(mPackageName, true,
+                            mMediaOutputDialogManager.createAndShow(mPackageName, true,
                                     mMediaViewHolder.getSeamlessButton());
                         }
                     }
@@ -1294,19 +1293,20 @@ public class MediaControlPanel {
                 mMediaViewHolder.getTurbulenceNoiseView();
         int width = targetView.getWidth();
         int height = targetView.getHeight();
+        Random random = new Random();
 
         return new TurbulenceNoiseAnimationConfig(
                 /* gridCount= */ 2.14f,
                 TurbulenceNoiseAnimationConfig.DEFAULT_LUMINOSITY_MULTIPLIER,
-                /* noiseOffsetX= */ mRandom.nextFloat(),
-                /* noiseOffsetY= */ mRandom.nextFloat(),
-                /* noiseOffsetZ= */ mRandom.nextFloat(),
+                /* noiseOffsetX= */ random.nextFloat(),
+                /* noiseOffsetY= */ random.nextFloat(),
+                /* noiseOffsetZ= */ random.nextFloat(),
                 /* noiseMoveSpeedX= */ 0.42f,
                 /* noiseMoveSpeedY= */ 0f,
                 TurbulenceNoiseAnimationConfig.DEFAULT_NOISE_SPEED_Z,
                 // Color will be correctly updated in ColorSchemeTransition.
                 /* color= */ mColorSchemeTransition.getAccentPrimary().getCurrentColor(),
-                /* backgroundColor= */ Color.BLACK,
+                /* screenColor= */ Color.BLACK,
                 width,
                 height,
                 TurbulenceNoiseAnimationConfig.DEFAULT_MAX_DURATION_IN_MILLIS,

@@ -78,6 +78,14 @@ public interface ShadeController extends CoreStartable {
      */
     void animateCollapseShade(int flags, boolean force, boolean delayed, float speedUpFactor);
 
+    /**
+     * Collapses the shade with an animation duration in milliseconds.
+     *
+     * @deprecated use animateCollapseShade with a speed up factor instead
+     */
+    @Deprecated
+    void collapseWithDuration(int animationDuration);
+
     /** Expand the shade with an animation. */
     void animateExpandShade();
 
@@ -223,6 +231,13 @@ public interface ShadeController extends CoreStartable {
 
     /** Called when a launch animation ends. */
     void onLaunchAnimationEnd(boolean launchIsFullScreen);
+
+    /**
+     * Performs haptic feedback from a view with a haptic feedback constant.
+     *
+     * @param constant One of android.view.HapticFeedbackConstants
+     */
+    void performHapticFeedback(int constant);
 
     /** Sets the listener for when the visibility of the shade changes. */
     default void setVisibilityListener(ShadeVisibilityListener listener) {}

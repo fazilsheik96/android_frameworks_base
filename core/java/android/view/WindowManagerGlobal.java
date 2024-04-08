@@ -16,6 +16,7 @@
 
 package android.view;
 
+import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 
 import android.animation.ValueAnimator;
@@ -343,6 +344,36 @@ public final class WindowManagerGlobal {
         return null;
     }
 
+    private int getVisibleRootCount (ArrayList<ViewRootImpl> roots) {
+        int visibleRootCount = 0;
+        int lastLeft = -1;
+        int lastTop = -1;
+        int lastWidth = 0;
+        int lastHeight = 0;
+        for (int i = roots.size() - 1; i >= 0; --i) {
+            View root_view = roots.get(i).getView();
+            if (root_view != null && root_view.getVisibility() == View.VISIBLE) {
+                int left = root_view.getLeft();
+                int top = root_view.getTop();
+                int width = root_view.getRight() - root_view.getLeft() ;
+                int height = root_view.getBottom() - root_view.getTop() ;
+                // Filter the invalid visible views.
+                if (width != 0 && height != 0) {
+                    // Filter the overwritten visible views.
+                    if (lastWidth != width || lastHeight != height ||
+                        lastLeft != left || lastTop != top ) {
+                        visibleRootCount++;
+                    }
+                    lastLeft = left;
+                    lastTop = top;
+                    lastWidth = width;
+                    lastHeight = height;
+                }
+            }
+        }
+        return visibleRootCount;
+    }
+
     public void addView(View view, ViewGroup.LayoutParams params,
             Display display, Window parentWindow, int userId) {
         if (view == null) {
@@ -399,12 +430,10 @@ public final class WindowManagerGlobal {
                 // The previous removeView() had not completed executing. Now it has.
             }
 
-            boolean isSubWindow = false;
             // If this is a panel window, then find the window it is being
             // attached to for future reference.
             if (wparams.type >= WindowManager.LayoutParams.FIRST_SUB_WINDOW &&
                     wparams.type <= WindowManager.LayoutParams.LAST_SUB_WINDOW) {
-                isSubWindow = true;
                 final int count = mViews.size();
                 for (int i = 0; i < count; i++) {
                     if (mRoots.get(i).mWindow.asBinder() == wparams.token) {
@@ -436,15 +465,8 @@ public final class WindowManagerGlobal {
             view.setLayoutParams(wparams);
 
             int visibleRootCount = 0;
-            if (!isSubWindow) {
-                for (int i = mRoots.size() - 1; i >= 0; --i) {
-                    View root_view = mRoots.get(i).getView();
-                    if (root_view != null && root_view.getVisibility() == View.VISIBLE) {
-                        visibleRootCount++;
-                    }
-                }
-            }
-            if (isSubWindow || visibleRootCount > 1) {
+            visibleRootCount = getVisibleRootCount(mRoots);
+            if (visibleRootCount > 1) {
                 ScrollOptimizer.disableOptimizer(true);
             }
 
@@ -575,14 +597,15 @@ public final class WindowManagerGlobal {
                 mDyingViews.remove(view);
             }
 
+            // The visibleRootCount more than one means multi-layer, and multi-layer rendering
+            // can result in unexpected pending between UI thread and render thread with
+            // pre-rendering enabled. Need to disable pre-rendering for multi-layer cases.
             int visibleRootCount = 0;
-            for (int i = mRoots.size() - 1; i >= 0; --i) {
-                View root_view = mRoots.get(i).getView();
-                if (root_view != null && root_view.getVisibility() == View.VISIBLE) {
-                    visibleRootCount++;
-                }
-            }
-            if (visibleRootCount == 1) {
+            visibleRootCount = getVisibleRootCount(mRoots);
+
+            if (visibleRootCount > 1) {
+                ScrollOptimizer.disableOptimizer(true);
+            } else if (visibleRootCount == 1) {
                 ScrollOptimizer.disableOptimizer(false);
             }
 
@@ -867,20 +890,40 @@ public final class WindowManagerGlobal {
         mTrustedPresentationListener.removeListener(listener);
     }
 
-    InputTransferToken registerBatchedSurfaceControlInputReceiver(int displayId,
+    private static InputChannel createInputChannel(@NonNull IBinder clientToken,
             @NonNull InputTransferToken hostToken, @NonNull SurfaceControl surfaceControl,
-            @NonNull Choreographer choreographer, @NonNull SurfaceControlInputReceiver receiver) {
-        IBinder clientToken = new Binder();
-        InputTransferToken inputTransferToken = new InputTransferToken();
+            @Nullable InputTransferToken inputTransferToken) {
         InputChannel inputChannel = new InputChannel();
         try {
-            WindowManagerGlobal.getWindowSession().grantInputChannel(displayId, surfaceControl,
-                    clientToken, hostToken, 0, 0, TYPE_APPLICATION, 0, null, inputTransferToken,
-                    surfaceControl.getName(), inputChannel);
+            // TODO (b/329860681): Use INVALID_DISPLAY for now because the displayId will be
+            // selected in  SurfaceFlinger. This should be cleaned up so grantInputChannel doesn't
+            // take in a displayId at all
+            WindowManagerGlobal.getWindowSession().grantInputChannel(INVALID_DISPLAY,
+                    surfaceControl, clientToken, hostToken, 0, 0, TYPE_APPLICATION, 0, null,
+                    inputTransferToken, surfaceControl.getName(), inputChannel);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to create input channel", e);
             e.rethrowAsRuntimeException();
         }
+        return inputChannel;
+    }
+
+    private static void removeInputChannel(IBinder clientToken) {
+        try {
+            WindowManagerGlobal.getWindowSession().remove(clientToken);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to remove input channel", e);
+            e.rethrowAsRuntimeException();
+        }
+    }
+
+    InputTransferToken registerBatchedSurfaceControlInputReceiver(
+            @NonNull InputTransferToken hostToken, @NonNull SurfaceControl surfaceControl,
+            @NonNull Choreographer choreographer, @NonNull SurfaceControlInputReceiver receiver) {
+        IBinder clientToken = new Binder();
+        InputTransferToken inputTransferToken = new InputTransferToken();
+        InputChannel inputChannel = createInputChannel(clientToken, hostToken,
+                surfaceControl, inputTransferToken);
 
         synchronized (mSurfaceControlInputReceivers) {
             mSurfaceControlInputReceivers.put(surfaceControl.getLayerId(),
@@ -897,20 +940,13 @@ public final class WindowManagerGlobal {
         return inputTransferToken;
     }
 
-    InputTransferToken registerUnbatchedSurfaceControlInputReceiver(int displayId,
+    InputTransferToken registerUnbatchedSurfaceControlInputReceiver(
             @NonNull InputTransferToken hostToken, @NonNull SurfaceControl surfaceControl,
             @NonNull Looper looper, @NonNull SurfaceControlInputReceiver receiver) {
         IBinder clientToken = new Binder();
         InputTransferToken inputTransferToken = new InputTransferToken();
-        InputChannel inputChannel = new InputChannel();
-        try {
-            WindowManagerGlobal.getWindowSession().grantInputChannel(displayId, surfaceControl,
-                    clientToken, hostToken, 0, 0, TYPE_APPLICATION, 0, null, inputTransferToken,
-                    surfaceControl.getName(), inputChannel);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to create input channel", e);
-            e.rethrowAsRuntimeException();
-        }
+        InputChannel inputChannel = createInputChannel(clientToken, hostToken,
+                surfaceControl, inputTransferToken);
 
         synchronized (mSurfaceControlInputReceivers) {
             mSurfaceControlInputReceivers.put(surfaceControl.getLayerId(),
@@ -937,13 +973,7 @@ public final class WindowManagerGlobal {
             Log.w(TAG, "No registered input event receiver with sc: " + surfaceControl);
             return;
         }
-        try {
-            WindowManagerGlobal.getWindowSession().remove(
-                    surfaceControlInputReceiverInfo.mClientToken);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to remove input channel", e);
-            e.rethrowAsRuntimeException();
-        }
+        removeInputChannel(surfaceControlInputReceiverInfo.mClientToken);
 
         surfaceControlInputReceiverInfo.mInputEventReceiver.dispose();
     }

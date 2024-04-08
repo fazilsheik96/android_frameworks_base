@@ -33,6 +33,7 @@ open class ShadeControllerEmptyImpl @Inject constructor() : ShadeController {
         delayed: Boolean,
         speedUpFactor: Float
     ) {}
+    override fun collapseWithDuration(animationDuration: Int) {}
     override fun animateExpandShade() {}
     override fun animateExpandQs() {}
     override fun postAnimateCollapseShade() {}
@@ -62,4 +63,5 @@ open class ShadeControllerEmptyImpl @Inject constructor() : ShadeController {
     override fun onStatusBarTouch(event: MotionEvent?) {}
     override fun onLaunchAnimationCancelled(isLaunchForActivity: Boolean) {}
     override fun onLaunchAnimationEnd(launchIsFullScreen: Boolean) {}
+    override fun performHapticFeedback(constant: Int) {}
 }

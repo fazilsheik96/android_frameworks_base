@@ -16,8 +16,7 @@
 
 package com.android.systemui.qs.tiles.dialog.bluetooth
 
-import android.content.SharedPreferences
-import android.content.pm.UserInfo
+import android.bluetooth.BluetoothAdapter
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
 import android.view.View
@@ -27,15 +26,18 @@ import android.widget.LinearLayout
 import androidx.test.filters.SmallTest
 import com.android.internal.logging.UiEventLogger
 import com.android.settingslib.bluetooth.CachedBluetoothDevice
+import com.android.settingslib.bluetooth.LocalBluetoothManager
 import com.android.settingslib.flags.Flags
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.animation.DialogTransitionAnimator
 import com.android.systemui.plugins.ActivityStarter
-import com.android.systemui.user.data.repository.FakeUserRepository
+import com.android.systemui.statusbar.phone.SystemUIDialog
+import com.android.systemui.util.FakeSharedPreferences
 import com.android.systemui.util.concurrency.FakeExecutor
+import com.android.systemui.util.kotlin.getMutableStateFlow
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.nullable
-import com.android.systemui.util.settings.FakeSettings
+import com.android.systemui.util.mockito.whenever
 import com.android.systemui.util.time.FakeSystemClock
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineDispatcher
@@ -50,12 +52,12 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.Mock
 import org.mockito.Mockito.anyBoolean
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
-import org.mockito.Mockito.`when`
 import org.mockito.junit.MockitoJUnit
 import org.mockito.junit.MockitoRule
 
@@ -72,6 +74,8 @@ class BluetoothTileDialogViewModelTest : SysuiTestCase() {
 
     @Mock private lateinit var bluetoothStateInteractor: BluetoothStateInteractor
 
+    @Mock private lateinit var bluetoothAutoOnInteractor: BluetoothAutoOnInteractor
+
     @Mock private lateinit var deviceItemInteractor: DeviceItemInteractor
 
     @Mock private lateinit var activityStarter: ActivityStarter
@@ -84,15 +88,23 @@ class BluetoothTileDialogViewModelTest : SysuiTestCase() {
 
     @Mock private lateinit var uiEventLogger: UiEventLogger
 
-    @Mock private lateinit var logger: BluetoothTileDialogLogger
+    @Mock private lateinit var bluetoothAdapter: BluetoothAdapter
 
-    @Mock private lateinit var sharedPreferences: SharedPreferences
+    @Mock private lateinit var localBluetoothManager: LocalBluetoothManager
+
+    @Mock
+    private lateinit var mBluetoothTileDialogDelegateDelegateFactory:
+        BluetoothTileDialogDelegate.Factory
+
+    @Mock private lateinit var bluetoothTileDialogDelegate: BluetoothTileDialogDelegate
+
+    @Mock private lateinit var sysuiDialog: SystemUIDialog
+
+    private val sharedPreferences = FakeSharedPreferences()
 
     private lateinit var scheduler: TestCoroutineScheduler
     private lateinit var dispatcher: CoroutineDispatcher
     private lateinit var testScope: TestScope
-    private lateinit var secureSettings: FakeSettings
-    private lateinit var userRepository: FakeUserRepository
 
     @Before
     fun setUp() {
@@ -100,14 +112,6 @@ class BluetoothTileDialogViewModelTest : SysuiTestCase() {
         scheduler = TestCoroutineScheduler()
         dispatcher = UnconfinedTestDispatcher(scheduler)
         testScope = TestScope(dispatcher)
-        secureSettings = FakeSettings()
-        userRepository = FakeUserRepository()
-        userRepository.setUserInfos(listOf(SYSTEM_USER))
-        secureSettings.putIntForUser(
-            BluetoothAutoOnRepository.SETTING_NAME,
-            BluetoothAutoOnInteractor.ENABLED,
-            SYSTEM_USER_ID
-        )
         bluetoothTileDialogViewModel =
             BluetoothTileDialogViewModel(
                 deviceItemInteractor,
@@ -115,44 +119,61 @@ class BluetoothTileDialogViewModelTest : SysuiTestCase() {
                 // TODO(b/316822488): Create FakeBluetoothAutoOnInteractor.
                 BluetoothAutoOnInteractor(
                     BluetoothAutoOnRepository(
-                        secureSettings,
-                        userRepository,
+                        localBluetoothManager,
+                        bluetoothAdapter,
                         testScope.backgroundScope,
                         dispatcher
                     )
                 ),
                 mDialogTransitionAnimator,
                 activityStarter,
-                fakeSystemClock,
                 uiEventLogger,
-                logger,
                 testScope.backgroundScope,
                 dispatcher,
                 dispatcher,
                 sharedPreferences,
+                mBluetoothTileDialogDelegateDelegateFactory
             )
-        `when`(deviceItemInteractor.deviceItemUpdate).thenReturn(MutableSharedFlow())
-        `when`(bluetoothStateInteractor.bluetoothStateUpdate)
+        whenever(deviceItemInteractor.deviceItemUpdate).thenReturn(MutableSharedFlow())
+        whenever(bluetoothStateInteractor.bluetoothStateUpdate)
             .thenReturn(MutableStateFlow(null).asStateFlow())
-        `when`(deviceItemInteractor.deviceItemUpdateRequest)
+        whenever(deviceItemInteractor.deviceItemUpdateRequest)
             .thenReturn(MutableStateFlow(Unit).asStateFlow())
-        `when`(bluetoothStateInteractor.isBluetoothEnabled).thenReturn(true)
+        whenever(bluetoothStateInteractor.isBluetoothEnabled).thenReturn(true)
+        whenever(
+                mBluetoothTileDialogDelegateDelegateFactory.create(
+                    any(),
+                    anyInt(),
+                    ArgumentMatchers.anyBoolean(),
+                    any(),
+                    any()
+                )
+            )
+            .thenReturn(bluetoothTileDialogDelegate)
+        whenever(bluetoothTileDialogDelegate.createDialog()).thenReturn(sysuiDialog)
+        whenever(sysuiDialog.context).thenReturn(mContext)
+        whenever(bluetoothTileDialogDelegate.bluetoothStateToggle)
+            .thenReturn(getMutableStateFlow(false))
+        whenever(bluetoothTileDialogDelegate.deviceItemClick)
+            .thenReturn(getMutableStateFlow(deviceItem))
+        whenever(bluetoothTileDialogDelegate.contentHeight).thenReturn(getMutableStateFlow(0))
+        whenever(bluetoothTileDialogDelegate.bluetoothAutoOnToggle)
+            .thenReturn(getMutableStateFlow(false))
     }
 
     @Test
     fun testShowDialog_noAnimation() {
         testScope.runTest {
-            bluetoothTileDialogViewModel.showDialog(context, null)
+            bluetoothTileDialogViewModel.showDialog(null)
 
             verify(mDialogTransitionAnimator, never()).showFromView(any(), any(), any(), any())
-            verify(uiEventLogger).log(BluetoothTileDialogUiEvent.BLUETOOTH_TILE_DIALOG_SHOWN)
         }
     }
 
     @Test
     fun testShowDialog_animated() {
         testScope.runTest {
-            bluetoothTileDialogViewModel.showDialog(mContext, LinearLayout(mContext))
+            bluetoothTileDialogViewModel.showDialog(LinearLayout(mContext))
 
             verify(mDialogTransitionAnimator).showFromView(any(), any(), nullable(), anyBoolean())
         }
@@ -162,7 +183,7 @@ class BluetoothTileDialogViewModelTest : SysuiTestCase() {
     fun testShowDialog_animated_callInBackgroundThread() {
         testScope.runTest {
             backgroundExecutor.execute {
-                bluetoothTileDialogViewModel.showDialog(mContext, LinearLayout(mContext))
+                bluetoothTileDialogViewModel.showDialog(LinearLayout(mContext))
 
                 verify(mDialogTransitionAnimator)
                     .showFromView(any(), any(), nullable(), anyBoolean())
@@ -173,7 +194,7 @@ class BluetoothTileDialogViewModelTest : SysuiTestCase() {
     @Test
     fun testShowDialog_fetchDeviceItem() {
         testScope.runTest {
-            bluetoothTileDialogViewModel.showDialog(context, null)
+            bluetoothTileDialogViewModel.showDialog(null)
 
             verify(deviceItemInteractor).deviceItemUpdate
         }
@@ -182,7 +203,7 @@ class BluetoothTileDialogViewModelTest : SysuiTestCase() {
     @Test
     fun testShowDialog_withBluetoothStateValue() {
         testScope.runTest {
-            bluetoothTileDialogViewModel.showDialog(context, null)
+            bluetoothTileDialogViewModel.showDialog(null)
 
             verify(bluetoothStateInteractor).bluetoothStateUpdate
         }
@@ -191,8 +212,8 @@ class BluetoothTileDialogViewModelTest : SysuiTestCase() {
     @Test
     fun testStartSettingsActivity_activityLaunched_dialogDismissed() {
         testScope.runTest {
-            `when`(deviceItem.cachedBluetoothDevice).thenReturn(cachedBluetoothDevice)
-            bluetoothTileDialogViewModel.showDialog(context, null)
+            whenever(deviceItem.cachedBluetoothDevice).thenReturn(cachedBluetoothDevice)
+            bluetoothTileDialogViewModel.showDialog(null)
 
             val clickedView = View(context)
             bluetoothTileDialogViewModel.onPairNewDeviceClicked(clickedView)
@@ -239,26 +260,22 @@ class BluetoothTileDialogViewModelTest : SysuiTestCase() {
     }
 
     @Test
-    fun testIsAutoOnToggleFeatureAvailable_flagOn_settingValueSet_returnTrue() {
+    fun testIsAutoOnToggleFeatureAvailable_returnTrue() {
         testScope.runTest {
+            whenever(bluetoothAdapter.isAutoOnSupported).thenReturn(true)
+
             val actual = bluetoothTileDialogViewModel.isAutoOnToggleFeatureAvailable()
             assertThat(actual).isTrue()
         }
     }
 
     @Test
-    fun testIsAutoOnToggleFeatureAvailable_flagOff_settingValueSet_returnFalse() {
+    fun testIsAutoOnToggleFeatureAvailable_returnFalse() {
         testScope.runTest {
-            mSetFlagsRule.disableFlags(Flags.FLAG_BLUETOOTH_QS_TILE_DIALOG_AUTO_ON_TOGGLE)
+            whenever(bluetoothAdapter.isAutoOnSupported).thenReturn(false)
 
             val actual = bluetoothTileDialogViewModel.isAutoOnToggleFeatureAvailable()
             assertThat(actual).isFalse()
         }
-    }
-
-    companion object {
-        private const val SYSTEM_USER_ID = 0
-        private val SYSTEM_USER =
-            UserInfo(/* id= */ SYSTEM_USER_ID, /* name= */ "system user", /* flags= */ 0)
     }
 }

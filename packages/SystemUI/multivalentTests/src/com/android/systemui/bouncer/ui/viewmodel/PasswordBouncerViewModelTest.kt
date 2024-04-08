@@ -19,6 +19,7 @@ package com.android.systemui.bouncer.ui.viewmodel
 import android.content.pm.UserInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
+import com.android.compose.animation.scene.SceneKey
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.authentication.data.repository.fakeAuthenticationRepository
 import com.android.systemui.authentication.domain.interactor.authenticationInteractor
@@ -33,7 +34,7 @@ import com.android.systemui.inputmethod.domain.interactor.inputMethodInteractor
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.res.R
 import com.android.systemui.scene.domain.interactor.sceneInteractor
-import com.android.systemui.scene.shared.model.SceneKey
+import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.testKosmos
 import com.android.systemui.user.data.model.SelectedUserModel
 import com.android.systemui.user.data.model.SelectionStatus
@@ -65,7 +66,6 @@ class PasswordBouncerViewModelTest : SysuiTestCase() {
     private val bouncerInteractor by lazy { kosmos.bouncerInteractor }
     private val selectedUserInteractor by lazy { kosmos.selectedUserInteractor }
     private val inputMethodInteractor by lazy { kosmos.inputMethodInteractor }
-    private val bouncerViewModel by lazy { kosmos.bouncerViewModel }
     private val isInputEnabled = MutableStateFlow(true)
 
     private val underTest =
@@ -75,6 +75,7 @@ class PasswordBouncerViewModelTest : SysuiTestCase() {
             interactor = bouncerInteractor,
             inputMethodInteractor = inputMethodInteractor,
             selectedUserInteractor = selectedUserInteractor,
+            onIntentionalUserInput = {},
         )
 
     @Before
@@ -87,29 +88,24 @@ class PasswordBouncerViewModelTest : SysuiTestCase() {
     fun onShown() =
         testScope.runTest {
             val currentScene by collectLastValue(sceneInteractor.currentScene)
-            val message by collectLastValue(bouncerViewModel.message)
             val password by collectLastValue(underTest.password)
             lockDeviceAndOpenPasswordBouncer()
 
-            assertThat(message?.text).isEqualTo(ENTER_YOUR_PASSWORD)
             assertThat(password).isEmpty()
-            assertThat(currentScene).isEqualTo(SceneKey.Bouncer)
+            assertThat(currentScene).isEqualTo(Scenes.Bouncer)
             assertThat(underTest.authenticationMethod).isEqualTo(AuthenticationMethodModel.Password)
         }
 
     @Test
     fun onHidden_resetsPasswordInputAndMessage() =
         testScope.runTest {
-            val message by collectLastValue(bouncerViewModel.message)
             val password by collectLastValue(underTest.password)
             lockDeviceAndOpenPasswordBouncer()
 
             underTest.onPasswordInputChanged("password")
-            assertThat(message?.text).isNotEqualTo(ENTER_YOUR_PASSWORD)
             assertThat(password).isNotEmpty()
 
             underTest.onHidden()
-            assertThat(message?.text).isEqualTo(ENTER_YOUR_PASSWORD)
             assertThat(password).isEmpty()
         }
 
@@ -117,15 +113,13 @@ class PasswordBouncerViewModelTest : SysuiTestCase() {
     fun onPasswordInputChanged() =
         testScope.runTest {
             val currentScene by collectLastValue(sceneInteractor.currentScene)
-            val message by collectLastValue(bouncerViewModel.message)
             val password by collectLastValue(underTest.password)
             lockDeviceAndOpenPasswordBouncer()
 
             underTest.onPasswordInputChanged("password")
 
-            assertThat(message?.text).isEmpty()
             assertThat(password).isEqualTo("password")
-            assertThat(currentScene).isEqualTo(SceneKey.Bouncer)
+            assertThat(currentScene).isEqualTo(Scenes.Bouncer)
         }
 
     @Test
@@ -143,7 +137,6 @@ class PasswordBouncerViewModelTest : SysuiTestCase() {
     @Test
     fun onAuthenticateKeyPressed_whenWrong() =
         testScope.runTest {
-            val message by collectLastValue(bouncerViewModel.message)
             val password by collectLastValue(underTest.password)
             lockDeviceAndOpenPasswordBouncer()
 
@@ -151,33 +144,29 @@ class PasswordBouncerViewModelTest : SysuiTestCase() {
             underTest.onAuthenticateKeyPressed()
 
             assertThat(password).isEmpty()
-            assertThat(message?.text).isEqualTo(WRONG_PASSWORD)
         }
 
     @Test
     fun onAuthenticateKeyPressed_whenEmpty() =
         testScope.runTest {
-            val message by collectLastValue(bouncerViewModel.message)
             val password by collectLastValue(underTest.password)
             kosmos.fakeAuthenticationRepository.setAuthenticationMethod(
                 AuthenticationMethodModel.Password
             )
             kosmos.fakeDeviceEntryRepository.setUnlocked(false)
-            switchToScene(SceneKey.Bouncer)
+            switchToScene(Scenes.Bouncer)
 
             // No input entered.
 
             underTest.onAuthenticateKeyPressed()
 
             assertThat(password).isEmpty()
-            assertThat(message?.text).isEqualTo(ENTER_YOUR_PASSWORD)
         }
 
     @Test
     fun onAuthenticateKeyPressed_correctAfterWrong() =
         testScope.runTest {
             val authResult by collectLastValue(authenticationInteractor.onAuthenticationResult)
-            val message by collectLastValue(bouncerViewModel.message)
             val password by collectLastValue(underTest.password)
             lockDeviceAndOpenPasswordBouncer()
 
@@ -185,12 +174,10 @@ class PasswordBouncerViewModelTest : SysuiTestCase() {
             underTest.onPasswordInputChanged("wrong")
             underTest.onAuthenticateKeyPressed()
             assertThat(password).isEqualTo("")
-            assertThat(message?.text).isEqualTo(WRONG_PASSWORD)
             assertThat(authResult).isFalse()
 
             // Enter the correct password:
             underTest.onPasswordInputChanged("password")
-            assertThat(message?.text).isEmpty()
 
             underTest.onAuthenticateKeyPressed()
 
@@ -209,14 +196,14 @@ class PasswordBouncerViewModelTest : SysuiTestCase() {
             assertThat(password).isEqualTo("password")
 
             // The user doesn't confirm the password, but navigates back to the lockscreen instead.
-            switchToScene(SceneKey.Lockscreen)
+            switchToScene(Scenes.Lockscreen)
 
             // The user navigates to the bouncer again.
-            switchToScene(SceneKey.Bouncer)
+            switchToScene(Scenes.Bouncer)
 
             // Ensure the previously-entered password is not shown.
             assertThat(password).isEmpty()
-            assertThat(currentScene).isEqualTo(SceneKey.Bouncer)
+            assertThat(currentScene).isEqualTo(Scenes.Bouncer)
         }
 
     @Test
@@ -330,10 +317,8 @@ class PasswordBouncerViewModelTest : SysuiTestCase() {
 
     private fun TestScope.switchToScene(toScene: SceneKey) {
         val currentScene by collectLastValue(sceneInteractor.currentScene)
-        val bouncerShown = currentScene != SceneKey.Bouncer && toScene == SceneKey.Bouncer
-        val bouncerHidden = currentScene == SceneKey.Bouncer && toScene != SceneKey.Bouncer
+        val bouncerHidden = currentScene == Scenes.Bouncer && toScene != Scenes.Bouncer
         sceneInteractor.changeScene(toScene, "reason")
-        if (bouncerShown) underTest.onShown()
         if (bouncerHidden) underTest.onHidden()
         runCurrent()
 
@@ -345,7 +330,7 @@ class PasswordBouncerViewModelTest : SysuiTestCase() {
             AuthenticationMethodModel.Password
         )
         kosmos.fakeDeviceEntryRepository.setUnlocked(false)
-        switchToScene(SceneKey.Bouncer)
+        switchToScene(Scenes.Bouncer)
     }
 
     private suspend fun TestScope.setLockout(

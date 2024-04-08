@@ -48,7 +48,10 @@ import android.view.IWindowManager;
 import android.view.ViewDebug;
 
 import com.android.internal.os.ByteTransferPipe;
-import com.android.internal.protolog.ProtoLogImpl;
+import com.android.internal.protolog.LegacyProtoLogImpl;
+import com.android.internal.protolog.PerfettoProtoLogImpl;
+import com.android.internal.protolog.common.IProtoLog;
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.server.IoThread;
 import com.android.server.wm.LetterboxConfiguration.LetterboxBackgroundType;
 import com.android.server.wm.LetterboxConfiguration.LetterboxHorizontalReachabilityPosition;
@@ -107,11 +110,23 @@ public class WindowManagerShellCommand extends ShellCommand {
                     // trace files can be written.
                     return mInternal.mWindowTracing.onShellCommand(this);
                 case "logging":
-                    int result = ProtoLogImpl.getSingleInstance().onShellCommand(this);
-                    if (result != 0) {
-                        pw.println("Not handled, please use "
-                                + "`adb shell dumpsys activity service SystemUIService WMShell` "
-                                + "if you are looking for ProtoLog in WMShell");
+                    IProtoLog instance = ProtoLog.getSingleInstance();
+                    int result = 0;
+                    if (instance instanceof LegacyProtoLogImpl
+                            || instance instanceof PerfettoProtoLogImpl) {
+                        if (instance instanceof LegacyProtoLogImpl) {
+                            result = ((LegacyProtoLogImpl) instance).onShellCommand(this);
+                        } else {
+                            result = ((PerfettoProtoLogImpl) instance).onShellCommand(this);
+                        }
+                        if (result != 0) {
+                            pw.println("Not handled, please use "
+                                    + "`adb shell dumpsys activity service SystemUIService "
+                                    + "WMShell` if you are looking for ProtoLog in WMShell");
+                        }
+                    } else {
+                        result = -1;
+                        pw.println("ProtoLog impl doesn't support handling commands");
                     }
                     return result;
                 case "user-rotation":
@@ -504,6 +519,9 @@ public class WindowManagerShellCommand extends ShellCommand {
             case "default":
                 fixedToUserRotation = IWindowManager.FIXED_TO_USER_ROTATION_DEFAULT;
                 break;
+            case "enabled_if_no_auto_rotation":
+                fixedToUserRotation = IWindowManager.FIXED_TO_USER_ROTATION_IF_NO_AUTO_ROTATION;
+                break;
             default:
                 getErrPrintWriter().println("Error: expecting enabled, disabled or default, but we "
                         + "get " + arg);
@@ -522,6 +540,9 @@ public class WindowManagerShellCommand extends ShellCommand {
                 return 0;
             case IWindowManager.FIXED_TO_USER_ROTATION_DISABLED:
                 pw.println("disabled");
+                return 0;
+            case IWindowManager.FIXED_TO_USER_ROTATION_IF_NO_AUTO_ROTATION:
+                pw.println("enabled_if_no_auto_rotation");
                 return 0;
             case IWindowManager.FIXED_TO_USER_ROTATION_ENABLED:
                 pw.println("enabled");
@@ -1479,7 +1500,8 @@ public class WindowManagerShellCommand extends ShellCommand {
         pw.println("    Print or set user rotation mode and user rotation.");
         pw.println("  dump-visible-window-views");
         pw.println("    Dumps the encoded view hierarchies of visible windows");
-        pw.println("  fixed-to-user-rotation [-d DISPLAY_ID] [enabled|disabled|default]");
+        pw.println("  fixed-to-user-rotation [-d DISPLAY_ID] [enabled|disabled|default");
+        pw.println("      |enabled_if_no_auto_rotation]");
         pw.println("    Print or set rotating display for app requested orientation.");
         pw.println("  set-ignore-orientation-request [-d DISPLAY_ID] [true|1|false|0]");
         pw.println("  get-ignore-orientation-request [-d DISPLAY_ID] ");

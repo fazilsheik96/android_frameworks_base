@@ -26,9 +26,9 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import com.android.systemui.Flags.keyguardBottomAreaRefactor
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.keyguard.KeyguardBottomAreaRefactor
 import com.android.systemui.keyguard.ui.view.layout.blueprints.transitions.BaseBlueprintTransition
 import com.android.systemui.keyguard.ui.view.layout.blueprints.transitions.IntraBlueprintTransition
 import com.android.systemui.keyguard.ui.view.layout.blueprints.transitions.IntraBlueprintTransition.Config
@@ -36,12 +36,13 @@ import com.android.systemui.keyguard.ui.viewmodel.KeyguardBlueprintViewModel
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardClockViewModel
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardSmartspaceViewModel
 import com.android.systemui.lifecycle.repeatWhenAttached
+import com.android.systemui.res.R
 import javax.inject.Inject
 import kotlin.math.max
 import kotlinx.coroutines.launch
 
 private const val TAG = "KeyguardBlueprintViewBinder"
-private const val DEBUG = true
+private const val DEBUG = false
 
 @SysUISingleton
 class KeyguardBlueprintViewBinder
@@ -104,7 +105,7 @@ constructor(
 
                         var transition =
                             if (
-                                !keyguardBottomAreaRefactor() &&
+                                !KeyguardBottomAreaRefactor.isEnabled &&
                                     prevBluePrint != null &&
                                     prevBluePrint != blueprint
                             ) {
@@ -127,6 +128,7 @@ constructor(
                         runTransition(constraintLayout, transition, Config.DEFAULT) {
                             // Add and remove views of sections that are not contained by the other.
                             blueprint.replaceViews(prevBluePrint, constraintLayout)
+                            logAlphaVisibilityOfAppliedConstraintSet(cs, clockViewModel)
                             cs.applyTo(constraintLayout)
                         }
 
@@ -153,6 +155,7 @@ constructor(
                             ),
                             transition,
                         ) {
+                            logAlphaVisibilityOfAppliedConstraintSet(cs, clockViewModel)
                             cs.applyTo(constraintLayout)
                         }
                         Trace.endSection()
@@ -204,5 +207,25 @@ constructor(
             runningTransitions.remove(transition)
             apply()
         }
+    }
+
+    private fun logAlphaVisibilityOfAppliedConstraintSet(
+        cs: ConstraintSet,
+        viewModel: KeyguardClockViewModel
+    ) {
+        val currentClock = viewModel.currentClock.value
+        if (!DEBUG || currentClock == null) return
+        val smallClockViewId = R.id.lockscreen_clock_view
+        val largeClockViewId = currentClock.largeClock.layout.views[0].id
+        Log.i(
+            TAG,
+            "applyCsToSmallClock: vis=${cs.getVisibility(smallClockViewId)} " +
+                "alpha=${cs.getConstraint(smallClockViewId).propertySet}"
+        )
+        Log.i(
+            TAG,
+            "applyCsToLargeClock: vis=${cs.getVisibility(largeClockViewId)} " +
+                "alpha=${cs.getConstraint(largeClockViewId).propertySet}"
+        )
     }
 }

@@ -30,6 +30,7 @@ import android.graphics.drawable.Drawable
 import android.text.TextUtils
 import android.util.Log
 import androidx.activity.result.IntentSenderRequest
+import androidx.credentials.PasswordCredential
 import androidx.credentials.PublicKeyCredential
 import androidx.credentials.provider.Action
 import androidx.credentials.provider.AuthenticationAction
@@ -45,9 +46,12 @@ import com.android.credentialmanager.model.get.CredentialEntryInfo
 import com.android.credentialmanager.model.CredentialType
 import com.android.credentialmanager.model.get.ProviderInfo
 import com.android.credentialmanager.model.get.RemoteEntryInfo
+import com.android.credentialmanager.shared.R
 import com.android.credentialmanager.TAG
+import com.android.credentialmanager.model.BiometricRequestInfo
+import com.android.credentialmanager.model.EntryInfo
 
-fun CredentialEntryInfo.getIntentSenderRequest(
+fun EntryInfo.getIntentSenderRequest(
     isAutoSelected: Boolean = false
 ): IntentSenderRequest? {
     val entryIntent = fillInIntent?.putExtra(IS_AUTO_SELECTED_KEY, isAutoSelected)
@@ -123,14 +127,20 @@ private fun getCredentialOptionInfoList(
                     pendingIntent = credentialEntry.pendingIntent,
                     fillInIntent = it.frameworkExtrasIntent,
                     credentialType = CredentialType.PASSWORD,
+                    rawCredentialType = PasswordCredential.TYPE_PASSWORD_CREDENTIAL,
                     credentialTypeDisplayName = credentialEntry.typeDisplayName.toString(),
                     userName = credentialEntry.username.toString(),
                     displayName = credentialEntry.displayName?.toString(),
                     icon = credentialEntry.icon.loadDrawable(context),
-                    shouldTintIcon = credentialEntry.isDefaultIcon,
+                    shouldTintIcon = credentialEntry.hasDefaultIcon,
                     lastUsedTimeMillis = credentialEntry.lastUsedTime,
                     isAutoSelectable = credentialEntry.isAutoSelectAllowed &&
-                            credentialEntry.autoSelectAllowedFromOption,
+                            credentialEntry.isAutoSelectAllowedFromOption,
+                    entryGroupId = credentialEntry.entryGroupId.toString(),
+                    isDefaultIconPreferredAsSingleProvider =
+                            credentialEntry.isDefaultIconPreferredAsSingleProvider,
+                    affiliatedDomain = credentialEntry.affiliatedDomain?.toString(),
+                    biometricRequest = predetermineAndValidateBiometricFlow(it),
                 )
                 )
             }
@@ -144,14 +154,22 @@ private fun getCredentialOptionInfoList(
                     pendingIntent = credentialEntry.pendingIntent,
                     fillInIntent = it.frameworkExtrasIntent,
                     credentialType = CredentialType.PASSKEY,
+                    rawCredentialType = PublicKeyCredential.TYPE_PUBLIC_KEY_CREDENTIAL,
                     credentialTypeDisplayName = credentialEntry.typeDisplayName.toString(),
                     userName = credentialEntry.username.toString(),
                     displayName = credentialEntry.displayName?.toString(),
-                    icon = credentialEntry.icon.loadDrawable(context),
-                    shouldTintIcon = credentialEntry.isDefaultIcon,
+                    icon = if (credentialEntry.hasDefaultIcon)
+                        context.getDrawable(R.drawable.ic_passkey_24)
+                    else credentialEntry.icon.loadDrawable(context),
+                    shouldTintIcon = credentialEntry.hasDefaultIcon,
                     lastUsedTimeMillis = credentialEntry.lastUsedTime,
                     isAutoSelectable = credentialEntry.isAutoSelectAllowed &&
-                            credentialEntry.autoSelectAllowedFromOption,
+                            credentialEntry.isAutoSelectAllowedFromOption,
+                    entryGroupId = credentialEntry.entryGroupId.toString(),
+                    isDefaultIconPreferredAsSingleProvider =
+                            credentialEntry.isDefaultIconPreferredAsSingleProvider,
+                    affiliatedDomain = credentialEntry.affiliatedDomain?.toString(),
+                    biometricRequest = predetermineAndValidateBiometricFlow(it),
                 )
                 )
             }
@@ -165,15 +183,21 @@ private fun getCredentialOptionInfoList(
                     pendingIntent = credentialEntry.pendingIntent,
                     fillInIntent = it.frameworkExtrasIntent,
                     credentialType = CredentialType.UNKNOWN,
+                    rawCredentialType = credentialEntry.type,
                     credentialTypeDisplayName =
                     credentialEntry.typeDisplayName?.toString().orEmpty(),
                     userName = credentialEntry.title.toString(),
                     displayName = credentialEntry.subtitle?.toString(),
                     icon = credentialEntry.icon.loadDrawable(context),
-                    shouldTintIcon = credentialEntry.isDefaultIcon,
+                    shouldTintIcon = credentialEntry.hasDefaultIcon,
                     lastUsedTimeMillis = credentialEntry.lastUsedTime,
                     isAutoSelectable = credentialEntry.isAutoSelectAllowed &&
-                            credentialEntry.autoSelectAllowedFromOption,
+                            credentialEntry.isAutoSelectAllowedFromOption,
+                    entryGroupId = credentialEntry.entryGroupId.toString(),
+                    isDefaultIconPreferredAsSingleProvider =
+                            credentialEntry.isDefaultIconPreferredAsSingleProvider,
+                    affiliatedDomain = credentialEntry.affiliatedDomain?.toString(),
+                    biometricRequest = predetermineAndValidateBiometricFlow(it),
                 )
                 )
             }
@@ -185,6 +209,36 @@ private fun getCredentialOptionInfoList(
     }
     return result
 }
+
+/**
+ * This validates if this is a biometric flow or not, and if it is, this returns the expected
+ * [BiometricRequestInfo]. Namely, the biometric flow must have at least the
+ * ALLOWED_AUTHENTICATORS bit passed from Jetpack.
+ * Note that the required values, such as the provider info's icon or display name, or the entries
+ * credential type or userName, and finally the display info's app name, are non-null and must
+ * exist to run through the flow.
+ * // TODO(b/326243754) : Presently, due to dependencies, the opId bit is parsed but is never
+ * // expected to be used. When it is added, it should be lightly validated.
+ */
+private fun predetermineAndValidateBiometricFlow(
+    it: Entry
+): BiometricRequestInfo? {
+    // TODO(b/326243754) : When available, use the official jetpack structured type
+    val allowedAuthenticators: Int? = it.slice.items.firstOrNull {
+        it.hasHint("androidx.credentials." +
+                "provider.credentialEntry.SLICE_HINT_ALLOWED_AUTHENTICATORS")
+    }?.int
+
+    // This is optional and does not affect validating the biometric flow in any case
+    val opId: Int? = it.slice.items.firstOrNull {
+        it.hasHint("androidx.credentials.provider.credentialEntry.SLICE_HINT_CRYPTO_OP_ID")
+    }?.int
+    if (allowedAuthenticators != null) {
+        return BiometricRequestInfo(opId = opId, allowedAuthenticators = allowedAuthenticators)
+    }
+    return null
+}
+
 val Slice.credentialEntry: CredentialEntry?
     get() =
         try {
@@ -200,7 +254,6 @@ val Slice.credentialEntry: CredentialEntry?
             // password / passkey parsing attempt.
             CustomCredentialEntry.fromSlice(this)
         }
-
 
 /**
  * Note: caller required handle empty list due to parsing error.

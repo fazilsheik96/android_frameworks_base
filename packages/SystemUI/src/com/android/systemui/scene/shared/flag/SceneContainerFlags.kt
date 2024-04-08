@@ -18,17 +18,15 @@
 
 package com.android.systemui.scene.shared.flag
 
-import com.android.systemui.Flags.FLAG_KEYGUARD_BOTTOM_AREA_REFACTOR
-import com.android.systemui.Flags.FLAG_MIGRATE_CLOCKS_TO_BLUEPRINT
 import com.android.systemui.Flags.FLAG_SCENE_CONTAINER
-import com.android.systemui.Flags.keyguardBottomAreaRefactor
-import com.android.systemui.Flags.migrateClocksToBlueprint
 import com.android.systemui.Flags.sceneContainer
-import com.android.systemui.compose.ComposeFacade
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.flags.FlagToken
 import com.android.systemui.flags.Flags.SCENE_CONTAINER_ENABLED
 import com.android.systemui.flags.RefactorFlagUtils
+import com.android.systemui.keyguard.KeyguardBottomAreaRefactor
+import com.android.systemui.keyguard.KeyguardWmStateRefactor
+import com.android.systemui.keyguard.MigrateClocksToBlueprint
 import com.android.systemui.keyguard.shared.ComposeLockscreen
 import com.android.systemui.media.controls.util.MediaInSceneContainerFlag
 import dagger.Module
@@ -44,12 +42,12 @@ object SceneContainerFlag {
         get() =
             SCENE_CONTAINER_ENABLED && // mainStaticFlag
             sceneContainer() && // mainAconfigFlag
-                keyguardBottomAreaRefactor() &&
-                migrateClocksToBlueprint() &&
+                KeyguardBottomAreaRefactor.isEnabled &&
+                MigrateClocksToBlueprint.isEnabled &&
                 ComposeLockscreen.isEnabled &&
                 MediaInSceneContainerFlag.isEnabled &&
-                // NOTE: Changes should also be made in getSecondaryFlags and @EnableSceneContainer
-                ComposeFacade.isComposeAvailable()
+                KeyguardWmStateRefactor.isEnabled
+    // NOTE: Changes should also be made in getSecondaryFlags and @EnableSceneContainer
 
     /**
      * The main static flag, SCENE_CONTAINER_ENABLED. This is an explicit static flag check that
@@ -65,8 +63,9 @@ object SceneContainerFlag {
     /** The set of secondary flags which must be enabled for scene container to work properly */
     inline fun getSecondaryFlags(): Sequence<FlagToken> =
         sequenceOf(
-            FlagToken(FLAG_KEYGUARD_BOTTOM_AREA_REFACTOR, keyguardBottomAreaRefactor()),
-            FlagToken(FLAG_MIGRATE_CLOCKS_TO_BLUEPRINT, migrateClocksToBlueprint()),
+            KeyguardBottomAreaRefactor.token,
+            MigrateClocksToBlueprint.token,
+            KeyguardWmStateRefactor.token,
             ComposeLockscreen.token,
             MediaInSceneContainerFlag.token,
             // NOTE: Changes should also be made in isEnabled and @EnableSceneContainer
@@ -74,11 +73,7 @@ object SceneContainerFlag {
 
     /** The full set of requirements for SceneContainer */
     inline fun getAllRequirements(): Sequence<FlagToken> {
-        val composeRequirement =
-            FlagToken("ComposeFacade.isComposeAvailable()", ComposeFacade.isComposeAvailable())
-        return sequenceOf(getMainStaticFlag(), getMainAconfigFlag()) +
-            getSecondaryFlags() +
-            composeRequirement
+        return sequenceOf(getMainStaticFlag(), getMainAconfigFlag()) + getSecondaryFlags()
     }
 
     /** Return all dependencies of this flag in pairs where [Pair.first] depends on [Pair.second] */

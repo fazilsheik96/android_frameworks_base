@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,13 +30,10 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,6 +79,8 @@ fun Entry(
     isLockedAuthEntry: Boolean = false,
     enforceOneLine: Boolean = false,
     onTextLayout: (TextLayoutResult) -> Unit = {},
+    /** Get flow only, if present, where be drawn as a line above the headline. */
+    affiliatedDomainText: String? = null,
 ) {
     val iconPadding = Modifier.wrapContentSize().padding(
         // Horizontal padding should be 16dp, but the suggestion chip itself
@@ -95,7 +95,7 @@ fun Entry(
         label = {
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth().padding(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(
                     // Total end padding should be 16dp, but the suggestion chip itself
                     // has 8dp horizontal elements padding
                     horizontal = 8.dp, vertical = 16.dp,
@@ -105,6 +105,13 @@ fun Entry(
             ) {
                 // Apply weight so that the trailing icon can always show.
                 Column(modifier = Modifier.wrapContentHeight().fillMaxWidth().weight(1f)) {
+                    if (!affiliatedDomainText.isNullOrBlank()) {
+                        BodySmallText(
+                            text = affiliatedDomainText,
+                            enforceOneLine = enforceOneLine,
+                            onTextLayout = onTextLayout,
+                        )
+                    }
                     SmallTitleText(
                         text = entryHeadlineText,
                         enforceOneLine = enforceOneLine,
@@ -146,14 +153,14 @@ fun Entry(
                                 },
                             )
                         }
-                    } else if (entrySecondLineText != null) {
+                    } else if (!entrySecondLineText.isNullOrBlank()) {
                         BodySmallText(
                             text = entrySecondLineText,
                             enforceOneLine = enforceOneLine,
                             onTextLayout = onTextLayout,
                         )
                     }
-                    if (entryThirdLineText != null) {
+                    if (!entryThirdLineText.isNullOrBlank()) {
                         BodySmallText(
                             text = entryThirdLineText,
                             enforceOneLine = enforceOneLine,
@@ -252,10 +259,14 @@ fun ActionEntry(
         onClick = onClick,
         shape = Shapes.large,
         label = {
-            Column(modifier = Modifier.wrapContentSize()
-                .padding(start = 16.dp, top = 16.dp, bottom = 16.dp)) {
+            Column(
+                    modifier = Modifier.heightIn(min = 56.dp).wrapContentSize().padding(
+                            start = 16.dp, top = 16.dp, bottom = 16.dp
+                    ),
+                    verticalArrangement = Arrangement.Center,
+            ) {
                 SmallTitleText(entryHeadlineText)
-                if (entrySecondLineText != null && entrySecondLineText.isNotEmpty()) {
+                if (!entrySecondLineText.isNullOrBlank()) {
                     BodySmallText(entrySecondLineText)
                 }
             }
@@ -278,31 +289,6 @@ fun ActionEntry(
 }
 
 /**
- * A single row of leading icon and text describing a benefit of passkeys, used by the
- * [com.android.credentialmanager.createflow.PasskeyIntroCard].
- */
-@Composable
-fun PasskeyBenefitRow(
-    leadingIconPainter: Painter,
-    text: String,
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Icon(
-            modifier = Modifier.size(24.dp),
-            painter = leadingIconPainter,
-            tint = LocalAndroidColorScheme.current.onSurfaceVariant,
-            // Decorative purpose only.
-            contentDescription = null,
-        )
-        BodyMediumText(text = text)
-    }
-}
-
-/**
  * A single row of one or two CTA buttons for continuing or cancelling the current step.
  */
 @Composable
@@ -319,48 +305,48 @@ fun CtaButtonRow(
         modifier = Modifier.fillMaxWidth()
     ) {
         if (leftButton != null) {
-            leftButton()
+            Box(modifier = Modifier.wrapContentSize().weight(1f, fill = false)) {
+                leftButton()
+            }
         }
         if (rightButton != null) {
-            rightButton()
+            Box(modifier = Modifier.wrapContentSize().weight(1f, fill = false)) {
+                rightButton()
+            }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MoreOptionTopAppBar(
     text: String,
     onNavigationIconClicked: () -> Unit,
     bottomPadding: Dp,
 ) {
-    TopAppBar(
-        title = {
-            LargeTitleText(text = text, modifier = Modifier.padding(horizontal = 4.dp))
-        },
-        navigationIcon = {
-            IconButton(
+    Row(
+            modifier = Modifier.padding(top = 12.dp, bottom = bottomPadding),
+            verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
                 modifier = Modifier.padding(top = 8.dp, bottom = 8.dp, start = 4.dp).size(48.dp),
                 onClick = onNavigationIconClicked
-            ) {
-                Box(
+        ) {
+            Box(
                     modifier = Modifier.size(48.dp),
                     contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
+            ) {
+                Icon(
                         imageVector = Icons.Filled.ArrowBack,
                         contentDescription = stringResource(
-                            R.string.accessibility_back_arrow_button
+                                R.string.accessibility_back_arrow_button
                         ),
                         modifier = Modifier.size(24.dp).autoMirrored(),
                         tint = LocalAndroidColorScheme.current.onSurfaceVariant,
-                    )
-                }
+                )
             }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-        modifier = Modifier.padding(top = 12.dp, bottom = bottomPadding)
-    )
+        }
+        LargeTitleText(text = text, modifier = Modifier.padding(horizontal = 4.dp))
+    }
 }
 
 private fun Modifier.autoMirrored() = composed {

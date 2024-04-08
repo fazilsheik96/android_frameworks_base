@@ -17,6 +17,7 @@
 package com.android.server.location;
 
 import static android.Manifest.permission.INTERACT_ACROSS_USERS;
+import static android.Manifest.permission.LOCATION_BYPASS;
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
 import static android.app.compat.CompatChanges.isChangeEnabled;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_AWARE;
@@ -34,6 +35,7 @@ import static android.location.provider.LocationProviderBase.ACTION_NETWORK_PROV
 
 import static com.android.server.location.LocationPermissions.PERMISSION_COARSE;
 import static com.android.server.location.LocationPermissions.PERMISSION_FINE;
+import static com.android.server.location.LocationPermissions.PERMISSION_NONE;
 import static com.android.server.location.eventlog.LocationEventLog.EVENT_LOG;
 
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
@@ -73,6 +75,7 @@ import android.location.LocationManagerInternal.LocationPackageTagsListener;
 import android.location.LocationProvider;
 import android.location.LocationRequest;
 import android.location.LocationTime;
+import android.location.flags.Flags;
 import android.location.provider.ForwardGeocodeRequest;
 import android.location.provider.IGeocodeCallback;
 import android.location.provider.IProviderRequestListener;
@@ -468,11 +471,13 @@ public class LocationManagerService extends ILocationManager.Stub implements
                     com.android.internal.R.bool.config_useGnssHardwareProvider);
             AbstractLocationProvider gnssProvider = null;
             if (!useGnssHardwareProvider) {
+                // TODO: Create a separate config_enableGnssLocationOverlay config resource
+                // if we want to selectively enable a GNSS overlay but disable a fused overlay.
                 gnssProvider = ProxyLocationProvider.create(
                         mContext,
                         GPS_PROVIDER,
                         ACTION_GNSS_PROVIDER,
-                        com.android.internal.R.bool.config_useGnssHardwareProvider,
+                        com.android.internal.R.bool.config_enableFusedLocationOverlay,
                         com.android.internal.R.string.config_gnssLocationProviderPackageName);
             }
             if (gnssProvider == null) {
@@ -786,8 +791,19 @@ public class LocationManagerService extends ILocationManager.Stub implements
                 listenerId);
         int permissionLevel = LocationPermissions.getPermissionLevel(mContext, identity.getUid(),
                 identity.getPid());
-        LocationPermissions.enforceLocationPermission(identity.getUid(), permissionLevel,
-                PERMISSION_COARSE);
+        if (Flags.enableLocationBypass()) {
+            if (permissionLevel == PERMISSION_NONE) {
+                if (mContext.checkCallingPermission(LOCATION_BYPASS) != PERMISSION_GRANTED) {
+                    LocationPermissions.enforceLocationPermission(
+                            identity.getUid(), permissionLevel, PERMISSION_COARSE);
+                } else {
+                    permissionLevel = PERMISSION_FINE;
+                }
+            }
+        } else {
+            LocationPermissions.enforceLocationPermission(identity.getUid(), permissionLevel,
+                    PERMISSION_COARSE);
+        }
 
         // clients in the system process must have an attribution tag set
         Preconditions.checkState(identity.getPid() != Process.myPid() || attributionTag != null);
@@ -815,8 +831,19 @@ public class LocationManagerService extends ILocationManager.Stub implements
                 listenerId);
         int permissionLevel = LocationPermissions.getPermissionLevel(mContext, identity.getUid(),
                 identity.getPid());
-        LocationPermissions.enforceLocationPermission(identity.getUid(), permissionLevel,
-                PERMISSION_COARSE);
+        if (Flags.enableLocationBypass()) {
+            if (permissionLevel == PERMISSION_NONE) {
+                if (mContext.checkCallingPermission(LOCATION_BYPASS) != PERMISSION_GRANTED) {
+                    LocationPermissions.enforceLocationPermission(
+                            identity.getUid(), permissionLevel, PERMISSION_COARSE);
+                } else {
+                    permissionLevel = PERMISSION_FINE;
+                }
+            }
+        } else {
+            LocationPermissions.enforceLocationPermission(identity.getUid(), permissionLevel,
+                    PERMISSION_COARSE);
+        }
 
         // clients in the system process should have an attribution tag set
         if (identity.getPid() == Process.myPid() && attributionTag == null) {
@@ -840,8 +867,19 @@ public class LocationManagerService extends ILocationManager.Stub implements
                 AppOpsManager.toReceiverId(pendingIntent));
         int permissionLevel = LocationPermissions.getPermissionLevel(mContext, identity.getUid(),
                 identity.getPid());
-        LocationPermissions.enforceLocationPermission(identity.getUid(), permissionLevel,
-                PERMISSION_COARSE);
+        if (Flags.enableLocationBypass()) {
+            if (permissionLevel == PERMISSION_NONE) {
+                if (mContext.checkCallingPermission(LOCATION_BYPASS) != PERMISSION_GRANTED) {
+                    LocationPermissions.enforceLocationPermission(
+                            identity.getUid(), permissionLevel, PERMISSION_COARSE);
+                } else {
+                    permissionLevel = PERMISSION_FINE;
+                }
+            }
+        } else {
+            LocationPermissions.enforceLocationPermission(identity.getUid(), permissionLevel,
+                    PERMISSION_COARSE);
+        }
 
         // clients in the system process must have an attribution tag set
         Preconditions.checkArgument(identity.getPid() != Process.myPid() || attributionTag != null);
@@ -992,8 +1030,19 @@ public class LocationManagerService extends ILocationManager.Stub implements
         CallerIdentity identity = CallerIdentity.fromBinder(mContext, packageName, attributionTag);
         int permissionLevel = LocationPermissions.getPermissionLevel(mContext, identity.getUid(),
                 identity.getPid());
-        LocationPermissions.enforceLocationPermission(identity.getUid(), permissionLevel,
-                PERMISSION_COARSE);
+        if (Flags.enableLocationBypass()) {
+            if (permissionLevel == PERMISSION_NONE) {
+                if (mContext.checkCallingPermission(LOCATION_BYPASS) != PERMISSION_GRANTED) {
+                    LocationPermissions.enforceLocationPermission(
+                            identity.getUid(), permissionLevel, PERMISSION_COARSE);
+                } else {
+                    permissionLevel = PERMISSION_FINE;
+                }
+            }
+        } else {
+            LocationPermissions.enforceLocationPermission(identity.getUid(), permissionLevel,
+                    PERMISSION_COARSE);
+        }
 
         // clients in the system process must have an attribution tag set
         Preconditions.checkArgument(identity.getPid() != Process.myPid() || attributionTag != null);

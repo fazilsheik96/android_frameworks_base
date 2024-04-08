@@ -20,7 +20,6 @@ import static android.app.WindowConfiguration.activityTypeToString;
 import static android.app.WindowConfiguration.windowingModeToString;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
-import static android.media.audio.Flags.FLAG_FOREGROUND_AUDIO_CONTROL;
 
 import android.Manifest;
 import android.annotation.ColorInt;
@@ -948,8 +947,6 @@ public class ActivityManager {
      * @hide
      * Process can access volume APIs and can request audio focus with GAIN.
      */
-    @FlaggedApi(FLAG_FOREGROUND_AUDIO_CONTROL)
-    @SystemApi
     public static final int PROCESS_CAPABILITY_FOREGROUND_AUDIO_CONTROL = 1 << 6;
 
     /**
@@ -1604,7 +1601,7 @@ public class ActivityManager {
         private int mStatusBarColor;
         private int mNavigationBarColor;
         @Appearance
-        private int mStatusBarAppearance;
+        private int mSystemBarsAppearance;
         private boolean mEnsureStatusBarContrastWhenTransparent;
         private boolean mEnsureNavigationBarContrastWhenTransparent;
         private int mResizeMode;
@@ -1804,7 +1801,7 @@ public class ActivityManager {
         public TaskDescription(@Nullable String label, @Nullable Icon icon,
                 int colorPrimary, int colorBackground,
                 int statusBarColor, int navigationBarColor,
-                @Appearance int statusBarAppearance,
+                @Appearance int systemBarsAppearance,
                 boolean ensureStatusBarContrastWhenTransparent,
                 boolean ensureNavigationBarContrastWhenTransparent, int resizeMode, int minWidth,
                 int minHeight, int colorBackgroundFloating) {
@@ -1814,7 +1811,7 @@ public class ActivityManager {
             mColorBackground = colorBackground;
             mStatusBarColor = statusBarColor;
             mNavigationBarColor = navigationBarColor;
-            mStatusBarAppearance = statusBarAppearance;
+            mSystemBarsAppearance = systemBarsAppearance;
             mEnsureStatusBarContrastWhenTransparent = ensureStatusBarContrastWhenTransparent;
             mEnsureNavigationBarContrastWhenTransparent =
                     ensureNavigationBarContrastWhenTransparent;
@@ -1843,7 +1840,7 @@ public class ActivityManager {
             mColorBackground = other.mColorBackground;
             mStatusBarColor = other.mStatusBarColor;
             mNavigationBarColor = other.mNavigationBarColor;
-            mStatusBarAppearance = other.mStatusBarAppearance;
+            mSystemBarsAppearance = other.mSystemBarsAppearance;
             mEnsureStatusBarContrastWhenTransparent = other.mEnsureStatusBarContrastWhenTransparent;
             mEnsureNavigationBarContrastWhenTransparent =
                     other.mEnsureNavigationBarContrastWhenTransparent;
@@ -1873,8 +1870,8 @@ public class ActivityManager {
             if (other.mNavigationBarColor != 0) {
                 mNavigationBarColor = other.mNavigationBarColor;
             }
-            if (other.mStatusBarAppearance != 0) {
-                mStatusBarAppearance = other.mStatusBarAppearance;
+            if (other.mSystemBarsAppearance != 0) {
+                mSystemBarsAppearance = other.mSystemBarsAppearance;
             }
 
             mEnsureStatusBarContrastWhenTransparent = other.mEnsureStatusBarContrastWhenTransparent;
@@ -2148,8 +2145,8 @@ public class ActivityManager {
          * @hide
          */
         @Appearance
-        public int getStatusBarAppearance() {
-            return mStatusBarAppearance;
+        public int getSystemBarsAppearance() {
+            return mSystemBarsAppearance;
         }
 
         /**
@@ -2163,8 +2160,8 @@ public class ActivityManager {
         /**
          * @hide
          */
-        public void setStatusBarAppearance(@Appearance int statusBarAppearance) {
-            mStatusBarAppearance = statusBarAppearance;
+        public void setSystemBarsAppearance(@Appearance int systemBarsAppearance) {
+            mSystemBarsAppearance = systemBarsAppearance;
         }
 
         /**
@@ -2291,7 +2288,7 @@ public class ActivityManager {
             dest.writeInt(mColorBackground);
             dest.writeInt(mStatusBarColor);
             dest.writeInt(mNavigationBarColor);
-            dest.writeInt(mStatusBarAppearance);
+            dest.writeInt(mSystemBarsAppearance);
             dest.writeBoolean(mEnsureStatusBarContrastWhenTransparent);
             dest.writeBoolean(mEnsureNavigationBarContrastWhenTransparent);
             dest.writeInt(mResizeMode);
@@ -2315,7 +2312,7 @@ public class ActivityManager {
             mColorBackground = source.readInt();
             mStatusBarColor = source.readInt();
             mNavigationBarColor = source.readInt();
-            mStatusBarAppearance = source.readInt();
+            mSystemBarsAppearance = source.readInt();
             mEnsureStatusBarContrastWhenTransparent = source.readBoolean();
             mEnsureNavigationBarContrastWhenTransparent = source.readBoolean();
             mResizeMode = source.readInt();
@@ -2347,7 +2344,8 @@ public class ActivityManager {
                             ? " (contrast when transparent)" : "")
                     + " resizeMode: " + ActivityInfo.resizeModeToString(mResizeMode)
                     + " minWidth: " + mMinWidth + " minHeight: " + mMinHeight
-                    + " colorBackgrounFloating: " + mColorBackgroundFloating;
+                    + " colorBackgrounFloating: " + mColorBackgroundFloating
+                    + " systemBarsAppearance: " + mSystemBarsAppearance;
         }
 
         @Override
@@ -2367,7 +2365,7 @@ public class ActivityManager {
             result = result * 31 + mColorBackgroundFloating;
             result = result * 31 + mStatusBarColor;
             result = result * 31 + mNavigationBarColor;
-            result = result * 31 + mStatusBarAppearance;
+            result = result * 31 + mSystemBarsAppearance;
             result = result * 31 + (mEnsureStatusBarContrastWhenTransparent ? 1 : 0);
             result = result * 31 + (mEnsureNavigationBarContrastWhenTransparent ? 1 : 0);
             result = result * 31 + mResizeMode;
@@ -2390,7 +2388,7 @@ public class ActivityManager {
                     && mColorBackground == other.mColorBackground
                     && mStatusBarColor == other.mStatusBarColor
                     && mNavigationBarColor == other.mNavigationBarColor
-                    && mStatusBarAppearance == other.mStatusBarAppearance
+                    && mSystemBarsAppearance == other.mSystemBarsAppearance
                     && mEnsureStatusBarContrastWhenTransparent
                             == other.mEnsureStatusBarContrastWhenTransparent
                     && mEnsureNavigationBarContrastWhenTransparent
@@ -6047,20 +6045,6 @@ public class ActivityManager {
             @IntRange(from = 0) long delayedDurationMs) {
         try {
             getService().forceDelayBroadcastDelivery(targetPackage, delayedDurationMs);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Checks if the "modern" broadcast queue is enabled.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.DUMP)
-    public boolean isModernBroadcastQueueEnabled() {
-        try {
-            return getService().isModernBroadcastQueueEnabled();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

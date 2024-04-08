@@ -18,12 +18,12 @@ package com.android.server.pm;
 
 import static android.Manifest.permission.READ_FRAME_BUFFER;
 import static android.app.ActivityOptions.KEY_SPLASH_SCREEN_THEME;
+import static android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED;
+import static android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.MODE_IGNORED;
 import static android.app.AppOpsManager.OP_ARCHIVE_ICON_OVERLAY;
 import static android.app.AppOpsManager.OP_UNARCHIVAL_CONFIRMATION;
-import static android.app.ComponentOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED;
-import static android.app.ComponentOptions.MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED;
 import static android.app.PendingIntent.FLAG_IMMUTABLE;
 import static android.app.PendingIntent.FLAG_MUTABLE;
 import static android.app.PendingIntent.FLAG_UPDATE_CURRENT;
@@ -161,6 +161,9 @@ import java.util.zip.ZipOutputStream;
 public class LauncherAppsService extends SystemService {
     private static final String WM_TRACE_DIR = "/data/misc/wmtrace/";
     private static final String VC_FILE_SUFFIX = ".vc";
+    // TODO(b/310027945): Update the intent name.
+    private static final String PS_SETTINGS_INTENT =
+            "com.android.settings.action.PRIVATE_SPACE_SETUP_FLOW";
 
     private static final Set<PosixFilePermission> WM_TRACE_FILE_PERMISSIONS = Set.of(
             PosixFilePermission.OWNER_WRITE,
@@ -552,18 +555,19 @@ public class LauncherAppsService extends SystemService {
                     return false;
                 }
 
-                if (!mRoleManager
-                        .getRoleHoldersAsUser(
-                                RoleManager.ROLE_HOME, UserHandle.getUserHandleForUid(callingUid))
-                        .contains(callingPackage.getPackageName())) {
-                    return false;
-                }
                 if (mContext.checkPermission(
                                 Manifest.permission.ACCESS_HIDDEN_PROFILES_FULL,
                                 callingPid,
                                 callingUid)
                         == PackageManager.PERMISSION_GRANTED) {
                     return true;
+                }
+
+                if (!mRoleManager
+                        .getRoleHoldersAsUser(
+                                RoleManager.ROLE_HOME, UserHandle.getUserHandleForUid(callingUid))
+                        .contains(callingPackage.getPackageName())) {
+                    return false;
                 }
 
                 // TODO(b/321988638): add option to disable with a flag
@@ -581,7 +585,8 @@ public class LauncherAppsService extends SystemService {
             return android.os.Flags.allowPrivateProfile()
                     && Flags.enableHidingProfiles()
                     && Flags.enableLauncherAppsHiddenProfileChecks()
-                    && Flags.enablePermissionToAccessHiddenProfiles();
+                    && Flags.enablePermissionToAccessHiddenProfiles()
+                    && Flags.enablePrivateSpaceFeatures();
         }
 
         @VisibleForTesting // We override it in unit tests
@@ -1777,6 +1782,27 @@ public class LauncherAppsService extends SystemService {
             }
         }
 
+        @Override
+        public @Nullable IntentSender getPrivateSpaceSettingsIntent() {
+            if (!canAccessHiddenProfile(getCallingUid(), getCallingPid())) {
+                Slog.e(TAG, "Caller cannot access hidden profiles");
+                return null;
+            }
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                Intent psSettingsIntent = new Intent(PS_SETTINGS_INTENT);
+                psSettingsIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                final PendingIntent pi = PendingIntent.getActivity(mContext,
+                        /* requestCode */ 0,
+                        psSettingsIntent,
+                        PendingIntent.FLAG_IMMUTABLE | FLAG_UPDATE_CURRENT);
+                return pi == null ? null : pi.getIntentSender();
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
         @Nullable
         private IntentSender buildAppMarketIntentSenderForUser(@NonNull UserHandle user) {
             Intent appMarketIntent = new Intent(Intent.ACTION_MAIN);
@@ -2091,6 +2117,18 @@ public class LauncherAppsService extends SystemService {
 
         @RequiresPermission(READ_FRAME_BUFFER)
         @Override
+        public void saveViewCaptureData() {
+            int status = checkCallingOrSelfPermissionForPreflight(mContext, READ_FRAME_BUFFER);
+            if (PERMISSION_GRANTED == status) {
+                forEachViewCaptureWindow(this::dumpViewCaptureDataToWmTrace);
+            } else {
+                Log.w(TAG, "caller lacks permissions to save view capture data");
+            }
+        }
+
+
+        @RequiresPermission(READ_FRAME_BUFFER)
+        @Override
         public void registerDumpCallback(@NonNull IDumpCallback cb) {
             int status = checkCallingOrSelfPermissionForPreflight(mContext, READ_FRAME_BUFFER);
             if (PERMISSION_GRANTED == status) {
@@ -2209,8 +2247,10 @@ public class LauncherAppsService extends SystemService {
             for (UserHandle user : users) {
                 mPackageManagerInternal.forEachInstalledPackage(pkg -> {
                     final String packageName = pkg.getPackageName();
-                    if (mPackageManagerInternal.getIncrementalStatesInfo(packageName,
-                            Process.myUid(), user.getIdentifier()).isLoading()) {
+                    final IncrementalStatesInfo info =
+                            mPackageManagerInternal.getIncrementalStatesInfo(packageName,
+                                    Process.myUid(), user.getIdentifier());
+                    if (info != null && info.isLoading()) {
                         mPackageManagerInternal.registerInstalledLoadingProgressCallback(
                                 packageName, new PackageLoadingProgressCallback(packageName, user),
                                 user.getIdentifier());

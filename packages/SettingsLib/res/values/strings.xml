@@ -1108,7 +1108,7 @@
     <!-- [CHAR_LIMIT=NONE] Label for charging on hold on main page of settings -->
     <string name="power_charging_on_hold_settings_home_page"><xliff:g id="level">%1$s</xliff:g> - Charging on hold to protect battery</string>
     <!-- [CHAR_LIMIT=NONE] Label for incompatible charging accessory on main page of settings -->
-    <string name="power_incompatible_charging_settings_home_page"><xliff:g id="level">%1$s</xliff:g> - Checking charging accessory</string>
+    <string name="power_incompatible_charging_settings_home_page"><xliff:g id="level">%1$s</xliff:g> - Check charging accessory</string>
     <!-- [CHAR_LIMIT=40] Label for estimated remaining duration of battery discharging -->
     <string name="power_remaining_duration_only">About <xliff:g id="time_remaining">%1$s</xliff:g> left</string>
     <!-- [CHAR_LIMIT=40] Label for battery level chart when discharging with duration -->
@@ -1508,7 +1508,7 @@
     <string name="user_nickname">Nickname</string>
 
     <!-- Confirmation message on dialog for editing user name and profile picture. Inform user on who will be able to see the changes [CHAR LIMIT=NONE]-->
-    <string name="edit_user_info_message">Your name and picture will be visible to anyone that uses this device.</string>
+    <string name="edit_user_info_message">The name and picture you choose will be visible to anyone who uses this device.</string>
 
     <!-- Label for adding a new user in the user switcher [CHAR LIMIT=35] -->
     <string name="user_add_user">Add user</string>

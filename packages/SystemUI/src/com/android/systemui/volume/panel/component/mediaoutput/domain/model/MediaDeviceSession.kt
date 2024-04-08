@@ -17,22 +17,15 @@
 package com.android.systemui.volume.panel.component.mediaoutput.domain.model
 
 import android.media.session.MediaSession
-import android.media.session.PlaybackState
 
 /** Represents media playing on the connected device. */
-sealed interface MediaDeviceSession {
+data class MediaDeviceSession(
+    val appLabel: CharSequence,
+    val packageName: String,
+    val sessionToken: MediaSession.Token,
+    val canAdjustVolume: Boolean,
+)
 
-    /** Media is playing. */
-    data class Active(
-        val appLabel: CharSequence,
-        val packageName: String,
-        val sessionToken: MediaSession.Token,
-        val playbackState: PlaybackState?,
-    ) : MediaDeviceSession
-
-    /** Media is not playing. */
-    data object Inactive : MediaDeviceSession
-
-    /** Current media state is unknown yet. */
-    data object Unknown : MediaDeviceSession
-}
+/** Returns true when [other] controls the same sessions as [this]. */
+fun MediaDeviceSession.isTheSameSession(other: MediaDeviceSession?): Boolean =
+    sessionToken == other?.sessionToken

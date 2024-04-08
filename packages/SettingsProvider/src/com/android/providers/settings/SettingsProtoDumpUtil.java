@@ -1841,6 +1841,9 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED,
                 SecureSettingsProto.Accessibility.ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED);
         dumpSetting(s, p,
+                Settings.Secure.ACCESSIBILITY_FLOATING_MENU_TARGETS,
+                SecureSettingsProto.Accessibility.ACCESSIBILITY_FLOATING_MENU_TARGETS);
+        dumpSetting(s, p,
                 Settings.Secure.ODI_CAPTIONS_VOLUME_UI_ENABLED,
                 SecureSettingsProto.Accessibility.ODI_CAPTIONS_VOLUME_UI_ENABLED);
         dumpSetting(s, p,
@@ -1867,6 +1870,10 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.ACCESSIBILITY_PINCH_TO_ZOOM_ANYWHERE_ENABLED,
                 SecureSettingsProto.Accessibility
                         .ACCESSIBILITY_PINCH_TO_ZOOM_ANYWHERE_ENABLED);
+        dumpSetting(s, p,
+                Settings.Secure.ACCESSIBILITY_SINGLE_FINGER_PANNING_ENABLED,
+                SecureSettingsProto.Accessibility
+                        .ACCESSIBILITY_SINGLE_FINGER_PANNING_ENABLED);
         dumpSetting(s, p,
                 Settings.Secure.HEARING_AID_RINGTONE_ROUTING,
                 SecureSettingsProto.Accessibility.HEARING_AID_RINGTONE_ROUTING);
@@ -1949,11 +1956,8 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.ASSIST_LONG_PRESS_HOME_ENABLED,
                 SecureSettingsProto.Assist.LONG_PRESS_HOME_ENABLED);
         dumpSetting(s, p,
-                Settings.Secure.SEARCH_PRESS_HOLD_NAV_HANDLE_ENABLED,
-                SecureSettingsProto.Assist.SEARCH_PRESS_HOLD_NAV_HANDLE_ENABLED);
-        dumpSetting(s, p,
-                Settings.Secure.SEARCH_LONG_PRESS_HOME_ENABLED,
-                SecureSettingsProto.Assist.SEARCH_LONG_PRESS_HOME_ENABLED);
+                Settings.Secure.SEARCH_ALL_ENTRYPOINTS_ENABLED,
+                SecureSettingsProto.Assist.SEARCH_ALL_ENTRYPOINTS_ENABLED);
         dumpSetting(s, p,
                 Settings.Secure.VISUAL_QUERY_ACCESSIBILITY_DETECTION_ENABLED,
                 SecureSettingsProto.Assist.VISUAL_QUERY_ACCESSIBILITY_DETECTION_ENABLED);

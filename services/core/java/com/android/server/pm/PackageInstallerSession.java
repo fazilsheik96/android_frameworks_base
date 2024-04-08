@@ -148,6 +148,7 @@ import android.os.incremental.V4Signature;
 import android.os.storage.StorageManager;
 import android.provider.DeviceConfig;
 import android.provider.Settings.Global;
+import android.service.persistentdata.PersistentDataBlockManager;
 import android.stats.devicepolicy.DevicePolicyEnums;
 import android.system.ErrnoException;
 import android.system.Int64Ref;
@@ -359,7 +360,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     /** Default byte size limit for app metadata */
     private static final long DEFAULT_APP_METADATA_BYTE_SIZE_LIMIT = 32000;
 
-    private static final int APP_METADATA_FILE_ACCESS_MODE = 0640;
+    static final int APP_METADATA_FILE_ACCESS_MODE = 0640;
 
     /**
      * Throws IllegalArgumentException if the {@link IntentSender} from an immutable
@@ -975,10 +976,19 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         if (ps == null || ps.getPkg() == null || !ps.isSystem()) {
             return false;
         }
+        int uid = UserHandle.getUid(userId, ps.getAppId());
         String emergencyInstaller = ps.getPkg().getEmergencyInstaller();
         if (emergencyInstaller == null || !ArrayUtils.contains(
-                snapshot.getPackagesForUid(mInstallerUid),
-                emergencyInstaller)) {
+                snapshot.getPackagesForUid(mInstallerUid), emergencyInstaller)) {
+            return false;
+        }
+        // Only system installers can have an emergency installer
+        if (PackageManager.PERMISSION_GRANTED
+                != snapshot.checkUidPermission(Manifest.permission.INSTALL_PACKAGES, uid)
+                && PackageManager.PERMISSION_GRANTED
+                != snapshot.checkUidPermission(Manifest.permission.INSTALL_PACKAGE_UPDATES, uid)
+                && PackageManager.PERMISSION_GRANTED
+                != snapshot.checkUidPermission(Manifest.permission.INSTALL_SELF_UPDATES, uid)) {
             return false;
         }
         return (snapshot.checkUidPermission(Manifest.permission.EMERGENCY_INSTALL_PACKAGES,
@@ -1790,8 +1800,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     private File getStagedAppMetadataFile() {
-        File file = new File(stageDir, APP_METADATA_FILE_NAME);
-        return file.exists() ? file : null;
+        return new File(stageDir, APP_METADATA_FILE_NAME);
     }
 
     private static boolean isAppMetadata(String name) {
@@ -1807,7 +1816,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         assertCallerIsOwnerOrRoot();
         synchronized (mLock) {
             assertPreparedAndNotCommittedOrDestroyedLocked("getAppMetadataFd");
-            if (getStagedAppMetadataFile() == null) {
+            if (!getStagedAppMetadataFile().exists()) {
                 return null;
             }
             try {
@@ -1821,12 +1830,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     @Override
     public void removeAppMetadata() {
         File file = getStagedAppMetadataFile();
-        if (file != null) {
+        if (file.exists()) {
             file.delete();
         }
     }
 
-    private static long getAppMetadataSizeLimit() {
+    static long getAppMetadataSizeLimit() {
         final long token = Binder.clearCallingIdentity();
         try {
             return DeviceConfig.getLong(NAMESPACE_PACKAGE_MANAGER_SERVICE,
@@ -2151,7 +2160,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
 
         File appMetadataFile = getStagedAppMetadataFile();
-        if (appMetadataFile != null) {
+        if (appMetadataFile.exists()) {
             long sizeLimit = getAppMetadataSizeLimit();
             if (appMetadataFile.length() > sizeLimit) {
                 appMetadataFile.delete();
@@ -2376,8 +2385,21 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             assertPreparedAndNotDestroyedLocked("commit of session " + sessionId);
             assertNoWriteFileTransfersOpenLocked();
 
-            final boolean isSecureFrpEnabled =
-                    Global.getInt(mContext.getContentResolver(), Global.SECURE_FRP_MODE, 0) == 1;
+            boolean isSecureFrpEnabled;
+            if (android.security.Flags.frpEnforcement()) {
+                PersistentDataBlockManager pdbManager =
+                        mContext.getSystemService(PersistentDataBlockManager.class);
+                if (pdbManager == null) {
+                    // Some devices may not support FRP. In that case, we can't block the install
+                    // accordingly.
+                    isSecureFrpEnabled = false;
+                } else {
+                    isSecureFrpEnabled = pdbManager.isFactoryResetProtectionActive();
+                }
+            } else {
+                isSecureFrpEnabled = Global.getInt(mContext.getContentResolver(),
+                        Global.SECURE_FRP_MODE, 0) == 1;
+            }
 
             if (isSecureFrpEnabled
                     && !isSecureFrpInstallAllowed(mContext, Binder.getCallingUid())) {
@@ -3439,7 +3461,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         final List<ApkLite> addedFiles = getAddedApkLitesLocked();
         if (addedFiles.isEmpty()
-                && (removeSplitList.size() == 0 || getStagedAppMetadataFile() != null)) {
+                && (removeSplitList.size() == 0 || getStagedAppMetadataFile().exists())) {
             throw new PackageManagerException(INSTALL_FAILED_INVALID_APK,
                     TextUtils.formatSimple("Session: %d. No packages staged in %s", sessionId,
                           stageDir.getAbsolutePath()));

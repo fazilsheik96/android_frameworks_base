@@ -21,6 +21,8 @@ import static com.android.systemui.statusbar.notification.row.NotificationRowCon
 import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_EXPANDED;
 import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_PUBLIC;
 import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_SINGLE_LINE;
+import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_GROUP_SUMMARY_HEADER;
+import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_LOW_PRIORITY_GROUP_SUMMARY_HEADER;
 
 import static java.util.Objects.requireNonNull;
 
@@ -50,6 +52,7 @@ import com.android.systemui.statusbar.notification.row.RowContentBindParams;
 import com.android.systemui.statusbar.notification.row.RowContentBindStage;
 import com.android.systemui.statusbar.notification.row.RowInflaterTask;
 import com.android.systemui.statusbar.notification.row.dagger.ExpandableNotificationRowComponent;
+import com.android.systemui.statusbar.notification.row.shared.AsyncGroupHeaderViewInflation;
 import com.android.systemui.statusbar.notification.row.shared.AsyncHybridViewInflation;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 
@@ -135,7 +138,7 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
 
         if (entry.rowExists()) {
             mLogger.logUpdatingRow(entry, params);
-            mIconManager.updateIcons(entry);
+            mIconManager.updateIcons(entry, /* usingCache = */ false);
             ExpandableNotificationRow row = entry.getRow();
             row.reset();
             updateRow(entry, row);
@@ -240,7 +243,7 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
             @Nullable NotificationRowContentBinder.InflationCallback inflationCallback) {
         final boolean useIncreasedCollapsedHeight =
                 mMessagingUtil.isImportantMessaging(entry.getSbn(), entry.getImportance());
-        final boolean isLowPriority = inflaterParams.isLowPriority();
+        final boolean isMinimized = inflaterParams.isMinimized();
 
         // Set show snooze action
         row.setShowSnooze(inflaterParams.getShowSnooze());
@@ -249,13 +252,11 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
         params.requireContentViews(FLAG_CONTENT_VIEW_CONTRACTED);
         params.requireContentViews(FLAG_CONTENT_VIEW_EXPANDED);
         params.setUseIncreasedCollapsedHeight(useIncreasedCollapsedHeight);
-        params.setUseLowPriority(isLowPriority);
+        params.setUseMinimized(isMinimized);
 
-        // If screenshareNotificationHiding is enabled, both public and private views should be
-        // inflated to avoid any latency associated with reinflating all notification views when
-        // screen share starts and stops
         if (screenshareNotificationHiding()
-                || mNotificationLockscreenUserManager.needsRedaction(entry)) {
+                ? inflaterParams.getNeedsRedaction()
+                : mNotificationLockscreenUserManager.needsRedaction(entry)) {
             params.requireContentViews(FLAG_CONTENT_VIEW_PUBLIC);
         } else {
             params.markContentViewsFreeable(FLAG_CONTENT_VIEW_PUBLIC);
@@ -271,12 +272,23 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
             }
         }
 
+        if (AsyncGroupHeaderViewInflation.isEnabled()) {
+            if (inflaterParams.isGroupSummary()) {
+                params.requireContentViews(FLAG_GROUP_SUMMARY_HEADER);
+                if (isMinimized) {
+                    params.requireContentViews(FLAG_LOW_PRIORITY_GROUP_SUMMARY_HEADER);
+                }
+            } else {
+                params.markContentViewsFreeable(FLAG_GROUP_SUMMARY_HEADER);
+                params.markContentViewsFreeable(FLAG_LOW_PRIORITY_GROUP_SUMMARY_HEADER);
+            }
+        }
         params.rebindAllContentViews();
         mLogger.logRequestingRebind(entry, inflaterParams);
         mRowContentBindStage.requestRebind(entry, en -> {
             mLogger.logRebindComplete(entry);
             row.setUsesIncreasedCollapsedHeight(useIncreasedCollapsedHeight);
-            row.setIsLowPriority(isLowPriority);
+            row.setIsMinimized(isMinimized);
             if (inflationCallback != null) {
                 inflationCallback.onAsyncInflationFinished(en);
             }

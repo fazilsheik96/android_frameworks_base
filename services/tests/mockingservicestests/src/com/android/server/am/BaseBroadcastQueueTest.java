@@ -56,6 +56,7 @@ import com.android.server.wm.ActivityTaskManagerService;
 
 import org.junit.Rule;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.io.File;
@@ -98,8 +99,6 @@ public abstract class BaseBroadcastQueueTest {
     @Rule
     public final CheckFlagsRule mCheckFlagsRule = DeviceFlagsValueProvider.createCheckFlagsRule();
 
-    final BroadcastQueue[] mBroadcastQueues = new BroadcastQueue[1];
-
     @Mock
     AppOpsService mAppOpsService;
     @Mock
@@ -120,6 +119,7 @@ public abstract class BaseBroadcastQueueTest {
     HandlerThread mHandlerThread;
     TestLooperManager mLooper;
     AtomicInteger mNextPid;
+    BroadcastHistory mEmptyHistory;
 
     /**
      * Map from PID to registered registered runtime receivers.
@@ -136,6 +136,13 @@ public abstract class BaseBroadcastQueueTest {
         mLooper = Objects.requireNonNull(InstrumentationRegistry.getInstrumentation()
                 .acquireLooperManager(mHandlerThread.getLooper()));
         mNextPid = new AtomicInteger(100);
+
+        mConstants = new BroadcastConstants(Settings.Global.BROADCAST_FG_CONSTANTS);
+        mEmptyHistory = new BroadcastHistory(mConstants) {
+            public void addBroadcastToHistoryLocked(BroadcastRecord original) {
+                // Ignored
+            }
+        };
 
         LocalServices.removeServiceForTest(DropBoxManagerInternal.class);
         LocalServices.addService(DropBoxManagerInternal.class, mDropBoxManagerInt);
@@ -154,6 +161,7 @@ public abstract class BaseBroadcastQueueTest {
         realAms.mActivityTaskManager = new ActivityTaskManagerService(mContext);
         realAms.mActivityTaskManager.initialize(null, null, mContext.getMainLooper());
         realAms.mAtmInternal = spy(realAms.mActivityTaskManager.getAtmInternal());
+        realAms.mOomAdjuster.mCachedAppOptimizer = Mockito.mock(CachedAppOptimizer.class);
         realAms.mOomAdjuster = spy(realAms.mOomAdjuster);
         ExtendedMockito.doNothing().when(() -> ProcessList.setOomAdj(anyInt(), anyInt(), anyInt()));
         realAms.mPackageManagerInt = mPackageManagerInt;
@@ -164,8 +172,6 @@ public abstract class BaseBroadcastQueueTest {
         mSkipPolicy = spy(new BroadcastSkipPolicy(mAms));
         doReturn(null).when(mSkipPolicy).shouldSkipMessage(any(), any());
         doReturn(false).when(mSkipPolicy).disallowBackgroundStart(any());
-
-        mConstants = new BroadcastConstants(Settings.Global.BROADCAST_FG_CONSTANTS);
     }
 
     public void tearDown() throws Exception {
@@ -213,8 +219,8 @@ public abstract class BaseBroadcastQueueTest {
         }
 
         @Override
-        public BroadcastQueue[] getBroadcastQueues(ActivityManagerService service) {
-            return mBroadcastQueues;
+        public BroadcastQueue getBroadcastQueue(ActivityManagerService service) {
+            return null;
         }
     }
 
@@ -278,5 +284,10 @@ public abstract class BaseBroadcastQueueTest {
                 receiverList.userId, false, false, true);
         receiverList.add(res);
         return res;
+    }
+
+    void setProcessFreezable(ProcessRecord app, boolean pendingFreeze, boolean frozen) {
+        app.mOptRecord.setPendingFreeze(pendingFreeze);
+        app.mOptRecord.setFrozen(frozen);
     }
 }

@@ -38,6 +38,7 @@ java_sdk_library {
     name: "framework-nfc",
     libs: [
         "unsupportedappusage", // for android.compat.annotation.UnsupportedAppUsage
+        "framework-permission-s",
     ],
     static_libs: [
         "android.nfc.flags-aconfig-java",
@@ -49,7 +50,7 @@ java_sdk_library {
     ],
     defaults: ["framework-module-defaults"],
     sdk_version: "module_current",
-    min_sdk_version: "34", // should be 35 (making it 34 for compiling for `-next`)
+    min_sdk_version: "current",
     installable: true,
     optimize: {
         enabled: false,
@@ -75,6 +76,9 @@ java_sdk_library {
     apex_available: [
         "//apex_available:platform",
         "com.android.nfcservices",
+    ],
+    aconfig_declarations: [
+        "android.nfc.flags-aconfig",
     ],
 }
 

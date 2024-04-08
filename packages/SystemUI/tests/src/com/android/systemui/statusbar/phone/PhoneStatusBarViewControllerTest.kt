@@ -20,6 +20,7 @@ import android.app.StatusBarManager.WINDOW_STATE_HIDDEN
 import android.app.StatusBarManager.WINDOW_STATE_HIDING
 import android.app.StatusBarManager.WINDOW_STATE_SHOWING
 import android.app.StatusBarManager.WINDOW_STATUS_BAR
+import android.view.InputDevice
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -37,6 +38,7 @@ import com.android.systemui.scene.ui.view.WindowRootView
 import com.android.systemui.shade.ShadeControllerImpl
 import com.android.systemui.shade.ShadeLogger
 import com.android.systemui.shade.ShadeViewController
+import com.android.systemui.shade.domain.interactor.PanelExpansionInteractor
 import com.android.systemui.statusbar.CommandQueue
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.window.StatusBarWindowStateController
@@ -66,6 +68,7 @@ import javax.inject.Provider
 class PhoneStatusBarViewControllerTest : SysuiTestCase() {
 
     @Mock private lateinit var shadeViewController: ShadeViewController
+    @Mock private lateinit var panelExpansionInteractor: PanelExpansionInteractor
     @Mock private lateinit var featureFlags: FeatureFlags
     @Mock private lateinit var moveFromCenterAnimation: StatusBarMoveFromCenterAnimationController
     @Mock private lateinit var sysuiUnfoldComponent: SysUIUnfoldComponent
@@ -194,7 +197,7 @@ class PhoneStatusBarViewControllerTest : SysuiTestCase() {
     @Test
     fun handleTouchEventFromStatusBar_topEdgeTouch_viewNeverReceivesEvent() {
         `when`(centralSurfacesImpl.commandQueuePanelsEnabled).thenReturn(true)
-        `when`(shadeViewController.isFullyCollapsed).thenReturn(true)
+        `when`(panelExpansionInteractor.isFullyCollapsed).thenReturn(true)
         val event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
 
         view.onTouchEvent(event)
@@ -233,14 +236,35 @@ class PhoneStatusBarViewControllerTest : SysuiTestCase() {
     }
 
     @Test
-    fun shadeIsExpandedOnStatusIconClick() {
+    fun shadeIsExpandedOnStatusIconMouseClick() {
         val view = createViewMock()
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             controller = createAndInitController(view)
         }
         val statusContainer = view.requireViewById<View>(R.id.system_icons)
-        statusContainer.performClick()
-        verify(shadeViewController).expand(any())
+        statusContainer.dispatchTouchEvent(
+            getActionUpEventFromSource(InputDevice.SOURCE_MOUSE)
+        )
+        verify(shadeControllerImpl).animateExpandShade()
+    }
+
+    @Test
+    fun statusIconContainerIsNotHandlingTouchScreenTouches() {
+        val view = createViewMock()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            controller = createAndInitController(view)
+        }
+        val statusContainer = view.requireViewById<View>(R.id.system_icons)
+        val handled = statusContainer.dispatchTouchEvent(
+            getActionUpEventFromSource(InputDevice.SOURCE_TOUCHSCREEN)
+        )
+        assertThat(handled).isFalse()
+    }
+
+    private fun getActionUpEventFromSource(source: Int): MotionEvent {
+        val ev = MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 0f, 0f, 0)
+        ev.source = source
+        return ev
     }
 
     @Test
@@ -250,7 +274,7 @@ class PhoneStatusBarViewControllerTest : SysuiTestCase() {
             controller = createAndInitController(view)
         }
         view.performClick()
-        verify(shadeViewController, never()).expand(any())
+        verify(shadeControllerImpl, never()).animateExpandShade()
     }
 
     private fun getCommandQueueCallback(): CommandQueue.Callbacks {
@@ -269,21 +293,22 @@ class PhoneStatusBarViewControllerTest : SysuiTestCase() {
 
     private fun createAndInitController(view: PhoneStatusBarView): PhoneStatusBarViewController {
         return PhoneStatusBarViewController.Factory(
-                Optional.of(sysuiUnfoldComponent),
-                Optional.of(progressProvider),
-                featureFlags,
-                FakeSceneContainerFlags(),
-                userChipViewModel,
-                centralSurfacesImpl,
-                statusBarWindowStateController,
-                shadeControllerImpl,
-                shadeViewController,
-                windowRootView,
-                shadeLogger,
-                viewUtil,
-                configurationController,
-                mStatusOverlayHoverListenerFactory
-            )
+            Optional.of(sysuiUnfoldComponent),
+            Optional.of(progressProvider),
+            featureFlags,
+            FakeSceneContainerFlags(),
+            userChipViewModel,
+            centralSurfacesImpl,
+            statusBarWindowStateController,
+            shadeControllerImpl,
+            shadeViewController,
+            panelExpansionInteractor,
+            windowRootView,
+            shadeLogger,
+            viewUtil,
+            configurationController,
+            mStatusOverlayHoverListenerFactory
+        )
             .create(view)
             .also { it.init() }
     }

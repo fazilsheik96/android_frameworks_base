@@ -21,6 +21,7 @@ import com.android.systemui.communal.domain.interactor.CommunalInteractor
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.keyguard.KeyguardWmStateRefactor
 import com.android.systemui.keyguard.data.repository.KeyguardTransitionRepository
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.power.domain.interactor.PowerInteractor
@@ -31,8 +32,12 @@ import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 
 @SysUISingleton
@@ -46,13 +51,16 @@ constructor(
     @Main mainDispatcher: CoroutineDispatcher,
     private val keyguardInteractor: KeyguardInteractor,
     private val communalInteractor: CommunalInteractor,
-    private val powerInteractor: PowerInteractor,
+    powerInteractor: PowerInteractor,
+    keyguardOcclusionInteractor: KeyguardOcclusionInteractor,
 ) :
     TransitionInteractor(
         fromState = KeyguardState.ALTERNATE_BOUNCER,
         transitionInteractor = transitionInteractor,
         mainDispatcher = mainDispatcher,
         bgDispatcher = bgDispatcher,
+        powerInteractor = powerInteractor,
+        keyguardOcclusionInteractor = keyguardOcclusionInteractor,
     ) {
 
     override fun start() {
@@ -62,7 +70,25 @@ constructor(
         listenForTransitionToCamera(scope, keyguardInteractor)
     }
 
-    @FlowPreview
+    val surfaceBehindVisibility: Flow<Boolean?> =
+        combine(
+                transitionInteractor.startedKeyguardTransitionStep,
+                transitionInteractor.transitionStepsFromState(KeyguardState.ALTERNATE_BOUNCER)
+            ) { startedStep, fromBouncerStep ->
+                if (startedStep.to != KeyguardState.GONE) {
+                    return@combine null
+                }
+
+                // The alt bouncer is pretty fast to hide, so start the surface behind animation
+                // around 30%.
+                fromBouncerStep.value > 0.3f
+            }
+            .onStart {
+                // Default to null ("don't care, use a reasonable default").
+                emit(null)
+            }
+            .distinctUntilChanged()
+
     private fun listenForAlternateBouncerToLockscreenHubAodOrDozing() {
         scope.launch {
             keyguardInteractor.alternateBouncerShowing
@@ -71,7 +97,7 @@ constructor(
                 // happening prematurely.
                 // This should eventually be removed in favor of
                 // [KeyguardTransitionInteractor#startDismissKeyguardTransition]
-                .sample(150L)
+                .onEach { delay(150L) }
                 .sampleCombine(
                     keyguardInteractor.primaryBouncerShowing,
                     startedKeyguardTransitionStep,
@@ -113,6 +139,11 @@ constructor(
     }
 
     private fun listenForAlternateBouncerToGone() {
+        if (KeyguardWmStateRefactor.isEnabled) {
+            // Handled via #dismissAlternateBouncer.
+            return
+        }
+
         scope.launch {
             keyguardInteractor.isKeyguardGoingAway
                 .sampleUtil(finishedKeyguardState, ::Pair)
@@ -150,11 +181,16 @@ constructor(
         }
     }
 
+    fun dismissAlternateBouncer() {
+        scope.launch { startTransitionTo(KeyguardState.GONE) }
+    }
+
     companion object {
         const val TAG = "FromAlternateBouncerTransitionInteractor"
         val TRANSITION_DURATION_MS = 300.milliseconds
         val TO_GONE_DURATION = 500.milliseconds
         val TO_AOD_DURATION = TRANSITION_DURATION_MS
         val TO_PRIMARY_BOUNCER_DURATION = TRANSITION_DURATION_MS
+        val TO_DOZING_DURATION = TRANSITION_DURATION_MS
     }
 }

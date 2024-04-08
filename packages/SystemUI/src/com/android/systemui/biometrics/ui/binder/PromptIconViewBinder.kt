@@ -37,6 +37,7 @@ import com.android.systemui.util.kotlin.Utils.Companion.toQuint
 import com.android.systemui.util.kotlin.Utils.Companion.toTriple
 import com.android.systemui.util.kotlin.sample
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** Sub-binder for [BiometricPromptLayout.iconView]. */
@@ -77,15 +78,15 @@ object PromptIconViewBinder {
                     }
 
                 launch {
-                    var width: Int
-                    var height: Int
-                    viewModel.activeAuthType.collect { activeAuthType ->
+                    combine(viewModel.activeAuthType, viewModel.iconSize, ::Pair).collect {
+                        (activeAuthType, iconSize) ->
+                        // Every time after bp shows, [isIconViewLoaded] is set to false in
+                        // [BiometricViewSizeBinder]. Then when biometric prompt view is redrew
+                        // (when size or activeAuthType changes), we need to update
+                        // [isIconViewLoaded] here to keep it correct.
                         when (activeAuthType) {
                             AuthType.Fingerprint,
                             AuthType.Coex -> {
-                                width = viewModel.fingerprintIconWidth
-                                height = viewModel.fingerprintIconHeight
-
                                 /**
                                  * View is only set visible in BiometricViewSizeBinder once
                                  * PromptSize is determined that accounts for iconView size, to
@@ -100,8 +101,6 @@ object PromptIconViewBinder {
                                 }
                             }
                             AuthType.Face -> {
-                                width = viewModel.faceIconWidth
-                                height = viewModel.faceIconHeight
                                 /**
                                  * Set to true by default since face icon is a drawable, which
                                  * doesn't have a LottieOnCompositionLoadedListener equivalent.
@@ -114,10 +113,11 @@ object PromptIconViewBinder {
                         }
 
                         if (iconViewLayoutParamSizeOverride == null) {
-                            iconView.layoutParams.width = width
-                            iconView.layoutParams.height = height
-                            iconOverlayView.layoutParams.width = width
-                            iconOverlayView.layoutParams.height = height
+                            iconView.layoutParams.width = iconSize.first
+                            iconView.layoutParams.height = iconSize.second
+
+                            iconOverlayView.layoutParams.width = iconSize.first
+                            iconOverlayView.layoutParams.height = iconSize.second
                         }
                     }
                 }

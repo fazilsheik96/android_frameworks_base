@@ -46,7 +46,6 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
-import android.util.ExceptionUtils;
 import android.util.Slog;
 import android.view.WindowManager;
 import android.view.inputmethod.CursorAnchorInfo;
@@ -72,10 +71,12 @@ import com.android.internal.util.FunctionalUtils.ThrowingRunnable;
 import com.android.internal.view.IInputMethodManager;
 
 import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.function.BooleanSupplier;
 
 /**
  * A proxy that processes all {@link IInputMethodManager} calls asynchronously.
@@ -85,10 +86,12 @@ public class ZeroJankProxy extends IInputMethodManager.Stub {
 
     private final IInputMethodManager mInner;
     private final Executor mExecutor;
+    private final BooleanSupplier mIsInputShown;
 
-    ZeroJankProxy(Executor executor, IInputMethodManager inner) {
+    ZeroJankProxy(Executor executor, IInputMethodManager inner, BooleanSupplier isInputShown) {
         mInner = inner;
         mExecutor = executor;
+        mIsInputShown = isInputShown;
     }
 
     private void offload(ThrowingRunnable r) {
@@ -100,7 +103,6 @@ public class ZeroJankProxy extends IInputMethodManager.Stub {
     }
 
     private void offloadInner(Runnable r) {
-        boolean useThrowingRunnable = r instanceof ThrowingRunnable;
         final long identity = Binder.clearCallingIdentity();
         try {
             mExecutor.execute(() -> {
@@ -109,14 +111,9 @@ public class ZeroJankProxy extends IInputMethodManager.Stub {
                 Binder.restoreCallingIdentity(identity);
                 try {
                     try {
-                        if (useThrowingRunnable) {
-                            ((ThrowingRunnable) r).runOrThrow();
-                        } else {
-                            r.run();
-                        }
+                        r.run();
                     } catch (Exception e) {
-                        Slog.e(TAG, "Error in async call", e);
-                        throw ExceptionUtils.propagate(e);
+                        Slog.e(TAG, "Error in async IMMS call", e);
                     }
                 } finally {
                     Binder.restoreCallingIdentity(inner);
@@ -168,8 +165,19 @@ public class ZeroJankProxy extends IInputMethodManager.Stub {
             int lastClickTooType, ResultReceiver resultReceiver,
             @SoftInputShowHideReason int reason)
             throws RemoteException {
-        offload(() -> mInner.showSoftInput(client, windowToken, statsToken, flags, lastClickTooType,
-                resultReceiver, reason));
+        offload(
+                () -> {
+                    if (!mInner.showSoftInput(
+                            client,
+                            windowToken,
+                            statsToken,
+                            flags,
+                            lastClickTooType,
+                            resultReceiver,
+                            reason)) {
+                        sendResultReceiverFailure(resultReceiver);
+                    }
+                });
         return true;
     }
 
@@ -178,9 +186,29 @@ public class ZeroJankProxy extends IInputMethodManager.Stub {
             @Nullable ImeTracker.Token statsToken, @InputMethodManager.HideFlags int flags,
             ResultReceiver resultReceiver, @SoftInputShowHideReason int reason)
             throws RemoteException {
-        offload(() -> mInner.hideSoftInput(client, windowToken, statsToken, flags, resultReceiver,
-                reason));
+        offload(
+                () -> {
+                    if (!mInner.hideSoftInput(
+                            client, windowToken, statsToken, flags, resultReceiver, reason)) {
+                        sendResultReceiverFailure(resultReceiver);
+                    }
+                });
         return true;
+    }
+
+    private void sendResultReceiverFailure(ResultReceiver resultReceiver) {
+        resultReceiver.send(
+                mIsInputShown.getAsBoolean()
+                        ? InputMethodManager.RESULT_UNCHANGED_SHOWN
+                        : InputMethodManager.RESULT_UNCHANGED_HIDDEN,
+                null);
+    }
+
+    @Override
+    @EnforcePermission(Manifest.permission.TEST_INPUT_METHOD)
+    public void hideSoftInputFromServerForTest() throws RemoteException {
+        super.hideSoftInputFromServerForTest_enforcePermission();
+        mInner.hideSoftInputFromServerForTest();
     }
 
     @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
@@ -404,16 +432,26 @@ public class ZeroJankProxy extends IInputMethodManager.Stub {
                 in, out, err, args, callback, resultReceiver);
     }
 
+    @Override
+    protected void dump(@NonNull FileDescriptor fd,
+            @NonNull PrintWriter fout,
+            @Nullable String[] args) {
+        ((InputMethodManagerService) mInner).dump(fd, fout, args);
+    }
+
     private void sendOnStartInputResult(
             IInputMethodClient client, InputBindResult res, int startInputSeq) {
-        InputMethodManagerService service = (InputMethodManagerService) mInner;
-        final ClientState cs = service.getClientState(client);
-        if (cs != null && cs.mClient != null) {
-            cs.mClient.onStartInputResult(res, startInputSeq);
-        } else {
-            // client is unbound.
-            Slog.i(TAG, "Client that requested startInputOrWindowGainedFocus is no longer"
-                    + " bound. InputBindResult: " + res + " for startInputSeq: " + startInputSeq);
+        synchronized (ImfLock.class) {
+            InputMethodManagerService service = (InputMethodManagerService) mInner;
+            final ClientState cs = service.getClientState(client);
+            if (cs != null && cs.mClient != null) {
+                cs.mClient.onStartInputResult(res, startInputSeq);
+            } else {
+                // client is unbound.
+                Slog.i(TAG, "Client that requested startInputOrWindowGainedFocus is no longer"
+                        + " bound. InputBindResult: " + res + " for startInputSeq: "
+                        + startInputSeq);
+            }
         }
     }
 }

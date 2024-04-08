@@ -34,7 +34,7 @@ import static android.bluetooth.le.ScanSettings.CALLBACK_TYPE_MATCH_LOST;
 import static android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_POWER;
 
 import static com.android.server.companion.presence.CompanionDevicePresenceMonitor.DEBUG;
-import static com.android.server.companion.presence.Utils.btDeviceToString;
+import static com.android.server.companion.utils.Utils.btDeviceToString;
 
 import static java.util.Objects.requireNonNull;
 
@@ -59,8 +59,8 @@ import android.os.Looper;
 import android.util.Log;
 import android.util.Slog;
 
-import com.android.server.companion.AssociationStore;
-import com.android.server.companion.AssociationStore.ChangeType;
+import com.android.server.companion.association.AssociationStore;
+import com.android.server.companion.association.AssociationStore.ChangeType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -106,7 +106,7 @@ class BleCompanionDeviceScanner implements AssociationStore.OnChangeListener {
         checkBleState();
         registerBluetoothStateBroadcastReceiver(context);
 
-        mAssociationStore.registerListener(this);
+        mAssociationStore.registerLocalListener(this);
     }
 
     @MainThread
@@ -168,7 +168,7 @@ class BleCompanionDeviceScanner implements AssociationStore.OnChangeListener {
     void startScan() {
         enforceInitialized();
 
-        if (DEBUG) Log.i(TAG, "startScan()");
+        Slog.i(TAG, "startBleScan()");
         // This method should not be called if scan is already in progress.
         if (mScanning) {
             Slog.w(TAG, "Scan is already in progress.");
@@ -183,7 +183,7 @@ class BleCompanionDeviceScanner implements AssociationStore.OnChangeListener {
 
         // Collect MAC addresses from all associations.
         final Set<String> macAddresses = new HashSet<>();
-        for (AssociationInfo association : mAssociationStore.getAssociations()) {
+        for (AssociationInfo association : mAssociationStore.getActiveAssociations()) {
             if (!association.isNotifyOnDeviceNearby()) continue;
 
             // Beware that BT stack does not consider low-case MAC addresses valid, while
@@ -228,7 +228,7 @@ class BleCompanionDeviceScanner implements AssociationStore.OnChangeListener {
     void stopScanIfNeeded() {
         enforceInitialized();
 
-        if (DEBUG) Log.i(TAG, "stopScan()");
+        Slog.i(TAG, "stopBleScan()");
         if (!mScanning) {
             if (DEBUG) Log.d(TAG, "  > not scanning.");
             return;
@@ -255,7 +255,7 @@ class BleCompanionDeviceScanner implements AssociationStore.OnChangeListener {
         if (DEBUG) Log.i(TAG, "notifyDevice_Found()" + btDeviceToString(device));
 
         final List<AssociationInfo> associations =
-                mAssociationStore.getAssociationsByAddress(device.getAddress());
+                mAssociationStore.getActiveAssociationsByAddress(device.getAddress());
         if (DEBUG) Log.d(TAG, "  > associations=" + Arrays.toString(associations.toArray()));
 
         for (AssociationInfo association : associations) {
@@ -268,7 +268,7 @@ class BleCompanionDeviceScanner implements AssociationStore.OnChangeListener {
         if (DEBUG) Log.i(TAG, "notifyDevice_Lost()" + btDeviceToString(device));
 
         final List<AssociationInfo> associations =
-                mAssociationStore.getAssociationsByAddress(device.getAddress());
+                mAssociationStore.getActiveAssociationsByAddress(device.getAddress());
         if (DEBUG) Log.d(TAG, "  > associations=" + Arrays.toString(associations.toArray()));
 
         for (AssociationInfo association : associations) {
@@ -319,7 +319,7 @@ class BleCompanionDeviceScanner implements AssociationStore.OnChangeListener {
                 Log.v(TAG, "  > scanResult=" + result);
 
                 final List<AssociationInfo> associations =
-                        mAssociationStore.getAssociationsByAddress(device.getAddress());
+                        mAssociationStore.getActiveAssociationsByAddress(device.getAddress());
                 Log.v(TAG, "  > associations=" + Arrays.toString(associations.toArray()));
             }
 

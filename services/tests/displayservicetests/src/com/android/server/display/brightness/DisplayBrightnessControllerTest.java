@@ -19,6 +19,7 @@ package com.android.server.display.brightness;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -109,8 +110,9 @@ public final class DisplayBrightnessControllerTest {
         DisplayPowerRequest displayPowerRequest = mock(DisplayPowerRequest.class);
         DisplayBrightnessStrategy displayBrightnessStrategy = mock(DisplayBrightnessStrategy.class);
         int targetDisplayState = Display.STATE_DOZE;
-        when(mDisplayBrightnessStrategySelector.selectStrategy(displayPowerRequest,
-                targetDisplayState)).thenReturn(displayBrightnessStrategy);
+        when(mDisplayBrightnessStrategySelector.selectStrategy(
+                eq(new StrategySelectionRequest(displayPowerRequest, targetDisplayState))))
+                .thenReturn(displayBrightnessStrategy);
         mDisplayBrightnessController.updateBrightness(displayPowerRequest, targetDisplayState);
         verify(displayBrightnessStrategy).updateBrightness(displayPowerRequest);
         assertEquals(mDisplayBrightnessController.getCurrentDisplayBrightnessStrategy(),
@@ -393,7 +395,31 @@ public final class DisplayBrightnessControllerTest {
         OffloadBrightnessStrategy offloadBrightnessStrategy = mock(OffloadBrightnessStrategy.class);
         when(mDisplayBrightnessStrategySelector.getOffloadBrightnessStrategy()).thenReturn(
                 offloadBrightnessStrategy);
-        mDisplayBrightnessController.setBrightnessFromOffload(brightness);
+        boolean brightnessUpdated =
+                mDisplayBrightnessController.setBrightnessFromOffload(brightness);
         verify(offloadBrightnessStrategy).setOffloadScreenBrightness(brightness);
+        assertTrue(brightnessUpdated);
+    }
+
+    @Test
+    public void setBrightnessFromOffload_OffloadStrategyNull() {
+        float brightness = 0.4f;
+        when(mDisplayBrightnessStrategySelector.getOffloadBrightnessStrategy()).thenReturn(null);
+        boolean brightnessUpdated =
+                mDisplayBrightnessController.setBrightnessFromOffload(brightness);
+        assertFalse(brightnessUpdated);
+    }
+
+    @Test
+    public void setBrightnessFromOffload_BrightnessUnchanged() {
+        float brightness = 0.4f;
+        OffloadBrightnessStrategy offloadBrightnessStrategy = mock(OffloadBrightnessStrategy.class);
+        when(offloadBrightnessStrategy.getOffloadScreenBrightness()).thenReturn(brightness);
+        when(mDisplayBrightnessStrategySelector.getOffloadBrightnessStrategy()).thenReturn(
+                offloadBrightnessStrategy);
+        boolean brightnessUpdated =
+                mDisplayBrightnessController.setBrightnessFromOffload(brightness);
+        verify(offloadBrightnessStrategy, never()).setOffloadScreenBrightness(brightness);
+        assertFalse(brightnessUpdated);
     }
 }

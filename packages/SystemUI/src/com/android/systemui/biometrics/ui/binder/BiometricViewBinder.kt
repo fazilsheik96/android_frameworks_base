@@ -22,7 +22,7 @@ import android.content.Context
 import android.hardware.biometrics.BiometricAuthenticator
 import android.hardware.biometrics.BiometricConstants
 import android.hardware.biometrics.BiometricPrompt
-import android.hardware.biometrics.Flags.customBiometricPrompt
+import android.hardware.biometrics.Flags
 import android.hardware.face.FaceManager
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
@@ -33,7 +33,7 @@ import android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
 import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.ImageView
-import android.widget.ScrollView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
@@ -101,7 +101,7 @@ object BiometricViewBinder {
         val subtitleView = view.requireViewById<TextView>(R.id.subtitle)
         val descriptionView = view.requireViewById<TextView>(R.id.description)
         val customizedViewContainer =
-            view.requireViewById<ScrollView>(R.id.customized_view_container)
+            view.requireViewById<LinearLayout>(R.id.customized_view_container)
 
         // set selected to enable marquee unless a screen reader is enabled
         logoView.isSelected =
@@ -119,7 +119,7 @@ object BiometricViewBinder {
 
         val iconSizeOverride =
             if (constraintBp()) {
-                viewModel.fingerprintAffordanceSize
+                null
             } else {
                 (view as BiometricPromptLayout).updatedFingerprintAffordanceSize
             }
@@ -151,17 +151,6 @@ object BiometricViewBinder {
             // these do not change and need to be set before any size transitions
             val modalities = viewModel.modalities.first()
 
-            // If there is no biometrics available, biometric prompt is showing just for displaying
-            // content, no authentication needed.
-            if (!(customBiometricPrompt() && modalities.isEmpty)) {
-                PromptIconViewBinder.bind(
-                    iconView,
-                    iconOverlayView,
-                    iconSizeOverride,
-                    viewModel,
-                )
-            }
-
             if (modalities.hasFingerprint) {
                 /**
                  * Load the given [rawResources] immediately so they are cached for use in the
@@ -178,11 +167,14 @@ object BiometricViewBinder {
             titleView.text = viewModel.title.first()
             subtitleView.text = viewModel.subtitle.first()
             descriptionView.text = viewModel.description.first()
-            BiometricCustomizedViewBinder.bind(
-                customizedViewContainer,
-                view.requireViewById(R.id.space_above_content),
-                viewModel
-            )
+
+            if (Flags.customBiometricPrompt() && constraintBp()) {
+                BiometricCustomizedViewBinder.bind(
+                    customizedViewContainer,
+                    view.requireViewById(R.id.space_above_content),
+                    viewModel
+                )
+            }
 
             // set button listeners
             negativeButton.setOnClickListener { legacyCallback.onButtonNegative() }
@@ -231,6 +223,19 @@ object BiometricViewBinder {
                     panelViewController = panelViewController,
                     jankListener = jankListener,
                 )
+            }
+
+            lifecycleScope.launch {
+                viewModel.showBpWithoutIconForCredential.collect {
+                    if (!it) {
+                        PromptIconViewBinder.bind(
+                            iconView,
+                            iconOverlayView,
+                            iconSizeOverride,
+                            viewModel,
+                        )
+                    }
+                }
             }
 
             // TODO(b/251476085): migrate legacy icon controllers and remove
@@ -438,9 +443,20 @@ object BiometricViewBinder {
 
                 // Play haptics
                 launch {
-                    viewModel.hapticsToPlay.collect { hapticFeedbackConstant ->
-                        if (hapticFeedbackConstant != HapticFeedbackConstants.NO_HAPTICS) {
-                            vibratorHelper.performHapticFeedback(view, hapticFeedbackConstant)
+                    viewModel.hapticsToPlay.collect { haptics ->
+                        if (haptics.hapticFeedbackConstant != HapticFeedbackConstants.NO_HAPTICS) {
+                            if (haptics.flag != null) {
+                                vibratorHelper.performHapticFeedback(
+                                    view,
+                                    haptics.hapticFeedbackConstant,
+                                    haptics.flag,
+                                )
+                            } else {
+                                vibratorHelper.performHapticFeedback(
+                                    view,
+                                    haptics.hapticFeedbackConstant,
+                                )
+                            }
                             viewModel.clearHaptics()
                         }
                     }
@@ -639,6 +655,8 @@ class Spaghetti(
     }
 
     fun isCoex() = modalities.hasFaceAndFingerprint
+
+    fun isFaceOnly() = modalities.hasFaceOnly
 
     fun asView() = view
 }

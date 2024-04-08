@@ -21,6 +21,7 @@ import android.os.PowerManager;
 
 import com.android.server.display.DisplayBrightnessState;
 import com.android.server.display.brightness.BrightnessReason;
+import com.android.server.display.brightness.StrategySelectionNotifyRequest;
 
 import java.io.PrintWriter;
 
@@ -67,8 +68,15 @@ public class OffloadBrightnessStrategy implements DisplayBrightnessStrategy {
     /**
      * Dumps the state of this class.
      */
+    @Override
     public void dump(PrintWriter writer) {
         writer.println("OffloadBrightnessStrategy:");
         writer.println("  mOffloadScreenBrightness:" + mOffloadScreenBrightness);
+    }
+
+    @Override
+    public void strategySelectionPostProcessor(
+            StrategySelectionNotifyRequest strategySelectionNotifyRequest) {
+        // DO NOTHING
     }
 }

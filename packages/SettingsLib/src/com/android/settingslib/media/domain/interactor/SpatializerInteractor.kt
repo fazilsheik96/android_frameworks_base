@@ -21,19 +21,37 @@ import com.android.settingslib.media.data.repository.SpatializerRepository
 
 class SpatializerInteractor(private val repository: SpatializerRepository) {
 
-    suspend fun isAvailable(audioDeviceAttributes: AudioDeviceAttributes): Boolean =
-        repository.isAvailableForDevice(audioDeviceAttributes)
+    /** Checks if spatial audio is available. */
+    suspend fun isSpatialAudioAvailable(audioDeviceAttributes: AudioDeviceAttributes): Boolean =
+        repository.isSpatialAudioAvailableForDevice(audioDeviceAttributes)
+
+    /** Checks if head tracking is available. */
+    suspend fun isHeadTrackingAvailable(audioDeviceAttributes: AudioDeviceAttributes): Boolean =
+        repository.isHeadTrackingAvailableForDevice(audioDeviceAttributes)
 
     /** Checks if spatial audio is enabled for the [audioDeviceAttributes]. */
-    suspend fun isEnabled(audioDeviceAttributes: AudioDeviceAttributes): Boolean =
-        repository.getCompatibleDevices().contains(audioDeviceAttributes)
+    suspend fun isSpatialAudioEnabled(audioDeviceAttributes: AudioDeviceAttributes): Boolean =
+        repository.getSpatialAudioCompatibleDevices().contains(audioDeviceAttributes)
 
-    /** Enblaes or disables spatial audio for [audioDeviceAttributes]. */
-    suspend fun setEnabled(audioDeviceAttributes: AudioDeviceAttributes, isEnabled: Boolean) {
+    /** Enables or disables spatial audio for [audioDeviceAttributes]. */
+    suspend fun setSpatialAudioEnabled(
+        audioDeviceAttributes: AudioDeviceAttributes,
+        isEnabled: Boolean
+    ) {
         if (isEnabled) {
-            repository.addCompatibleDevice(audioDeviceAttributes)
+            repository.addSpatialAudioCompatibleDevice(audioDeviceAttributes)
         } else {
-            repository.removeCompatibleDevice(audioDeviceAttributes)
+            repository.removeSpatialAudioCompatibleDevice(audioDeviceAttributes)
         }
     }
+
+    /** Checks if head tracking is enabled for the [audioDeviceAttributes]. */
+    suspend fun isHeadTrackingEnabled(audioDeviceAttributes: AudioDeviceAttributes): Boolean =
+        repository.isHeadTrackingEnabled(audioDeviceAttributes)
+
+    /** Enables or disables head tracking for the [audioDeviceAttributes]. */
+    suspend fun setHeadTrackingEnabled(
+        audioDeviceAttributes: AudioDeviceAttributes,
+        isEnabled: Boolean,
+    ) = repository.setHeadTrackingEnabled(audioDeviceAttributes, isEnabled)
 }

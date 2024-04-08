@@ -18,11 +18,12 @@ package com.android.systemui.volume.panel.ui.activity
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import com.android.systemui.compose.ComposeFacade
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.volume.panel.shared.flag.VolumePanelFlag
+import com.android.systemui.volume.panel.ui.composable.VolumePanelRoot
 import com.android.systemui.volume.panel.ui.viewmodel.VolumePanelViewModel
 import javax.inject.Inject
 import javax.inject.Provider
@@ -41,10 +42,9 @@ constructor(
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-
         volumePanelFlag.assertNewVolumePanel()
 
-        ComposeFacade.setVolumePanelActivityContent(this, viewModel) { finish() }
+        setContent { VolumePanelRoot(viewModel = viewModel, onDismiss = ::finish) }
     }
 
     override fun onContentChanged() {

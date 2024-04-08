@@ -309,6 +309,8 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
 
     private Object mUserTag;
 
+    private boolean mReleaseSurfaces = false;
+
     /**
      * Construct empty request.
      *
@@ -610,6 +612,9 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
             Parcelable[] parcelableArray = in.readParcelableArray(Surface.class.getClassLoader(),
                     Surface.class);
             if (parcelableArray != null) {
+                if (Flags.surfaceLeakFix()) {
+                    mReleaseSurfaces = true;
+                }
                 for (Parcelable p : parcelableArray) {
                     Surface s = (Surface) p;
                     mSurfaceSet.add(s);
@@ -789,6 +794,17 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
             mStreamIdxArray = null;
             mSurfaceIdxArray = null;
             mSurfaceConverted = false;
+        }
+    }
+
+    @SuppressWarnings("Finalize")
+    @FlaggedApi(Flags.FLAG_SURFACE_LEAK_FIX)
+    @Override
+    protected void finalize() {
+        if (mReleaseSurfaces) {
+            for (Surface s : mSurfaceSet) {
+                s.release();
+            }
         }
     }
 
@@ -2784,7 +2800,9 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * upright.</p>
      * <p>Camera devices may either encode this value into the JPEG EXIF header, or
      * rotate the image data to match this orientation. When the image data is rotated,
-     * the thumbnail data will also be rotated.</p>
+     * the thumbnail data will also be rotated. Additionally, in the case where the image data
+     * is rotated, {@link android.media.Image#getWidth } and {@link android.media.Image#getHeight }
+     * will not be updated to reflect the height and width of the rotated image.</p>
      * <p>Note that this orientation is relative to the orientation of the camera sensor, given
      * by {@link CameraCharacteristics#SENSOR_ORIENTATION android.sensor.orientation}.</p>
      * <p>To translate from the device orientation given by the Android sensor APIs for camera
@@ -4319,7 +4337,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * @hide
      */
     @ExtensionKey
-    @FlaggedApi(Flags.FLAG_CONCERT_MODE)
+    @FlaggedApi(Flags.FLAG_CONCERT_MODE_API)
     public static final Key<Float> EFV_PADDING_ZOOM_FACTOR =
             new Key<Float>("android.efv.paddingZoomFactor", float.class);
 
@@ -4342,7 +4360,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * @hide
      */
     @ExtensionKey
-    @FlaggedApi(Flags.FLAG_CONCERT_MODE)
+    @FlaggedApi(Flags.FLAG_CONCERT_MODE_API)
     public static final Key<Boolean> EFV_AUTO_ZOOM =
             new Key<Boolean>("android.efv.autoZoom", boolean.class);
 
@@ -4363,7 +4381,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * @hide
      */
     @ExtensionKey
-    @FlaggedApi(Flags.FLAG_CONCERT_MODE)
+    @FlaggedApi(Flags.FLAG_CONCERT_MODE_API)
     public static final Key<Float> EFV_MAX_PADDING_ZOOM_FACTOR =
             new Key<Float>("android.efv.maxPaddingZoomFactor", float.class);
 
@@ -4390,7 +4408,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * @hide
      */
     @ExtensionKey
-    @FlaggedApi(Flags.FLAG_CONCERT_MODE)
+    @FlaggedApi(Flags.FLAG_CONCERT_MODE_API)
     public static final Key<Integer> EFV_STABILIZATION_MODE =
             new Key<Integer>("android.efv.stabilizationMode", int.class);
 
@@ -4412,7 +4430,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * @hide
      */
     @ExtensionKey
-    @FlaggedApi(Flags.FLAG_CONCERT_MODE)
+    @FlaggedApi(Flags.FLAG_CONCERT_MODE_API)
     public static final Key<android.util.Pair<Integer,Integer>> EFV_TRANSLATE_VIEWPORT =
             new Key<android.util.Pair<Integer,Integer>>("android.efv.translateViewport", new TypeReference<android.util.Pair<Integer,Integer>>() {{ }});
 
@@ -4429,7 +4447,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * @hide
      */
     @ExtensionKey
-    @FlaggedApi(Flags.FLAG_CONCERT_MODE)
+    @FlaggedApi(Flags.FLAG_CONCERT_MODE_API)
     public static final Key<Float> EFV_ROTATE_VIEWPORT =
             new Key<Float>("android.efv.rotateViewport", float.class);
 

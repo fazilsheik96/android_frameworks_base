@@ -359,7 +359,7 @@ final class PolicyDefinition<V> {
             new NoArgsPolicyKey(DevicePolicyIdentifiers.CONTENT_PROTECTION_POLICY),
             new MostRecent<>(),
             POLICY_FLAG_LOCAL_ONLY_POLICY,
-            (Integer value, Context context, Integer userId, PolicyKey policyKey) -> true,
+            PolicyEnforcerCallbacks::setContentProtectionPolicy,
             new IntegerPolicySerializer());
 
     private static final Map<String, PolicyDefinition<?>> POLICY_DEFINITIONS = new HashMap<>();
@@ -506,6 +506,10 @@ final class PolicyDefinition<V> {
                 UserManager.DISALLOW_SIM_GLOBALLY,
                 POLICY_FLAG_GLOBAL_ONLY_POLICY);
         USER_RESTRICTION_FLAGS.put(UserManager.DISALLOW_ASSIST_CONTENT, /* flags= */ 0);
+        if (com.android.net.thread.platform.flags.Flags.threadUserRestrictionEnabled()) {
+            USER_RESTRICTION_FLAGS.put(
+                    UserManager.DISALLOW_THREAD_NETWORK, POLICY_FLAG_GLOBAL_ONLY_POLICY);
+        }
 
         for (String key : USER_RESTRICTION_FLAGS.keySet()) {
             createAndAddUserRestrictionPolicyDefinition(key, USER_RESTRICTION_FLAGS.get(key));

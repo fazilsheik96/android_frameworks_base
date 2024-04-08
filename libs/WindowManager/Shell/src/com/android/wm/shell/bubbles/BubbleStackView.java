@@ -291,6 +291,11 @@ public class BubbleStackView extends FrameLayout
      */
     private boolean mRemovingLastBubbleWhileExpanded = false;
 
+    /**
+     * Whether sensitive notification protection should disable flyout
+     */
+    private boolean mSensitiveNotificationProtectionActive = false;
+
     /** Animator for animating the expanded view's alpha (including the TaskView inside it). */
     private final ValueAnimator mExpandedViewAlphaAnimator = ValueAnimator.ofFloat(0f, 1f);
 
@@ -444,17 +449,21 @@ public class BubbleStackView extends FrameLayout
 
                 @Override
                 public void onStuckToTarget(@NonNull MagnetizedObject.MagneticTarget target,
-                        @NonNull MagnetizedObject draggedObject) {
-                    if (draggedObject.getUnderlyingObject() instanceof View view) {
+                        @NonNull MagnetizedObject<?> draggedObject) {
+                    Object underlyingObject = draggedObject.getUnderlyingObject();
+                    if (underlyingObject instanceof View) {
+                        View view = (View) underlyingObject;
                         animateDismissBubble(view, true);
                     }
                 }
 
                 @Override
                 public void onUnstuckFromTarget(@NonNull MagnetizedObject.MagneticTarget target,
-                        @NonNull MagnetizedObject draggedObject,
+                        @NonNull MagnetizedObject<?> draggedObject,
                         float velX, float velY, boolean wasFlungOut) {
-                    if (draggedObject.getUnderlyingObject() instanceof View view) {
+                    Object underlyingObject = draggedObject.getUnderlyingObject();
+                    if (underlyingObject instanceof View) {
+                        View view = (View) underlyingObject;
                         animateDismissBubble(view, false);
 
                         if (wasFlungOut) {
@@ -469,7 +478,9 @@ public class BubbleStackView extends FrameLayout
                 @Override
                 public void onReleasedInTarget(@NonNull MagnetizedObject.MagneticTarget target,
                         @NonNull MagnetizedObject<?> draggedObject) {
-                    if (draggedObject.getUnderlyingObject() instanceof View view) {
+                    Object underlyingObject = draggedObject.getUnderlyingObject();
+                    if (underlyingObject instanceof View) {
+                        View view = (View) underlyingObject;
                         mExpandedAnimationController.dismissDraggedOutBubble(
                                 view /* bubble */,
                                 mDismissView.getHeight() /* translationYBy */,
@@ -712,11 +723,6 @@ public class BubbleStackView extends FrameLayout
 
             // Hide the stack after a delay, if needed.
             updateTemporarilyInvisibleAnimation(false /* hideImmediately */);
-
-            if (mShouldReorderBubblesAfterGestureCompletes) {
-                mShouldReorderBubblesAfterGestureCompletes = false;
-                updateBubbleOrderInternal(mBubbleData.getBubbles(), true);
-            }
         }
     };
 
@@ -1019,6 +1025,7 @@ public class BubbleStackView extends FrameLayout
                             WindowManager.class)));
                     onDisplaySizeChanged();
                     mExpandedAnimationController.updateResources();
+                    mExpandedAnimationController.onOrientationChanged();
                     mStackAnimationController.updateResources();
                     mBubbleOverflow.updateResources();
 
@@ -1444,6 +1451,12 @@ public class BubbleStackView extends FrameLayout
         }
         if (mBubbleOverflow != null && mBubbleOverflow.getExpandedView() != null) {
             mBubbleOverflow.getExpandedView().updateFontSize();
+        }
+    }
+
+    void updateLocale() {
+        if (mBubbleOverflow != null && mBubbleOverflow.getExpandedView() != null) {
+            mBubbleOverflow.getExpandedView().updateLocale();
         }
     }
 
@@ -2199,6 +2212,11 @@ public class BubbleStackView extends FrameLayout
         }
     }
 
+    void onSensitiveNotificationProtectionStateChanged(
+            boolean sensitiveNotificationProtectionActive) {
+        mSensitiveNotificationProtectionActive = sensitiveNotificationProtectionActive;
+    }
+
     /**
      * Asks the BubbleController to hide the IME from anywhere, whether it's focused on Bubbles or
      * not.
@@ -2463,11 +2481,12 @@ public class BubbleStackView extends FrameLayout
         // Let the expanded animation controller know that it shouldn't animate child adds/reorders
         // since we're about to animate collapsed.
         mExpandedAnimationController.notifyPreparingToCollapse();
-
+        final PointF collapsePosition = mStackAnimationController
+                .getStackPositionAlongNearestHorizontalEdge();
         updateOverflowDotVisibility(false /* expanding */);
         final Runnable collapseBackToStack = () ->
                 mExpandedAnimationController.collapseBackToStack(
-                        mStackAnimationController.getStackPositionAlongNearestHorizontalEdge(),
+                        collapsePosition,
                         /* fadeBubblesDuringCollapse= */ mRemovingLastBubbleWhileExpanded,
                         () -> {
                             mBubbleContainer.setActiveController(mStackAnimationController);
@@ -2490,7 +2509,8 @@ public class BubbleStackView extends FrameLayout
             }
             mExpandedViewAnimationController.reset();
         };
-        mExpandedViewAnimationController.animateCollapse(collapseBackToStack, after);
+        mExpandedViewAnimationController.animateCollapse(collapseBackToStack, after,
+                collapsePosition);
         if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
             // When the animation completes, we should no longer be showing the content.
             // This won't actually update content visibility immediately, if we are currently
@@ -2716,6 +2736,12 @@ public class BubbleStackView extends FrameLayout
                 ev.getAction() != MotionEvent.ACTION_UP
                         && ev.getAction() != MotionEvent.ACTION_CANCEL;
 
+        // If there is a deferred reorder action, and the gesture is over, run it now.
+        if (mShouldReorderBubblesAfterGestureCompletes && !mIsGestureInProgress) {
+            mShouldReorderBubblesAfterGestureCompletes = false;
+            updateBubbleOrderInternal(mBubbleData.getBubbles(), false);
+        }
+
         return dispatched;
     }
 
@@ -2842,6 +2868,7 @@ public class BubbleStackView extends FrameLayout
                 || isExpanded()
                 || mIsExpansionAnimating
                 || mIsGestureInProgress
+                || mSensitiveNotificationProtectionActive
                 || mBubbleToExpandAfterFlyoutCollapse != null
                 || bubbleView == null) {
             if (bubbleView != null && mFlyout.getVisibility() != VISIBLE) {

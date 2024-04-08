@@ -35,6 +35,8 @@ import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
@@ -121,11 +123,13 @@ public class RavenwoodRule implements TestRule {
     int mUid = NOBODY_UID;
     int mPid = sNextPid.getAndIncrement();
 
+    String mPackageName;
+
     boolean mProvideMainThread = false;
 
     final RavenwoodSystemProperties mSystemProperties = new RavenwoodSystemProperties();
 
-    final ArraySet<Class<?>> mServicesRequired = new ArraySet<>();
+    final List<Class<?>> mServicesRequired = new ArrayList<>();
 
     volatile Context mContext;
     volatile Instrumentation mInstrumentation;
@@ -154,6 +158,15 @@ public class RavenwoodRule implements TestRule {
          */
         public Builder setProcessApp() {
             mRule.mUid = FIRST_APPLICATION_UID;
+            return this;
+        }
+
+        /**
+         * Configure the identity of this process to be the given package name for the duration
+         * of the test. Has no effect on non-Ravenwood environments.
+         */
+        public Builder setPackageName(/* @NonNull */ String packageName) {
+            mRule.mPackageName = Objects.requireNonNull(packageName);
             return this;
         }
 

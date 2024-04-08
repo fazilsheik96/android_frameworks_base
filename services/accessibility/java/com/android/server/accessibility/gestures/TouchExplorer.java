@@ -852,6 +852,11 @@ public class TouchExplorer extends BaseEventStreamTransformation
         final int pointerIdBits = (1 << pointerId);
         if (mSendHoverEnterAndMoveDelayed.isPending()) {
             // If we have not delivered the enter schedule an exit.
+            if (Flags.resetHoverEventTimerOnActionUp()) {
+                // We cancel first to reset the time window so that the user has the full amount of
+                // time to do a multi tap.
+                mSendHoverEnterAndMoveDelayed.repost();
+            }
             mSendHoverExitDelayed.post(event, rawEvent, pointerIdBits, policyFlags);
         } else {
             // The user is touch exploring so we send events for end.
@@ -1554,6 +1559,14 @@ public class TouchExplorer extends BaseEventStreamTransformation
             }
         }
 
+        public void repost() {
+            // cancel without clearing
+            if (isPending()) {
+                mHandler.removeCallbacks(this);
+                mHandler.postDelayed(this, mDetermineUserIntentTimeout);
+            }
+        }
+
         private boolean isPending() {
             return mHandler.hasCallbacks(this);
         }
@@ -1586,6 +1599,9 @@ public class TouchExplorer extends BaseEventStreamTransformation
                         "Attempted touch exploration with "
                                 + mReceivedPointerTracker.getReceivedPointerDownCount()
                                 + " pointers down.");
+                return;
+            }
+            if (Flags.resetHoverEventTimerOnActionUp() && mEvents.size() == 0) {
                 return;
             }
             // Send an accessibility event to announce the touch exploration start.

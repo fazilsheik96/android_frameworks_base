@@ -22,6 +22,7 @@ import android.os.PowerManager;
 import com.android.server.display.DisplayBrightnessState;
 import com.android.server.display.brightness.BrightnessReason;
 import com.android.server.display.brightness.BrightnessUtils;
+import com.android.server.display.brightness.StrategySelectionNotifyRequest;
 
 import java.io.PrintWriter;
 
@@ -75,10 +76,17 @@ public class FollowerBrightnessStrategy implements DisplayBrightnessStrategy {
     /**
      * Dumps the state of this class.
      */
+    @Override
     public void dump(PrintWriter writer) {
         writer.println("FollowerBrightnessStrategy:");
         writer.println("  mDisplayId=" + mDisplayId);
         writer.println("  mBrightnessToFollow:" + mBrightnessToFollow);
         writer.println("  mBrightnessToFollowSlowChange:" + mBrightnessToFollowSlowChange);
+    }
+
+    @Override
+    public void strategySelectionPostProcessor(
+            StrategySelectionNotifyRequest strategySelectionNotifyRequest) {
+        // DO NOTHING
     }
 }

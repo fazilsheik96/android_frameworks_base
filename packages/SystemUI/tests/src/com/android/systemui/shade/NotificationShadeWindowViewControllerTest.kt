@@ -16,6 +16,7 @@
 
 package com.android.systemui.shade
 
+import org.mockito.Mockito.`when` as whenever
 import android.content.Context
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper.RunWithLooper
@@ -33,7 +34,6 @@ import com.android.systemui.bouncer.domain.interactor.AlternateBouncerInteractor
 import com.android.systemui.bouncer.domain.interactor.PrimaryBouncerInteractor
 import com.android.systemui.bouncer.ui.binder.BouncerViewBinder
 import com.android.systemui.classifier.FalsingCollectorFake
-import com.android.systemui.compose.ComposeFacade.isComposeAvailable
 import com.android.systemui.dock.DockManager
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.flags.FakeFeatureFlagsClassic
@@ -88,7 +88,6 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
-import org.mockito.Mockito.`when` as whenever
 import org.mockito.MockitoAnnotations
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -113,7 +112,7 @@ class NotificationShadeWindowViewControllerTest : SysuiTestCase() {
     @Mock private lateinit var stackScrollLayoutController: NotificationStackScrollLayoutController
     @Mock private lateinit var statusBarKeyguardViewManager: StatusBarKeyguardViewManager
     @Mock private lateinit var statusBarWindowStateController: StatusBarWindowStateController
-    @Mock private lateinit var quickSettingsController: QuickSettingsController
+    @Mock private lateinit var quickSettingsController: QuickSettingsControllerImpl
     @Mock
     private lateinit var lockscreenShadeTransitionController: LockscreenShadeTransitionController
     @Mock private lateinit var lockIconViewController: LockIconViewController
@@ -482,8 +481,7 @@ class NotificationShadeWindowViewControllerTest : SysuiTestCase() {
         // AND status bar doesn't want it
         whenever(statusBarKeyguardViewManager.shouldInterceptTouchEvent(DOWN_EVENT))
             .thenReturn(false)
-        // AND shade is not fully expanded
-        whenever(notificationPanelViewController.isFullyExpanded()).thenReturn(false)
+        // AND shade is not fully expanded (mock is false by default)
         // AND the lock icon does NOT want the touch
         whenever(lockIconViewController.willHandleTouchWhileDozing(DOWN_EVENT)).thenReturn(false)
         // AND quick settings controller DOES want it
@@ -511,10 +509,6 @@ class NotificationShadeWindowViewControllerTest : SysuiTestCase() {
     @Test
     @Ignore("b/321332798")
     fun setsUpCommunalHubLayout_whenFlagEnabled() {
-        if (!isComposeAvailable()) {
-            return
-        }
-
         whenever(mGlanceableHubContainerController.communalAvailable())
             .thenReturn(MutableStateFlow(true))
 
@@ -537,10 +531,6 @@ class NotificationShadeWindowViewControllerTest : SysuiTestCase() {
 
     @Test
     fun doesNotSetupCommunalHubLayout_whenFlagDisabled() {
-        if (!isComposeAvailable()) {
-            return
-        }
-
         whenever(mGlanceableHubContainerController.communalAvailable())
             .thenReturn(MutableStateFlow(false))
 

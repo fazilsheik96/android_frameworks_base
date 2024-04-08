@@ -20,6 +20,7 @@ import android.Manifest;
 import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.credentials.Constants;
 import android.credentials.CredentialProviderInfo;
 import android.credentials.GetCandidateCredentialsException;
@@ -39,6 +40,8 @@ import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CredentialProviderService;
 import android.service.credentials.PermissionUtils;
 import android.util.Slog;
+
+import com.android.server.credentials.metrics.ApiStatus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -114,13 +117,13 @@ public class GetCandidateRequestSession extends RequestSession<GetCredentialRequ
             return;
         }
 
-        cancelExistingPendingIntent();
-        mPendingIntent = mCredentialManagerUi.createPendingIntentForAutofill(
+        Intent intent = mCredentialManagerUi.createIntentForAutofill(
                 RequestInfo.newGetRequestInfo(
                         mRequestId, mClientRequest, mClientAppInfo.getPackageName(),
                         PermissionUtils.hasPermission(mContext, mClientAppInfo.getPackageName(),
                                 Manifest.permission.CREDENTIAL_MANAGER_SET_ALLOWED_PROVIDERS),
-                        /*isShowAllOptionsRequested=*/ true));
+                        /*isShowAllOptionsRequested=*/ true),
+                mRequestSessionMetric);
 
         List<GetCredentialProviderData> candidateProviderDataList = new ArrayList<>();
         for (ProviderData providerData : providerDataList) {
@@ -129,7 +132,7 @@ public class GetCandidateRequestSession extends RequestSession<GetCredentialRequ
 
         try {
             invokeClientCallbackSuccess(new GetCandidateCredentialsResponse(
-                    candidateProviderDataList, mPendingIntent));
+                    candidateProviderDataList, intent));
         } catch (RemoteException e) {
             Slog.e(TAG, "Issue while responding to client with error : " + e);
         }
@@ -150,7 +153,8 @@ public class GetCandidateRequestSession extends RequestSession<GetCredentialRequ
     @Override
     public void onFinalErrorReceived(ComponentName componentName, String errorType,
             String message) {
-        respondToClientWithErrorAndFinish(errorType, message);
+        Slog.d(TAG, "onFinalErrorReceived");
+        respondToFinalReceiverWithFailureAndFinish(this.mFinalResponseReceiver, errorType, message);
     }
 
     @Override
@@ -163,6 +167,13 @@ public class GetCandidateRequestSession extends RequestSession<GetCredentialRequ
             message = "The UI was interrupted - please try again.";
         }
         mRequestSessionMetric.collectFrameworkException(exception);
+        respondToFinalReceiverWithFailureAndFinish(finalResponseReceiver, exception, message);
+    }
+
+    private void respondToFinalReceiverWithFailureAndFinish(
+            ResultReceiver finalResponseReceiver,
+            String exception, String message
+    ) {
         if (finalResponseReceiver != null) {
             Bundle resultData = new Bundle();
             resultData.putStringArray(
@@ -170,16 +181,16 @@ public class GetCandidateRequestSession extends RequestSession<GetCredentialRequ
                     new String[] {exception, message});
             finalResponseReceiver.send(Constants.FAILURE_CREDMAN_SELECTOR, resultData);
         } else {
-            respondToClientWithErrorAndFinish(exception, message);
+            Slog.w(TAG, "onUiCancellation called but finalResponseReceiver not found");
         }
+        finishSession(/*propagateCancellation=*/false, ApiStatus.FAILURE.getMetricCode());
     }
 
     @Override
     public void onUiSelectorInvocationFailure() {
         String exception = GetCandidateCredentialsException.TYPE_NO_CREDENTIAL;
         mRequestSessionMetric.collectFrameworkException(exception);
-        respondToClientWithErrorAndFinish(exception,
-                "No credentials available.");
+        // TODO(): Propagate through final receiver
     }
 
     @Override
@@ -213,9 +224,10 @@ public class GetCandidateRequestSession extends RequestSession<GetCredentialRequ
             resultData.putParcelable(
                     CredentialProviderService.EXTRA_GET_CREDENTIAL_RESPONSE, response);
             mFinalResponseReceiver.send(Constants.SUCCESS_CREDMAN_SELECTOR, resultData);
-            finishSession(/*propagateCancellation=*/ false);
+            finishSession(/*propagateCancellation=*/ false, ApiStatus.SUCCESS.getMetricCode());
         } else {
             Slog.w(TAG, "onFinalResponseReceived result receiver not found for pinned entry");
+            finishSession(/*propagateCancellation=*/ false, ApiStatus.FAILURE.getMetricCode());
         }
     }
 

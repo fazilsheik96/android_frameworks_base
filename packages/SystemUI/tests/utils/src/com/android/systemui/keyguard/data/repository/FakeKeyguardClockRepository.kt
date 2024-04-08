@@ -42,16 +42,21 @@ class FakeKeyguardClockRepository @Inject constructor() : KeyguardClockRepositor
     private val _currentClockId = MutableStateFlow(DEFAULT_CLOCK_ID)
     override val currentClockId: Flow<ClockId> = _currentClockId
 
-    private val _currentClock = MutableStateFlow(null)
+    private val _currentClock: MutableStateFlow<ClockController?> = MutableStateFlow(null)
     override val currentClock = _currentClock
 
     private val _previewClock = MutableStateFlow(Mockito.mock(ClockController::class.java))
-    override val previewClock: StateFlow<ClockController> = _previewClock
+    override val previewClock: Flow<ClockController>
+        get() = _previewClock
     override val clockEventController: ClockEventController
         get() = mock()
 
     override fun setClockSize(@ClockSize size: Int) {
         _clockSize.value = size
+    }
+
+    fun setCurrentClock(clockController: ClockController) {
+        _currentClock.value = clockController
     }
 }
 

@@ -16,6 +16,7 @@
 
 package com.android.systemui.shade.domain.interactor
 
+import com.android.systemui.shade.shared.model.ShadeMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -65,7 +66,7 @@ interface BaseShadeInteractor {
     val isAnyExpanded: StateFlow<Boolean>
 
     /** The amount [0-1] that the shade has been opened. */
-    val shadeExpansion: Flow<Float>
+    val shadeExpansion: StateFlow<Float>
 
     /**
      * The amount [0-1] QS has been opened. Normal shade with notifications (QQS) visible will
@@ -102,6 +103,8 @@ interface BaseShadeInteractor {
      * animating.
      */
     val isUserInteractingWithQs: Flow<Boolean>
+
+    val shadeMode: StateFlow<ShadeMode>
 }
 
 fun createAnyExpansionFlow(

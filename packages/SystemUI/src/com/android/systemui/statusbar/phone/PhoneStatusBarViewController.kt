@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone
 import android.app.StatusBarManager.WINDOW_STATUS_BAR
 import android.graphics.Point
 import android.util.Log
+import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -31,6 +32,7 @@ import com.android.systemui.scene.ui.view.WindowRootView
 import com.android.systemui.shade.ShadeController
 import com.android.systemui.shade.ShadeLogger
 import com.android.systemui.shade.ShadeViewController
+import com.android.systemui.shade.domain.interactor.PanelExpansionInteractor
 import com.android.systemui.shared.animation.UnfoldMoveFromCenterAnimator
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.window.StatusBarWindowStateController
@@ -57,6 +59,7 @@ private constructor(
     private val statusBarWindowStateController: StatusBarWindowStateController,
     private val shadeController: ShadeController,
     private val shadeViewController: ShadeViewController,
+    private val panelExpansionInteractor: PanelExpansionInteractor,
     private val windowRootView: Provider<WindowRootView>,
     private val shadeLogger: ShadeLogger,
     private val moveFromCenterAnimationController: StatusBarMoveFromCenterAnimationController?,
@@ -81,7 +84,22 @@ private constructor(
         statusContainer.setOnHoverListener(
             statusOverlayHoverListenerFactory.createDarkAwareListener(statusContainer)
         )
-        statusContainer.setOnClickListener { shadeViewController.expand(/* animate= */true) }
+        statusContainer.setOnTouchListener(object : View.OnTouchListener {
+            override fun onTouch(v: View, event: MotionEvent): Boolean {
+                // We want to handle only mouse events here to avoid stealing finger touches from
+                // status bar which expands shade when swiped down on. We're using onTouchListener
+                // instead of onClickListener as the later will lead to isClickable being set to
+                // true and hence ALL touches always being intercepted. See [View.OnTouchEvent]
+                if (event.source == InputDevice.SOURCE_MOUSE) {
+                    if (event.action == MotionEvent.ACTION_UP) {
+                        v.performClick()
+                        shadeController.animateExpandShade()
+                    }
+                    return true
+                }
+                return false
+            }
+        })
 
         progressProvider?.setReadyToHandleTransition(true)
         configurationController.addCallback(configurationListener)
@@ -202,7 +220,7 @@ private constructor(
                     )
                     return true
                 }
-                if (shadeViewController.isFullyCollapsed && event.y < 1f) {
+                if (panelExpansionInteractor.isFullyCollapsed && event.y < 1f) {
                     // b/235889526 Eat events on the top edge of the phone when collapsed
                     shadeLogger.logMotionEvent(event, "top edge touch ignored")
                     return true
@@ -255,6 +273,7 @@ private constructor(
         private val statusBarWindowStateController: StatusBarWindowStateController,
         private val shadeController: ShadeController,
         private val shadeViewController: ShadeViewController,
+        private val panelExpansionInteractor: PanelExpansionInteractor,
         private val windowRootView: Provider<WindowRootView>,
         private val shadeLogger: ShadeLogger,
         private val viewUtil: ViewUtil,
@@ -276,6 +295,7 @@ private constructor(
                 statusBarWindowStateController,
                 shadeController,
                 shadeViewController,
+                panelExpansionInteractor,
                 windowRootView,
                 shadeLogger,
                 statusBarMoveFromCenterAnimationController,

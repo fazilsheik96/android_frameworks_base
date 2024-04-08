@@ -226,12 +226,6 @@ public abstract class ActivityManagerInternal {
     public abstract boolean isSystemReady();
 
     /**
-     * @return {@code true} if system is using the "modern" broadcast queue,
-     *         {@code false} otherwise.
-     */
-    public abstract boolean isModernQueueEnabled();
-
-    /**
      * Enforce capability restrictions on use of the given BroadcastOptions
      */
     public abstract void enforceBroadcastOptionsPermissions(@Nullable Bundle options,
@@ -1262,10 +1256,14 @@ public abstract class ActivityManagerInternal {
     public abstract boolean clearApplicationUserData(String packageName, boolean keepState,
             boolean isRestore, IPackageDataObserver observer, int userId);
 
+
     /**
-     * Returns current state of {@link com.android.systemui.theme.ThemeOverlayController} color
-     * palette readiness.
+     * Method that checks if system is Headless (don't delay launch) case in which it
+     * should also check if ThemeOverlayController is ready (don't delay) or not (delay).
+     *
+     * @param userId
+     * @return Boolean indicating if Home launch should wait for ThemeOverlayController signal
      * @hide
      */
-    public abstract boolean isThemeOverlayReady(int userId);
+    public abstract boolean shouldDelayHomeLaunch(int userId);
 }

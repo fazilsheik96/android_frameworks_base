@@ -164,8 +164,6 @@ import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
 import android.app.PictureInPictureUiState;
 import android.app.ProfilerInfo;
-import android.app.RemoteAction;
-import android.app.RemoteTaskConstants;
 import android.app.WaitResult;
 import android.app.admin.DevicePolicyCache;
 import android.app.admin.DeviceStateCache;
@@ -202,7 +200,6 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.DeviceIntegrationUtils;
 import android.os.FactoryTest;
 import android.os.FileUtils;
 import android.os.Handler;
@@ -799,8 +796,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     TaskOrganizerController mTaskOrganizerController;
     TaskFragmentOrganizerController mTaskFragmentOrganizerController;
 
-    final RemoteTaskManager mRemoteTaskManager;
-
     @Nullable
     private BackgroundActivityStartCallback mBackgroundActivityStartCallback;
 
@@ -878,11 +873,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         mTaskFragmentOrganizerController =
                 mWindowOrganizerController.mTaskFragmentOrganizerController;
         mBackNavigationController = new BackNavigationController();
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-            mRemoteTaskManager = new RemoteTaskManager(this);
-        } else {
-            mRemoteTaskManager = null;
-        }
     }
 
     public void onSystemReady() {
@@ -900,10 +890,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mGrammaticalManagerInternal = LocalServices.getService(
                     GrammaticalInflectionManagerInternal.class);
         }
-    }
-
-    public RemoteTaskManager getRemoteTaskManager() {
-        return mRemoteTaskManager;
     }
 
     public void onInitPowerManagement() {
@@ -1076,10 +1062,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mTaskSupervisor.setWindowManager(wm);
             mRootWindowContainer.setWindowManager(wm);
             mBackNavigationController.setWindowManager(wm);
-            if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
-                && mRemoteTaskManager != null) {
-                mRemoteTaskManager.setRootWindowContainer(mRootWindowContainer);
-            }
         }
     }
 
@@ -2525,6 +2507,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         userId = handleIncomingUser(Binder.getCallingPid(), callingUid, userId, "getRecentTasks");
         final boolean allowed = isGetTasksAllowed("getRecentTasks", Binder.getCallingPid(),
                 callingUid);
+        if (!mAmInternal.isUserRunning(userId, ActivityManager.FLAG_AND_UNLOCKED)) {
+            Slog.i(TAG, "User " + userId + " is locked. Cannot load recents");
+            return ParceledListSlice.emptyList();
+        }
+        mRecentTasks.loadRecentTasksIfNeeded(userId);
         synchronized (mGlobalLock) {
             return mRecentTasks.getRecentTasks(maxNum, flags, allowed, userId, callingUid);
         }
@@ -3680,7 +3667,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     /**
-     * Prepare to enter PiP mode after {@link TransitionController#requestStartTransition}.
+     * Prepare to enter PiP mode after {@link TransitionController#requestStartDisplayTransition}.
      *
      * @param r activity auto entering pip
      * @return true if the activity is about to auto-enter pip or is already in pip mode.
@@ -3757,15 +3744,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 ? new Transition(TRANSIT_PIP, 0 /* flags */,
                         getTransitionController(), mWindowManager.mSyncEngine)
                 : null;
-
-        // Device Integration: Essentially we don't want a task who live in remote task could enter PIP mode,
-        // that may somehow cause difficulty for handling the Launch same app scenarios. In addition,
-        // pip mode comes with bad user experiences(whole black screen) when shows in Virtual Display
-        // in some cases, so we have to relinquish this mode.
-        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
-             && getRemoteTaskManager().anyTaskExist(r.getTask())) {
-            return false;
-        }
 
         if (r.getTaskFragment() != null && r.getTaskFragment().isEmbeddedWithBoundsOverride()
                 && transition != null) {
@@ -4187,19 +4165,21 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     @Override
     public void onPictureInPictureUiStateChanged(PictureInPictureUiState pipState) {
         enforceTaskPermission("onPictureInPictureUiStateChanged");
-        // The PictureInPictureUiState is sent to current pip task if there is any
-        // -or- the top standard task (state like entering PiP does not require a pinned task).
-        final Task task;
-        if (mRootWindowContainer.getDefaultTaskDisplayArea().hasPinnedTask()) {
-            task = mRootWindowContainer.getDefaultTaskDisplayArea().getRootPinnedTask();
-        } else {
-            task = mRootWindowContainer.getDefaultTaskDisplayArea().getRootTask(
-                    t -> t.isActivityTypeStandard());
-        }
-        if (task != null && task.getTopMostActivity() != null
-                && !task.getTopMostActivity().isState(FINISHING, DESTROYING, DESTROYED)) {
-            mWindowManager.mAtmService.mActivityClientController.onPictureInPictureUiStateChanged(
-                    task.getTopMostActivity(), pipState);
+        synchronized (mGlobalLock) {
+            // The PictureInPictureUiState is sent to current pip task if there is any
+            // -or- the top standard task (state like entering PiP does not require a pinned task).
+            final Task task;
+            if (mRootWindowContainer.getDefaultTaskDisplayArea().hasPinnedTask()) {
+                task = mRootWindowContainer.getDefaultTaskDisplayArea().getRootPinnedTask();
+            } else {
+                task = mRootWindowContainer.getDefaultTaskDisplayArea().getRootTask(
+                        t -> t.isActivityTypeStandard());
+            }
+            if (task != null && task.getTopMostActivity() != null
+                    && !task.getTopMostActivity().isState(FINISHING, DESTROYING, DESTROYED)) {
+                mWindowManager.mAtmService.mActivityClientController
+                        .onPictureInPictureUiStateChanged(task.getTopMostActivity(), pipState);
+            }
         }
     }
 
@@ -5716,29 +5696,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         throw e;
     }
 
-    /**
-     * Sets the corresponding {@link DisplayArea} information for the process global
-     * configuration. To be called when we need to show IME on a different {@link DisplayArea}
-     * or display.
-     *
-     * @param pid The process id associated with the IME window.
-     * @param imeContainer The DisplayArea that contains the IME window.
-     */
-    void onImeWindowSetOnDisplayArea(final int pid, @NonNull final DisplayArea imeContainer) {
-        if (pid == MY_PID || pid < 0) {
-            ProtoLog.w(WM_DEBUG_CONFIGURATION,
-                    "Trying to update display configuration for system/invalid process.");
-            return;
-        }
-        final WindowProcessController process = mProcessMap.getProcess(pid);
-        if (process == null) {
-            ProtoLog.w(WM_DEBUG_CONFIGURATION, "Trying to update display "
-                    + "configuration for invalid process, pid=%d", pid);
-            return;
-        }
-        process.registerDisplayAreaConfigurationListener(imeContainer);
-    }
-
     @Override
     public void setRunningRemoteTransitionDelegate(IApplicationThread delegate) {
         final TransitionController controller = getTransitionController();
@@ -6053,6 +6010,28 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     intent.resolveTypeIfNeeded(mContext.getContentResolver()),
                     resultTo, null, 0, startFlags, null, options, userId,
                     false /*validateIncomingUser*/);
+        }
+
+        @Override
+        public int startActivityWithScreenshot(@NonNull Intent intent,
+                @NonNull String callingPackage, int callingUid, int callingPid,
+                @Nullable IBinder resultTo, @Nullable Bundle options, int userId) {
+            userId = getActivityStartController().checkTargetUser(userId,
+                    false /* validateIncomingUser */, Binder.getCallingPid(),
+                    Binder.getCallingUid(), "startActivityWithScreenshot");
+
+            return getActivityStartController()
+                    .obtainStarter(intent, "startActivityWithScreenshot")
+                    .setCallingUid(callingUid)
+                    .setCallingPid(callingPid)
+                    .setCallingPackage(callingPackage)
+                    .setResultTo(resultTo)
+                    .setActivityOptions(createSafeActivityOptionsWithBalAllowed(options))
+                    .setRealCallingUid(Binder.getCallingUid())
+                    .setUserId(userId)
+                    .setBackgroundStartPrivileges(BackgroundStartPrivileges.ALLOW_BAL)
+                    .setFreezeScreen(true)
+                    .execute();
         }
 
         /**
@@ -7079,11 +7058,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public void loadRecentTasksForUser(int userId) {
-            synchronized (mGlobalLock) {
-                mRecentTasks.loadUserRecentsLocked(userId);
-                // TODO renaming the methods(?)
-                mPackageConfigPersister.loadUserPackages(userId);
-            }
+            // This runs on android.fg thread when the user is unlocking.
+            mRecentTasks.loadRecentTasksIfNeeded(userId);
+            mPackageConfigPersister.loadUserPackages(userId);
         }
 
         @Override
@@ -7366,6 +7343,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public void unregisterCompatScaleProvider(
                 @CompatScaleProvider.CompatScaleModeOrderId int id) {
             ActivityTaskManagerService.this.unregisterCompatScaleProvider(id);
+        }
+
+        @Override
+        public boolean isAssistDataAllowed() {
+            return ActivityTaskManagerService.this.isAssistDataAllowed();
         }
     }
 

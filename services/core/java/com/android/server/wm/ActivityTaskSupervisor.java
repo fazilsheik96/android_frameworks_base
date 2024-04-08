@@ -42,6 +42,7 @@ import static android.content.pm.PackageManager.NOTIFY_PACKAGE_USE_ACTIVITY;
 import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.PowerManager.PARTIAL_WAKE_LOCK;
+import static android.os.Process.INVALID_PID;
 import static android.os.Process.INVALID_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
@@ -57,6 +58,7 @@ import static com.android.server.wm.ActivityRecord.State.PAUSED;
 import static com.android.server.wm.ActivityRecord.State.PAUSING;
 import static com.android.server.wm.ActivityRecord.State.RESTARTING_PROCESS;
 import static com.android.server.wm.ActivityRecord.State.RESUMED;
+import static com.android.server.wm.ActivityRecord.State.STOPPING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ALL;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CLEANUP;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_IDLE;
@@ -74,6 +76,7 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLAS
 import static com.android.server.wm.ActivityTaskManagerService.ANIMATE;
 import static com.android.server.wm.ActivityTaskManagerService.H.FIRST_SUPERVISOR_TASK_MSG;
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
+import static com.android.server.wm.ClientLifecycleManager.shouldDispatchLaunchActivityItemIndependently;
 import static com.android.server.wm.LockTaskController.LOCK_TASK_AUTH_ALLOWLISTED;
 import static com.android.server.wm.LockTaskController.LOCK_TASK_AUTH_LAUNCHABLE;
 import static com.android.server.wm.LockTaskController.LOCK_TASK_AUTH_LAUNCHABLE_PRIV;
@@ -103,6 +106,7 @@ import android.app.servertransaction.ActivityLifecycleItem;
 import android.app.servertransaction.LaunchActivityItem;
 import android.app.servertransaction.PauseActivityItem;
 import android.app.servertransaction.ResumeActivityItem;
+import android.app.servertransaction.StopActivityItem;
 import android.companion.virtual.VirtualDeviceManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -122,7 +126,6 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
-import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -142,6 +145,7 @@ import android.util.SparseIntArray;
 import android.util.BoostFramework;
 import com.android.internal.app.procstats.ProcessStats;
 import android.view.Display;
+import android.window.ActivityWindowInfo;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
@@ -878,7 +882,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 // Deferring resume here because we're going to launch new activity shortly.
                 // We don't want to perform a redundant launch of the same record while ensuring
                 // configurations and trying to resume top activity of focused root task.
-                mRootWindowContainer.ensureVisibilityAndConfig(r, r.getDisplayId(),
+                mRootWindowContainer.ensureVisibilityAndConfig(r, r.mDisplayContent,
                         true /* deferResume */);
             }
 
@@ -948,6 +952,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 final Configuration overrideConfig = r.getMergedOverrideConfiguration();
                 r.setLastReportedConfiguration(procConfig, overrideConfig);
 
+                final ActivityWindowInfo activityWindowInfo = r.getActivityWindowInfo();
+                r.setLastReportedActivityWindowInfo(activityWindowInfo);
+
                 logIfTransactionTooLarge(r.intent, r.getSavedState());
 
                 final TaskFragment organizedTaskFragment = r.getOrganizedTaskFragment();
@@ -970,18 +977,27 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                         results, newIntents, r.takeSceneTransitionInfo(), isTransitionForward,
                         proc.createProfilerInfoIfNeeded(), r.assistToken, activityClientController,
                         r.shareableActivityToken, r.getLaunchedFromBubble(), fragmentToken,
-                        r.initialCallerInfoAccessToken);
+                        r.initialCallerInfoAccessToken, activityWindowInfo);
 
                 // Set desired final state.
                 final ActivityLifecycleItem lifecycleItem;
                 if (andResume) {
                     lifecycleItem = ResumeActivityItem.obtain(r.token, isTransitionForward,
                             r.shouldSendCompatFakeFocus());
-                } else {
+                } else if (r.isVisibleRequested()) {
                     lifecycleItem = PauseActivityItem.obtain(r.token);
+                } else {
+                    lifecycleItem = StopActivityItem.obtain(r.token);
                 }
 
                 // Schedule transaction.
+                if (shouldDispatchLaunchActivityItemIndependently(r.info.packageName, r.getUid())) {
+                    // LaunchActivityItem has @UnsupportedAppUsage usages.
+                    // Guard the bundleClientTransactionFlag feature with targetSDK on Android 15+.
+                    // To not bundle the transaction, dispatch the pending before schedule new
+                    // transaction.
+                    mService.getLifecycleManager().dispatchPendingTransaction(proc.getThread());
+                }
                 mService.getLifecycleManager().scheduleTransactionAndLifecycleItems(
                         proc.getThread(), launchActivityItem, lifecycleItem,
                         // Immediately dispatch the transaction, so that if it fails, the server can
@@ -1037,8 +1053,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         if (andResume && readyToResume()) {
             // As part of the process of launching, ActivityThread also performs
             // a resume.
-            rootTask.minimalResumeActivityLocked(r);
-        } else {
+            r.setState(RESUMED, "realStartActivityLocked");
+            r.completeResumeLocked();
+        } else if (r.isVisibleRequested()) {
             // This activity is not starting in the resumed state... which should look like we asked
             // it to pause+stop (but remain visible), and it has done so and reported back the
             // current icicle and other state.
@@ -1046,6 +1063,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                     + "(starting in paused state)", r);
             r.setState(PAUSED, "realStartActivityLocked");
             mRootWindowContainer.executeAppTransitionForAllDisplay();
+        } else {
+            // This activity is starting while invisible, so it should be stopped.
+            r.setState(STOPPING, "realStartActivityLocked");
         }
         // Perform OOM scoring after the activity state is set, so the process can be updated with
         // the latest state.
@@ -1500,7 +1520,6 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 }
                 mLaunchingActivityWakeLock.release();
             }
-            mRootWindowContainer.ensureActivitiesVisible();
         }
 
         // Atomically retrieve all of the other things to do.
@@ -1637,9 +1656,14 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     private void removePinnedRootTaskInSurfaceTransaction(Task rootTask) {
-        rootTask.mTransitionController.requestTransitionIfNeeded(TRANSIT_TO_BACK, 0 /* flags */,
-                rootTask, rootTask.mDisplayContent, null /* remoteTransition */,
-                null /* displayChange */);
+        final Transition transition = rootTask.mTransitionController.requestTransitionIfNeeded(
+                TRANSIT_TO_BACK, 0 /* flags */, rootTask, rootTask.mDisplayContent);
+        if (transition == null) {
+            rootTask.mTransitionController.collect(rootTask);
+        } else {
+            transition.collect(rootTask);
+        }
+
         /**
          * Workaround: Force-stop all the activities in the root pinned task before we reparent them
          * to the fullscreen root task.  This is to guarantee that when we are removing a root task,
@@ -1701,11 +1725,11 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
      * @return Returns true if the given task was found and removed.
      */
     boolean removeTaskById(int taskId, boolean killProcess, boolean removeFromRecents,
-            String reason, int callingUid) {
+            String reason, int callingUid, int callingPid) {
         final Task task =
                 mRootWindowContainer.anyTaskForId(taskId, MATCH_ATTACHED_TASK_OR_RECENT_TASKS);
         if (task != null) {
-            removeTask(task, killProcess, removeFromRecents, reason, callingUid, null);
+            removeTask(task, killProcess, removeFromRecents, reason, callingUid, callingPid, null);
             return true;
         }
         Slog.w(TAG, "Request to remove task ignored for non-existent task " + taskId);
@@ -1713,16 +1737,21 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     void removeTask(Task task, boolean killProcess, boolean removeFromRecents, String reason) {
-        removeTask(task, killProcess, removeFromRecents, reason, SYSTEM_UID, null);
+        removeTask(task, killProcess, removeFromRecents, reason, SYSTEM_UID, INVALID_PID, null);
     }
 
     void removeTask(Task task, boolean killProcess, boolean removeFromRecents, String reason,
-            int callingUid, String callerActivityClassName) {
+            int callingUid, int callingPid, String callerActivityClassName) {
         if (task.mInRemoveTask) {
             // Prevent recursion.
             return;
         }
-        task.mTransitionController.requestCloseTransitionIfNeeded(task);
+        final Transition transit = task.mTransitionController.requestCloseTransitionIfNeeded(task);
+        if (transit != null) {
+            transit.collectClose(task);
+        } else if (task.mTransitionController.isCollecting()) {
+            task.mTransitionController.getCollectingTransition().collectClose(task);
+        }
         // Consume the stopping activities immediately so activity manager won't skip killing
         // the process because it is still foreground state, i.e. RESUMED -> PAUSING set from
         // removeActivities -> finishIfPossible.
@@ -1755,16 +1784,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 mService.notifyTaskPersisterLocked(null, true);
             }
             mBalController
-                    .checkActivityAllowedToClearTask(task, callingUid, callerActivityClassName);
-
-            // Device Integration: Intercept task remove event and notify remote task handler manager.
-            // If current task to be removed is hold and managed by RemoteTaskManager
-            // remove event should be sent and notify correspond remote task instance handler.
-            // If current removed task is handled by remote task manger, need to notify
-            // correspond handler that the task already been closed.
-            if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-                mService.getRemoteTaskManager().handleRemoveTask(task);
-            }
+                .checkActivityAllowedToClearTask(task, callingUid, callingPid, callerActivityClassName);
         } finally {
             task.mInRemoveTask = false;
         }
@@ -1941,7 +1961,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             // Task was trimmed from the recent tasks list -- remove the active task record as well
             // since the user won't really be able to go back to it
             removeTaskById(task.mTaskId, killProcess, false /* removeFromRecents */,
-                    "recent-task-trimmed", SYSTEM_UID);
+                    "recent-task-trimmed", SYSTEM_UID, INVALID_PID);
         }
         task.removedFromRecents();
     }
@@ -1960,7 +1980,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         // Check that we aren't reparenting to the same root task that the task is already in
         if (prevRootTask != null && prevRootTask.mTaskId == rootTaskId) {
             Slog.w(TAG, "Can not reparent to same root task, task=" + task
-                    + " already in rootTaskId=" + rootTaskId);
+                    + " already in rootTaskId=" + rootTaskId + " by " + Debug.getCallers(8));
             return prevRootTask;
         }
 
@@ -2898,12 +2918,6 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                                     // Recents always has a new launching state (not combinable).
                                     null /* caller */, isCallerRecents ? INVALID_UID : callingUid);
                     try {
-                        // Device Integration: Once detect this task already shows in VD,and user click this app
-                        // again from Recent task list, we need to execute interception flow in
-                        // RemoteTaskManager.
-                        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
-                            mService.getRemoteTaskManager().interceptFromRecents(task, targetActivity.intent);
-                        }
                         mService.moveTaskToFrontLocked(null /* appThread */,
                                 null /* callingPackage */, task.mTaskId, 0, options);
                         // Apply options to prevent pendingOptions be taken when scheduling

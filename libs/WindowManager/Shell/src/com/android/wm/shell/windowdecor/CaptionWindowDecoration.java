@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.windowdecor;
 
+import android.annotation.NonNull;
 import android.app.ActivityManager.RunningTaskInfo;
 import android.app.WindowConfiguration;
 import android.app.WindowConfiguration.WindowingMode;
@@ -87,6 +88,7 @@ public class CaptionWindowDecoration extends WindowDecoration<WindowDecorLinearL
     }
 
     @Override
+    @NonNull
     Rect calculateValidDragArea() {
         final int leftButtonsWidth = loadDimensionPixelSize(mContext.getResources(),
                 R.dimen.caption_left_buttons_width);
@@ -190,6 +192,7 @@ public class CaptionWindowDecoration extends WindowDecoration<WindowDecorLinearL
         mRelayoutParams.mShadowRadiusId = shadowRadiusID;
         mRelayoutParams.mApplyStartTransactionOnDraw = applyStartTransactionOnDraw;
         mRelayoutParams.mSetTaskPositionAndCrop = setTaskCropAndPosition;
+        mRelayoutParams.mAllowCaptionInputFallthrough = false;
 
         relayout(mRelayoutParams, startT, finishT, wct, oldRootView, mResult);
         // After this line, mTaskInfo is up-to-date and should be used instead of taskInfo

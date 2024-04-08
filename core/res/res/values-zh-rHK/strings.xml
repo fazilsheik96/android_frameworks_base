@@ -666,24 +666,18 @@
     <string name="fingerprint_authenticated" msgid="2024862866860283100">"驗證咗指紋"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="8867889115112348167">"面孔已經驗證"</string>
     <string name="face_authenticated_confirmation_required" msgid="6872632732508013755">"面孔已經驗證，請㩒一下 [確認]"</string>
-    <!-- no translation found for fingerprint_error_hw_not_available (7755729484334001137) -->
-    <skip />
+    <string name="fingerprint_error_hw_not_available" msgid="7755729484334001137">"無法使用指紋硬件"</string>
     <string name="fingerprint_error_no_space" msgid="7285481581905967580">"無法設定指紋"</string>
     <string name="fingerprint_error_timeout" msgid="7361192266621252164">"指紋設定逾時，請再試一次。"</string>
-    <!-- no translation found for fingerprint_error_canceled (5541771463159727513) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_user_canceled (2017941773466506863) -->
-    <skip />
+    <string name="fingerprint_error_canceled" msgid="5541771463159727513">"指紋操作已取消"</string>
+    <string name="fingerprint_error_user_canceled" msgid="2017941773466506863">"使用者已取消指紋操作"</string>
     <string name="fingerprint_error_lockout" msgid="6626753679019351368">"嘗試次數過多，請改用螢幕鎖定功能。"</string>
     <string name="fingerprint_error_lockout_permanent" msgid="9060651300306264843">"嘗試次數過多，請改用螢幕鎖定功能。"</string>
     <string name="fingerprint_error_unable_to_process" msgid="2446280592818621224">"無法處理指紋，請再試一次。"</string>
-    <!-- no translation found for fingerprint_error_no_fingerprints (3144806556204061862) -->
-    <skip />
+    <string name="fingerprint_error_no_fingerprints" msgid="3144806556204061862">"尚未註冊任何指紋"</string>
     <string name="fingerprint_error_hw_not_present" msgid="5898827259419366359">"此裝置沒有指紋感應器"</string>
-    <!-- no translation found for fingerprint_error_security_update_required (8440349108169661934) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_bad_calibration (6770614925736183528) -->
-    <skip />
+    <string name="fingerprint_error_security_update_required" msgid="8440349108169661934">"感應器已暫時停用"</string>
+    <string name="fingerprint_error_bad_calibration" msgid="6770614925736183528">"指紋感應器無法使用，請諮詢維修服務供應商。"</string>
     <string name="fingerprint_error_power_pressed" msgid="5479524500542129414">"已按下開關按鈕"</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"手指 <xliff:g id="FINGERID">%d</xliff:g>"</string>
     <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"使用指紋鎖定"</string>
@@ -1992,6 +1986,9 @@
     <string name="work_mode_off_title" msgid="6367463960165135829">"要取消暫停工作應用程式嗎？"</string>
     <string name="work_mode_turn_on" msgid="5316648862401307800">"取消暫停"</string>
     <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"撥打緊急電話"</string>
+    <string name="set_up_screen_lock_title" msgid="8346083801616474030">"設定螢幕鎖定"</string>
+    <string name="set_up_screen_lock_action_label" msgid="2687634803649209367">"設定螢幕鎖定"</string>
+    <string name="private_space_set_up_screen_lock_message" msgid="1109956797005149814">"如要使用私人空間，請在此裝置上設定螢幕鎖定功能"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"無法使用應用程式"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"目前無法使用「<xliff:g id="APP_NAME">%1$s</xliff:g>」。"</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"無法使用「<xliff:g id="ACTIVITY">%1$s</xliff:g>」"</string>
@@ -2396,4 +2393,5 @@
     <string name="satellite_notification_summary" msgid="5207364139430767162">"你可在沒有流動/Wi-Fi 網絡的情況下收發訊息"</string>
     <string name="satellite_notification_open_message" msgid="4149234979688273729">"開啟「訊息」"</string>
     <string name="satellite_notification_how_it_works" msgid="3132069321977520519">"運作方式"</string>
+    <string name="unarchival_session_app_label" msgid="6811856981546348205">"待處理…"</string>
 </resources>

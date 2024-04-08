@@ -23,7 +23,6 @@ import android.platform.test.annotations.DisableFlags
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
 import androidx.test.filters.SmallTest
-import com.android.internal.jank.InteractionJankMonitor
 import com.android.internal.logging.testing.UiEventLoggerFake
 import com.android.systemui.Flags.FLAG_SCENE_CONTAINER
 import com.android.systemui.SysuiTestCase
@@ -39,22 +38,25 @@ import com.android.systemui.deviceentry.domain.interactor.DeviceEntryUdfpsIntera
 import com.android.systemui.deviceentry.domain.interactor.deviceUnlockedInteractor
 import com.android.systemui.flags.EnableSceneContainer
 import com.android.systemui.flags.FakeFeatureFlagsClassic
+import com.android.systemui.jank.interactionJankMonitor
 import com.android.systemui.keyguard.data.repository.FakeCommandQueue
 import com.android.systemui.keyguard.data.repository.FakeKeyguardRepository
 import com.android.systemui.keyguard.data.repository.FakeKeyguardTransitionRepository
 import com.android.systemui.keyguard.domain.interactor.FromLockscreenTransitionInteractor
 import com.android.systemui.keyguard.domain.interactor.FromPrimaryBouncerTransitionInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
+import com.android.systemui.keyguard.domain.interactor.fromGoneTransitionInteractor
 import com.android.systemui.keyguard.domain.interactor.fromLockscreenTransitionInteractor
 import com.android.systemui.keyguard.domain.interactor.fromPrimaryBouncerTransitionInteractor
 import com.android.systemui.keyguard.domain.interactor.keyguardTransitionInteractor
+import com.android.systemui.kosmos.Kosmos
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.power.data.repository.FakePowerRepository
 import com.android.systemui.power.domain.interactor.PowerInteractor
 import com.android.systemui.scene.domain.interactor.sceneInteractor
 import com.android.systemui.scene.shared.flag.FakeSceneContainerFlags
-import com.android.systemui.scene.shared.model.SceneKey
+import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.shade.LargeScreenHeaderHelper
 import com.android.systemui.shade.data.repository.FakeShadeRepository
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
@@ -70,7 +72,7 @@ import com.android.systemui.util.kotlin.JavaAdapter
 import com.android.systemui.util.mockito.mock
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -79,15 +81,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyFloat
-import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
-import org.mockito.Mockito.`when` as whenever
 import org.mockito.MockitoAnnotations
+import org.mockito.Mockito.`when` as whenever
 
 @SmallTest
 @RunWith(AndroidTestingRunner::class)
@@ -100,7 +100,6 @@ class StatusBarStateControllerImplTest : SysuiTestCase() {
     private lateinit var fromLockscreenTransitionInteractor: FromLockscreenTransitionInteractor
     private lateinit var fromPrimaryBouncerTransitionInteractor:
         FromPrimaryBouncerTransitionInteractor
-    private val interactionJankMonitor = mock<InteractionJankMonitor>()
     private val mockDarkAnimator = mock<ObjectAnimator>()
     private val deviceEntryUdfpsInteractor = mock<DeviceEntryUdfpsInteractor>()
     private val largeScreenHeaderHelper = mock<LargeScreenHeaderHelper>()
@@ -111,15 +110,13 @@ class StatusBarStateControllerImplTest : SysuiTestCase() {
     @Before
     fun setUp() {
         MockitoAnnotations.initMocks(this)
-        whenever(interactionJankMonitor.begin(any(), anyInt())).thenReturn(true)
-        whenever(interactionJankMonitor.end(anyInt())).thenReturn(true)
 
         uiEventLogger = UiEventLoggerFake()
         underTest =
             object :
                 StatusBarStateControllerImpl(
                     uiEventLogger,
-                    interactionJankMonitor,
+                    kosmos.interactionJankMonitor,
                     JavaAdapter(testScope.backgroundScope),
                     { shadeInteractor },
                     { kosmos.deviceUnlockedInteractor },
@@ -153,9 +150,10 @@ class StatusBarStateControllerImplTest : SysuiTestCase() {
                 shadeRepository,
                 keyguardTransitionInteractor,
                 { kosmos.sceneInteractor },
+                { kosmos.fromGoneTransitionInteractor },
             )
 
-        whenever(deviceEntryUdfpsInteractor.isUdfpsSupported).thenReturn(emptyFlow())
+        whenever(deviceEntryUdfpsInteractor.isUdfpsSupported).thenReturn(MutableStateFlow(false))
         shadeInteractor =
             ShadeInteractorImpl(
                 testScope.backgroundScope,
@@ -313,48 +311,48 @@ class StatusBarStateControllerImplTest : SysuiTestCase() {
             kosmos.fakeDeviceEntryRepository.setUnlocked(false)
             runCurrent()
             kosmos.sceneInteractor.changeScene(
-                toScene = SceneKey.Lockscreen,
+                toScene = Scenes.Lockscreen,
                 loggingReason = "reason"
             )
             runCurrent()
             assertThat(kosmos.deviceUnlockedInteractor.isDeviceUnlocked.value).isFalse()
-            assertThat(currentScene).isEqualTo(SceneKey.Lockscreen)
+            assertThat(currentScene).isEqualTo(Scenes.Lockscreen)
 
             // Call start to begin hydrating based on the scene framework:
             underTest.start()
 
-            kosmos.sceneInteractor.changeScene(toScene = SceneKey.Bouncer, loggingReason = "reason")
+            kosmos.sceneInteractor.changeScene(toScene = Scenes.Bouncer, loggingReason = "reason")
             runCurrent()
-            assertThat(currentScene).isEqualTo(SceneKey.Bouncer)
+            assertThat(currentScene).isEqualTo(Scenes.Bouncer)
             assertThat(statusBarState).isEqualTo(StatusBarState.KEYGUARD)
 
-            kosmos.sceneInteractor.changeScene(toScene = SceneKey.Shade, loggingReason = "reason")
+            kosmos.sceneInteractor.changeScene(toScene = Scenes.Shade, loggingReason = "reason")
             runCurrent()
-            assertThat(currentScene).isEqualTo(SceneKey.Shade)
+            assertThat(currentScene).isEqualTo(Scenes.Shade)
             assertThat(statusBarState).isEqualTo(StatusBarState.SHADE_LOCKED)
 
             kosmos.sceneInteractor.changeScene(
-                toScene = SceneKey.QuickSettings,
+                toScene = Scenes.QuickSettings,
                 loggingReason = "reason"
             )
             runCurrent()
-            assertThat(currentScene).isEqualTo(SceneKey.QuickSettings)
+            assertThat(currentScene).isEqualTo(Scenes.QuickSettings)
             assertThat(statusBarState).isEqualTo(StatusBarState.SHADE_LOCKED)
 
             kosmos.sceneInteractor.changeScene(
-                toScene = SceneKey.Communal,
+                toScene = Scenes.Communal,
                 loggingReason = "reason"
             )
             runCurrent()
-            assertThat(currentScene).isEqualTo(SceneKey.Communal)
+            assertThat(currentScene).isEqualTo(Scenes.Communal)
             assertThat(statusBarState).isEqualTo(StatusBarState.KEYGUARD)
 
             kosmos.sceneInteractor.changeScene(
-                toScene = SceneKey.Lockscreen,
+                toScene = Scenes.Lockscreen,
                 loggingReason = "reason"
             )
             runCurrent()
-            assertThat(currentScene).isEqualTo(SceneKey.Lockscreen)
+            assertThat(currentScene).isEqualTo(Scenes.Lockscreen)
             assertThat(statusBarState).isEqualTo(StatusBarState.KEYGUARD)
         }
 
@@ -377,25 +375,25 @@ class StatusBarStateControllerImplTest : SysuiTestCase() {
             )
             kosmos.fakeDeviceEntryRepository.setUnlocked(true)
             runCurrent()
-            kosmos.sceneInteractor.changeScene(toScene = SceneKey.Gone, loggingReason = "reason")
+            kosmos.sceneInteractor.changeScene(toScene = Scenes.Gone, loggingReason = "reason")
             runCurrent()
             assertThat(kosmos.deviceUnlockedInteractor.isDeviceUnlocked.value).isTrue()
-            assertThat(currentScene).isEqualTo(SceneKey.Gone)
+            assertThat(currentScene).isEqualTo(Scenes.Gone)
 
             // Call start to begin hydrating based on the scene framework:
             underTest.start()
 
-            kosmos.sceneInteractor.changeScene(toScene = SceneKey.Shade, loggingReason = "reason")
+            kosmos.sceneInteractor.changeScene(toScene = Scenes.Shade, loggingReason = "reason")
             runCurrent()
-            assertThat(currentScene).isEqualTo(SceneKey.Shade)
+            assertThat(currentScene).isEqualTo(Scenes.Shade)
             assertThat(statusBarState).isEqualTo(StatusBarState.SHADE)
 
             kosmos.sceneInteractor.changeScene(
-                toScene = SceneKey.QuickSettings,
+                toScene = Scenes.QuickSettings,
                 loggingReason = "reason"
             )
             runCurrent()
-            assertThat(currentScene).isEqualTo(SceneKey.QuickSettings)
+            assertThat(currentScene).isEqualTo(Scenes.QuickSettings)
             assertThat(statusBarState).isEqualTo(StatusBarState.SHADE)
         }
 }

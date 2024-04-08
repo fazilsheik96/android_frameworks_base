@@ -17,8 +17,7 @@
 package com.android.systemui.recordissue
 
 import android.annotation.SuppressLint
-import android.app.BroadcastOptions
-import android.app.PendingIntent
+import android.app.AlertDialog
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -30,8 +29,8 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.PopupMenu
 import android.widget.Switch
-import androidx.annotation.AnyThread
 import androidx.annotation.MainThread
+import androidx.annotation.WorkerThread
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.flags.FeatureFlagsClassic
@@ -40,11 +39,9 @@ import com.android.systemui.flags.Flags.WM_ENABLE_PARTIAL_SCREEN_SHARING_ENTERPR
 import com.android.systemui.mediaprojection.MediaProjectionMetricsLogger
 import com.android.systemui.mediaprojection.SessionCreationSource
 import com.android.systemui.mediaprojection.devicepolicy.ScreenCaptureDevicePolicyResolver
-import com.android.systemui.mediaprojection.devicepolicy.ScreenCaptureDisabledDialog
+import com.android.systemui.mediaprojection.devicepolicy.ScreenCaptureDisabledDialogDelegate
 import com.android.systemui.qs.tiles.RecordIssueTile
 import com.android.systemui.res.R
-import com.android.systemui.screenrecord.RecordingService
-import com.android.systemui.settings.UserContextProvider
 import com.android.systemui.settings.UserFileManager
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.statusbar.phone.SystemUIDialog
@@ -52,12 +49,12 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import java.util.concurrent.Executor
+import java.util.function.Consumer
 
 class RecordIssueDialogDelegate
 @AssistedInject
 constructor(
     private val factory: SystemUIDialog.Factory,
-    private val userContextProvider: UserContextProvider,
     private val userTracker: UserTracker,
     private val flags: FeatureFlagsClassic,
     @Background private val bgExecutor: Executor,
@@ -65,14 +62,15 @@ constructor(
     private val devicePolicyResolver: dagger.Lazy<ScreenCaptureDevicePolicyResolver>,
     private val mediaProjectionMetricsLogger: MediaProjectionMetricsLogger,
     private val userFileManager: UserFileManager,
-    @Assisted private val onStarted: Runnable,
+    private val screenCaptureDisabledDialogDelegate: ScreenCaptureDisabledDialogDelegate,
+    @Assisted private val onStarted: Consumer<IssueRecordingConfig>,
 ) : SystemUIDialog.Delegate {
 
     /** To inject dependencies and allow for easier testing */
     @AssistedFactory
     interface Factory {
         /** Create a dialog object */
-        fun create(onStarted: Runnable): RecordIssueDialogDelegate
+        fun create(onStarted: Consumer<IssueRecordingConfig>): RecordIssueDialogDelegate
     }
 
     @SuppressLint("UseSwitchCompatOrMaterialCode") private lateinit var screenRecordSwitch: Switch
@@ -85,13 +83,19 @@ constructor(
             setTitle(context.getString(R.string.qs_record_issue_label))
             setIcon(R.drawable.qs_record_issue_icon_off)
             setNegativeButton(R.string.cancel) { _, _ -> dismiss() }
-            setPositiveButton(R.string.qs_record_issue_start) { _, _ ->
-                onStarted.run()
-                if (screenRecordSwitch.isChecked) {
-                    requestScreenCapture()
-                }
-                dismiss()
-            }
+            setPositiveButton(
+                R.string.qs_record_issue_start,
+                { _, _ ->
+                    onStarted.accept(
+                        IssueRecordingConfig(
+                            screenRecordSwitch.isChecked,
+                            true /* TODO: Base this on issueType selected */
+                        )
+                    )
+                    dismiss()
+                },
+                false
+            )
         }
     }
 
@@ -105,49 +109,51 @@ constructor(
 
             screenRecordSwitch = requireViewById(R.id.screenrecord_switch)
             screenRecordSwitch.setOnCheckedChangeListener { _, isEnabled ->
-                onScreenRecordSwitchClicked(context, isEnabled)
+                if (isEnabled) {
+                    bgExecutor.execute { onScreenRecordSwitchClicked() }
+                }
             }
+            val startButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             issueTypeButton = requireViewById(R.id.issue_type_button)
-            issueTypeButton.setOnClickListener { onIssueTypeClicked(context) }
+            issueTypeButton.setOnClickListener {
+                onIssueTypeClicked(context) { startButton.isEnabled = true }
+            }
+            startButton.isEnabled = false
         }
     }
 
-    @AnyThread
-    private fun onScreenRecordSwitchClicked(context: Context, isEnabled: Boolean) {
-        if (!isEnabled) return
-
-        bgExecutor.execute {
-            if (
-                flags.isEnabled(WM_ENABLE_PARTIAL_SCREEN_SHARING_ENTERPRISE_POLICIES) &&
-                    devicePolicyResolver
-                        .get()
-                        .isScreenCaptureCompletelyDisabled(UserHandle.of(userTracker.userId))
-            ) {
-                mainExecutor.execute {
-                    ScreenCaptureDisabledDialog(context).show()
-                    screenRecordSwitch.isChecked = false
-                }
-                return@execute
+    @WorkerThread
+    private fun onScreenRecordSwitchClicked() {
+        if (
+            flags.isEnabled(WM_ENABLE_PARTIAL_SCREEN_SHARING_ENTERPRISE_POLICIES) &&
+                devicePolicyResolver
+                    .get()
+                    .isScreenCaptureCompletelyDisabled(UserHandle.of(userTracker.userId))
+        ) {
+            mainExecutor.execute {
+                screenCaptureDisabledDialogDelegate.createDialog().show()
+                screenRecordSwitch.isChecked = false
             }
+            return
+        }
 
-            mediaProjectionMetricsLogger.notifyProjectionInitiated(
-                userTracker.userId,
-                SessionCreationSource.SYSTEM_UI_SCREEN_RECORDER
-            )
+        mediaProjectionMetricsLogger.notifyProjectionInitiated(
+            userTracker.userId,
+            SessionCreationSource.SYSTEM_UI_SCREEN_RECORDER
+        )
 
-            if (flags.isEnabled(Flags.WM_ENABLE_PARTIAL_SCREEN_SHARING)) {
-                val prefs =
-                    userFileManager.getSharedPreferences(
-                        RecordIssueTile.TILE_SPEC,
-                        Context.MODE_PRIVATE,
-                        userTracker.userId
-                    )
-                if (!prefs.getBoolean(HAS_APPROVED_SCREEN_RECORDING, false)) {
-                    mainExecutor.execute {
-                        ScreenCapturePermissionDialogDelegate(factory, prefs).createDialog().apply {
-                            setOnCancelListener { screenRecordSwitch.isChecked = false }
-                            show()
-                        }
+        if (flags.isEnabled(Flags.WM_ENABLE_PARTIAL_SCREEN_SHARING)) {
+            val prefs =
+                userFileManager.getSharedPreferences(
+                    RecordIssueTile.TILE_SPEC,
+                    Context.MODE_PRIVATE,
+                    userTracker.userId
+                )
+            if (!prefs.getBoolean(HAS_APPROVED_SCREEN_RECORDING, false)) {
+                mainExecutor.execute {
+                    ScreenCapturePermissionDialogDelegate(factory, prefs).createDialog().apply {
+                        setOnCancelListener { screenRecordSwitch.isChecked = false }
+                        show()
                     }
                 }
             }
@@ -155,7 +161,7 @@ constructor(
     }
 
     @MainThread
-    private fun onIssueTypeClicked(context: Context) {
+    private fun onIssueTypeClicked(context: Context, onIssueTypeSelected: Runnable) {
         val selectedCategory = issueTypeButton.text.toString()
         val popupMenu = PopupMenu(context, issueTypeButton)
 
@@ -170,19 +176,11 @@ constructor(
         popupMenu.apply {
             setOnMenuItemClickListener {
                 issueTypeButton.text = it.title
+                onIssueTypeSelected.run()
                 true
             }
             setForceShowIcon(true)
             show()
         }
     }
-
-    private fun requestScreenCapture() =
-        PendingIntent.getForegroundService(
-                userContextProvider.userContext,
-                RecordingService.REQUEST_CODE,
-                IssueRecordingService.getStartIntent(userContextProvider.userContext),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            .send(BroadcastOptions.makeBasic().apply { isInteractive = true }.toBundle())
 }

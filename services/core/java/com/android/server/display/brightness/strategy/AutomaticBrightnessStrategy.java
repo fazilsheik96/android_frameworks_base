@@ -15,6 +15,8 @@
  */
 package com.android.server.display.brightness.strategy;
 
+import static android.hardware.display.DisplayManagerInternal.DisplayPowerRequest.POLICY_DOZE;
+
 import android.annotation.Nullable;
 import android.content.Context;
 import android.hardware.display.BrightnessConfiguration;
@@ -102,12 +104,10 @@ public class AutomaticBrightnessStrategy {
             boolean allowAutoBrightnessWhileDozingConfig, int brightnessReason, int policy,
             float lastUserSetScreenBrightness, boolean userSetBrightnessChanged) {
         final boolean autoBrightnessEnabledInDoze =
-                allowAutoBrightnessWhileDozingConfig
-                        && Display.isDozeState(targetDisplayState);
+                allowAutoBrightnessWhileDozingConfig && policy == POLICY_DOZE;
         mIsAutoBrightnessEnabled = shouldUseAutoBrightness()
                 && (targetDisplayState == Display.STATE_ON || autoBrightnessEnabledInDoze)
                 && brightnessReason != BrightnessReason.REASON_OVERRIDE
-                && brightnessReason != BrightnessReason.REASON_OFFLOAD
                 && mAutomaticBrightnessController != null;
         mAutoBrightnessDisabledDueToDisplayOff = shouldUseAutoBrightness()
                 && !(targetDisplayState == Display.STATE_ON || autoBrightnessEnabledInDoze);
@@ -119,7 +119,7 @@ public class AutomaticBrightnessStrategy {
                         : AutomaticBrightnessController.AUTO_BRIGHTNESS_DISABLED;
 
         accommodateUserBrightnessChanges(userSetBrightnessChanged, lastUserSetScreenBrightness,
-                policy, mBrightnessConfiguration, autoBrightnessState);
+                policy, targetDisplayState, mBrightnessConfiguration, autoBrightnessState);
     }
 
     public boolean isAutoBrightnessEnabled() {
@@ -267,6 +267,23 @@ public class AutomaticBrightnessStrategy {
     }
 
     /**
+     * Get the automatic screen brightness based on the last observed lux reading. Used e.g. when
+     * entering doze - we disable the light sensor, invalidate the lux, but we still need to set
+     * the initial brightness in doze mode.
+     * @param brightnessEvent Event object to populate with details about why the specific
+     *                        brightness was chosen.
+     */
+    public float getAutomaticScreenBrightnessBasedOnLastObservedLux(
+            BrightnessEvent brightnessEvent) {
+        float brightness = (mAutomaticBrightnessController != null)
+                ? mAutomaticBrightnessController
+                .getAutomaticScreenBrightnessBasedOnLastObservedLux(brightnessEvent)
+                : PowerManager.BRIGHTNESS_INVALID_FLOAT;
+        adjustAutomaticBrightnessStateIfValid(brightness);
+        return brightness;
+    }
+
+    /**
      * Gets the auto-brightness adjustment flag change reason
      */
     public int getAutoBrightnessAdjustmentReasonsFlags() {
@@ -355,7 +372,7 @@ public class AutomaticBrightnessStrategy {
      */
     @VisibleForTesting
     void accommodateUserBrightnessChanges(boolean userSetBrightnessChanged,
-            float lastUserSetScreenBrightness, int policy,
+            float lastUserSetScreenBrightness, int policy, int displayState,
             BrightnessConfiguration brightnessConfiguration, int autoBrightnessState) {
         // Update the pending auto-brightness adjustments if any. This typically checks and adjusts
         // the state of the class if the user moves the brightness slider and has settled to a
@@ -373,7 +390,8 @@ public class AutomaticBrightnessStrategy {
                     brightnessConfiguration,
                     lastUserSetScreenBrightness,
                     userSetBrightnessChanged, autoBrightnessAdjustment,
-                    mAutoBrightnessAdjustmentChanged, policy, mShouldResetShortTermModel);
+                    mAutoBrightnessAdjustmentChanged, policy, displayState,
+                    mShouldResetShortTermModel);
             mShouldResetShortTermModel = false;
             // We take note if the user brightness point is still being used in the current
             // auto-brightness model.

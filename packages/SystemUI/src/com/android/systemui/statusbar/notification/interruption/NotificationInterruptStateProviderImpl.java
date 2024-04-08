@@ -191,11 +191,11 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
     public boolean shouldBubbleUp(NotificationEntry entry) {
         final StatusBarNotification sbn = entry.getSbn();
 
-        if (!canAlertCommon(entry, true)) {
+        if (!canAlertCommon(entry, false)) {
             return false;
         }
 
-        if (!canAlertAwakeCommon(entry, true)) {
+        if (!canAlertAwakeCommon(entry, false)) {
             return false;
         }
 
@@ -359,6 +359,12 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
         // The device is not provisioned, launch FSI.
         if (!mDeviceProvisionedController.isDeviceProvisioned()) {
             return getDecisionGivenSuppression(FullScreenIntentDecision.FSI_NOT_PROVISIONED,
+                    suppressedByDND);
+        }
+
+        // The current user hasn't completed setup, launch FSI.
+        if (!mDeviceProvisionedController.isCurrentUserSetup()) {
+            return getDecisionGivenSuppression(FullScreenIntentDecision.FSI_USER_SETUP_INCOMPLETE,
                     suppressedByDND);
         }
 

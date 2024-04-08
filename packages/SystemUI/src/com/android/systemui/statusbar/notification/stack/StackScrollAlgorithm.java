@@ -53,9 +53,7 @@ public class StackScrollAlgorithm {
     public static final float START_FRACTION = 0.5f;
 
     private static final String TAG = "StackScrollAlgorithm";
-    private static final Boolean DEBUG = false;
     private static final SourceType STACK_SCROLL_ALGO = SourceType.from("StackScrollAlgorithm");
-
     private final ViewGroup mHostView;
     private float mPaddingBetweenElements;
     private float mGapHeight;
@@ -247,13 +245,11 @@ public class StackScrollAlgorithm {
                 >= ambientState.getMaxHeadsUpTranslation();
     }
 
-    public static void log(String s) {
-        if (DEBUG) {
-            android.util.Log.i(TAG, s);
-        }
+    public static void debugLog(String s) {
+        android.util.Log.i(TAG, s);
     }
 
-    public static void logView(View view, String s) {
+    public static void debugLogView(View view, String s) {
         String viewString = "";
         if (view instanceof ExpandableNotificationRow row) {
             if (row.getEntry() == null) {
@@ -274,7 +270,7 @@ public class StackScrollAlgorithm {
         } else {
             viewString = view.toString();
         }
-        log(viewString + " " + s);
+        debugLog(viewString + " " + s);
     }
 
     private void resetChildViewStates() {
@@ -369,13 +365,11 @@ public class StackScrollAlgorithm {
     /** Updates the dimmed and hiding sensitive states of the children. */
     private void updateDimmedAndHideSensitive(AmbientState ambientState,
             StackScrollAlgorithmState algorithmState) {
-        boolean dimmed = ambientState.isDimmed();
         boolean hideSensitive = ambientState.isHideSensitive();
         int childCount = algorithmState.visibleChildren.size();
         for (int i = 0; i < childCount; i++) {
             ExpandableView child = algorithmState.visibleChildren.get(i);
             ExpandableViewState childViewState = child.getViewState();
-            childViewState.dimmed = dimmed;
             childViewState.hideSensitive = hideSensitive;
         }
     }
@@ -600,15 +594,16 @@ public class StackScrollAlgorithm {
         );
         if (view instanceof FooterView) {
             if (FooterViewRefactor.isEnabled()) {
-                final float footerEnd = algorithmState.mCurrentExpandedYPosition
-                        + view.getIntrinsicHeight();
-                final boolean noSpaceForFooter = footerEnd > ambientState.getStackEndHeight();
-                // TODO(b/293167744): May be able to keep only noSpaceForFooter here if we add an
-                //  emission when clearAllNotifications is called, and then use that in the footer
-                //  visibility flow.
-                ((FooterView.FooterViewState) viewState).hideContent =
-                        noSpaceForFooter || (ambientState.isClearAllInProgress()
-                                && !hasNonClearableNotifs(algorithmState));
+                if (((FooterView) view).shouldBeHidden()) {
+                    viewState.hidden = true;
+                } else {
+                    final float footerEnd = algorithmState.mCurrentExpandedYPosition
+                            + view.getIntrinsicHeight();
+                    final boolean noSpaceForFooter = footerEnd > ambientState.getStackEndHeight();
+                    ((FooterView.FooterViewState) viewState).hideContent =
+                            noSpaceForFooter || (ambientState.isClearAllInProgress()
+                                    && !hasNonClearableNotifs(algorithmState));
+                }
 
             } else {
                 final boolean shadeClosed = !ambientState.isShadeExpanded();
@@ -853,7 +848,7 @@ public class StackScrollAlgorithm {
                 }
             }
             if (row.isHeadsUpAnimatingAway()) {
-                if (NotificationsImprovedHunAnimation.isEnabled()) {
+                if (NotificationsImprovedHunAnimation.isEnabled() && !ambientState.isDozing()) {
                     if (shouldHunAppearFromBottom(ambientState, childState)) {
                         // move to the bottom of the screen
                         childState.setYTranslation(

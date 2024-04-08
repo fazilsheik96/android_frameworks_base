@@ -47,73 +47,84 @@ class FakeKeyguardTransitionRepository @Inject constructor() : KeyguardTransitio
     override val transitions: SharedFlow<TransitionStep> = _transitions
 
     init {
-        _transitions.tryEmit(
-            TransitionStep(
-                transitionState = TransitionState.STARTED,
-                from = KeyguardState.OFF,
-                to = KeyguardState.LOCKSCREEN,
-            )
-        )
-
-        _transitions.tryEmit(
-            TransitionStep(
-                transitionState = TransitionState.FINISHED,
-                from = KeyguardState.OFF,
-                to = KeyguardState.LOCKSCREEN,
-            )
-        )
+        // Seed the fake repository with the same initial steps the actual repository uses.
+        KeyguardTransitionRepositoryImpl.initialTransitionSteps.forEach { _transitions.tryEmit(it) }
     }
 
     /**
-     * Sends STARTED, RUNNING, and FINISHED TransitionSteps between [from] and [to], calling
-     * [runCurrent] after each step.
+     * Sends TransitionSteps between [from] and [to], calling [runCurrent] after each step.
+     *
+     * By default, sends steps through FINISHED (STARTED, RUNNING, FINISHED) but can be halted part
+     * way using [throughTransitionState].
      */
     suspend fun sendTransitionSteps(
         from: KeyguardState,
         to: KeyguardState,
         testScope: TestScope,
+        throughTransitionState: TransitionState = TransitionState.FINISHED,
     ) {
-        sendTransitionSteps(from, to, testScope.testScheduler)
+        sendTransitionSteps(from, to, testScope.testScheduler, throughTransitionState)
     }
 
     /**
-     * Sends STARTED, RUNNING, and FINISHED TransitionSteps between [from] and [to], calling
-     * [runCurrent] after each step.
+     * Sends TransitionSteps between [from] and [to], calling [runCurrent] after each step.
+     *
+     * By default, sends steps through FINISHED (STARTED, RUNNING, FINISHED) but can be halted part
+     * way using [throughTransitionState].
      */
     suspend fun sendTransitionSteps(
         from: KeyguardState,
         to: KeyguardState,
         testScheduler: TestCoroutineScheduler,
+        throughTransitionState: TransitionState = TransitionState.FINISHED,
     ) {
         sendTransitionStep(
-            TransitionStep(
-                transitionState = TransitionState.STARTED,
-                from = from,
-                to = to,
-                value = 0f,
-            )
+            step =
+                TransitionStep(
+                    transitionState = TransitionState.STARTED,
+                    from = from,
+                    to = to,
+                    value = 0f,
+                )
         )
         testScheduler.runCurrent()
 
-        sendTransitionStep(
-            TransitionStep(
-                transitionState = TransitionState.RUNNING,
-                from = from,
-                to = to,
-                value = 0.5f
+        if (
+            throughTransitionState == TransitionState.RUNNING ||
+                throughTransitionState == TransitionState.FINISHED
+        ) {
+            sendTransitionStep(
+                step =
+                    TransitionStep(
+                        transitionState = TransitionState.RUNNING,
+                        from = from,
+                        to = to,
+                        value = 0.5f
+                    )
             )
-        )
-        testScheduler.runCurrent()
+            testScheduler.runCurrent()
+        }
 
-        sendTransitionStep(
-            TransitionStep(
-                transitionState = TransitionState.FINISHED,
-                from = from,
-                to = to,
-                value = 1f,
+        if (throughTransitionState == TransitionState.FINISHED) {
+            sendTransitionStep(
+                step =
+                    TransitionStep(
+                        transitionState = TransitionState.FINISHED,
+                        from = from,
+                        to = to,
+                        value = 1f,
+                    )
             )
+            testScheduler.runCurrent()
+        }
+    }
+
+    suspend fun sendTransitionStep(step: TransitionStep, validateStep: Boolean = true) {
+        this.sendTransitionStep(
+            step = step,
+            validateStep = validateStep,
+            ownerName = step.ownerName
         )
-        testScheduler.runCurrent()
     }
 
     /**
@@ -132,7 +143,22 @@ class FakeKeyguardTransitionRepository @Inject constructor() : KeyguardTransitio
      * If you're testing something involving transitions themselves and are sure you want to send
      * only a FINISHED step, override [validateStep].
      */
-    suspend fun sendTransitionStep(step: TransitionStep, validateStep: Boolean = true) {
+    suspend fun sendTransitionStep(
+        from: KeyguardState = KeyguardState.OFF,
+        to: KeyguardState = KeyguardState.OFF,
+        value: Float = 0f,
+        transitionState: TransitionState = TransitionState.FINISHED,
+        ownerName: String = "",
+        step: TransitionStep =
+            TransitionStep(
+                from = from,
+                to = to,
+                value = value,
+                transitionState = transitionState,
+                ownerName = ownerName
+            ),
+        validateStep: Boolean = true
+    ) {
         _transitions.replayCache.last().let { lastStep ->
             if (
                 validateStep &&
@@ -159,16 +185,18 @@ class FakeKeyguardTransitionRepository @Inject constructor() : KeyguardTransitio
         step: TransitionStep,
         validateStep: Boolean = true
     ): Job {
-        return coroutineScope.launch { sendTransitionStep(step, validateStep) }
+        return coroutineScope.launch {
+            sendTransitionStep(step = step, validateStep = validateStep)
+        }
     }
 
     suspend fun sendTransitionSteps(
         steps: List<TransitionStep>,
         testScope: TestScope,
-        validateStep: Boolean = true
+        validateSteps: Boolean = true
     ) {
         steps.forEach {
-            sendTransitionStep(it, validateStep = validateStep)
+            sendTransitionStep(step = it, validateStep = validateSteps)
             testScope.testScheduler.runCurrent()
         }
     }

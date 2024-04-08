@@ -40,7 +40,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import com.android.compose.animation.scene.SceneScope
 import com.android.compose.animation.scene.TransitionState
@@ -60,11 +60,11 @@ import com.android.systemui.battery.BatteryMeterViewController
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
-import com.android.systemui.qs.footer.ui.compose.FooterActions
+import com.android.systemui.qs.footer.ui.compose.FooterActionsWithAnimatedVisibility
 import com.android.systemui.qs.ui.viewmodel.QuickSettingsSceneViewModel
-import com.android.systemui.scene.shared.model.SceneKey
+import com.android.systemui.res.R
+import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.scene.ui.composable.ComposableScene
-import com.android.systemui.scene.ui.composable.asComposeAware
 import com.android.systemui.shade.ui.composable.CollapsedShadeHeader
 import com.android.systemui.shade.ui.composable.ExpandedShadeHeader
 import com.android.systemui.shade.ui.composable.Shade
@@ -88,7 +88,7 @@ constructor(
     private val batteryMeterViewControllerFactory: BatteryMeterViewController.Factory,
     private val statusBarIconController: StatusBarIconController,
 ) : ComposableScene {
-    override val key = SceneKey.QuickSettings
+    override val key = Scenes.QuickSettings
 
     override val destinationScenes =
         viewModel.destinationScenes.stateIn(
@@ -139,9 +139,7 @@ private fun SceneScope.QuickSettingsScene(
         val isScrollable =
             when (val state = layoutState.transitionState) {
                 is TransitionState.Idle -> true
-                is TransitionState.Transition -> {
-                    state.fromScene == SceneKey.QuickSettings.asComposeAware()
-                }
+                is TransitionState.Transition -> state.fromScene == Scenes.QuickSettings
             }
 
         LaunchedEffect(isCustomizing, scrollState) {
@@ -168,7 +166,7 @@ private fun SceneScope.QuickSettingsScene(
             modifier =
                 Modifier.element(Shade.Elements.BackgroundScrim)
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.scrim)
+                    .background(colorResource(R.color.shade_scrim_background_dark))
         )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -240,24 +238,18 @@ private fun SceneScope.QuickSettingsScene(
                     QuickSettings(
                         viewModel.qsSceneAdapter,
                         { viewModel.qsSceneAdapter.qsHeight },
+                        isSplitShade = false,
                         modifier = Modifier.sysuiResTag("expanded_qs_scroll_view"),
                     )
                 }
             }
-            AnimatedVisibility(
-                visible = !isCustomizing,
-                modifier = Modifier.align(Alignment.CenterHorizontally).fillMaxWidth()
-            ) {
-                QuickSettingsTheme {
-                    // This view has its own horizontal padding
-                    // TODO(b/321716470) This should use a lifecycle tied to the scene.
-                    FooterActions(
-                        viewModel = footerActionsViewModel,
-                        qsVisibilityLifecycleOwner = lifecycleOwner,
-                        modifier = Modifier.element(QuickSettings.Elements.FooterActions)
-                    )
-                }
-            }
+
+            FooterActionsWithAnimatedVisibility(
+                viewModel = footerActionsViewModel,
+                isCustomizing = isCustomizing,
+                lifecycleOwner = lifecycleOwner,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
     }
 }

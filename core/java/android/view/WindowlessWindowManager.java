@@ -479,13 +479,13 @@ public class WindowlessWindowManager implements IWindowSession {
     }
 
     @Override
-    public boolean performHapticFeedback(int effectId, boolean always) {
+    public boolean performHapticFeedback(int effectId, boolean always, boolean fromIme) {
         return false;
     }
 
     @Override
-    public void performHapticFeedbackAsync(int effectId, boolean always) {
-        performHapticFeedback(effectId, always);
+    public void performHapticFeedbackAsync(int effectId, boolean always, boolean fromIme) {
+        performHapticFeedback(effectId, always, fromIme);
     }
 
     @Override
@@ -638,7 +638,7 @@ public class WindowlessWindowManager implements IWindowSession {
                 mTmpConfig.setConfiguration(mConfiguration, mConfiguration);
                 s.mClient.resized(mTmpFrames, false /* reportDraw */, mTmpConfig, state,
                         false /* forceLayout */, false /* alwaysConsumeSystemBars */, s.mDisplayId,
-                        Integer.MAX_VALUE, false /* dragResizing */);
+                        Integer.MAX_VALUE, false /* dragResizing */, null /* activityWindowInfo */);
             } catch (RemoteException e) {
                 // Too bad
             }

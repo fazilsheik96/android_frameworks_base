@@ -542,6 +542,9 @@ public final class TransitionInfo implements Parcelable {
         // independent either.
         if (change.getMode() == TRANSIT_CHANGE) return false;
 
+        // Always fold the activity embedding change into the parent change.
+        if (change.hasFlags(FLAG_IN_TASK_WITH_EMBEDDED_ACTIVITY)) return false;
+
         TransitionInfo.Change parentChg = info.getChange(change.getParent());
         while (parentChg != null) {
             // If the parent is a visibility change, it will include the results of all child
@@ -1020,6 +1023,10 @@ public final class TransitionInfo implements Parcelable {
             if (mActivityComponent != null) {
                 sb.append(" component=");
                 sb.append(mActivityComponent.flattenToShortString());
+            }
+            if (mTaskInfo != null) {
+                sb.append(" taskParent=");
+                sb.append(mTaskInfo.parentTaskId);
             }
             sb.append('}');
             return sb.toString();

@@ -283,14 +283,14 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
             int lastSyncSeqId, ClientWindowFrames outFrames,
             MergedConfiguration mergedConfiguration, SurfaceControl outSurfaceControl,
             InsetsState outInsetsState, InsetsSourceControl.Array outActiveControls,
-            Bundle outSyncSeqIdBundle) {
+            Bundle outBundle) {
         if (false) Slog.d(TAG_WM, ">>>>>> ENTERED relayout from "
                 + Binder.getCallingPid());
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, mRelayoutTag);
         int res = mService.relayoutWindow(this, window, attrs,
                 requestedWidth, requestedHeight, viewFlags, flags, seq,
                 lastSyncSeqId, outFrames, mergedConfiguration, outSurfaceControl, outInsetsState,
-                outActiveControls, outSyncSeqIdBundle);
+                outActiveControls, outBundle);
         Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         if (false) Slog.d(TAG_WM, "<<<<<< EXITING relayout to "
                 + Binder.getCallingPid());
@@ -336,19 +336,19 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public boolean performHapticFeedback(int effectId, boolean always) {
+    public boolean performHapticFeedback(int effectId, boolean always, boolean fromIme) {
         final long ident = Binder.clearCallingIdentity();
         try {
             return mService.mPolicy.performHapticFeedback(mUid, mPackageName,
-                        effectId, always, null);
+                        effectId, always, null, fromIme);
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
     }
 
     @Override
-    public void performHapticFeedbackAsync(int effectId, boolean always) {
-        performHapticFeedback(effectId, always);
+    public void performHapticFeedbackAsync(int effectId, boolean always, boolean fromIme) {
+        performHapticFeedback(effectId, always, fromIme);
     }
 
     /* Drag/drop */

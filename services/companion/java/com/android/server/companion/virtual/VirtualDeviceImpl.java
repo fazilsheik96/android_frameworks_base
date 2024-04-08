@@ -23,12 +23,14 @@ import static android.companion.virtual.VirtualDeviceParams.ACTIVITY_POLICY_DEFA
 import static android.companion.virtual.VirtualDeviceParams.DEVICE_POLICY_DEFAULT;
 import static android.companion.virtual.VirtualDeviceParams.NAVIGATION_POLICY_DEFAULT_ALLOWED;
 import static android.companion.virtual.VirtualDeviceParams.POLICY_TYPE_ACTIVITY;
+import static android.companion.virtual.VirtualDeviceParams.POLICY_TYPE_AUDIO;
 import static android.companion.virtual.VirtualDeviceParams.POLICY_TYPE_CAMERA;
 import static android.companion.virtual.VirtualDeviceParams.POLICY_TYPE_CLIPBOARD;
 import static android.companion.virtual.VirtualDeviceParams.POLICY_TYPE_RECENTS;
 import static android.content.pm.PackageManager.ACTION_REQUEST_PERMISSIONS;
 import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
 import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
+import static android.companion.virtualdevice.flags.Flags.virtualCameraServiceDiscovery;
 
 import android.annotation.EnforcePermission;
 import android.annotation.NonNull;
@@ -81,6 +83,8 @@ import android.hardware.input.VirtualStylusConfig;
 import android.hardware.input.VirtualStylusMotionEvent;
 import android.hardware.input.VirtualTouchEvent;
 import android.hardware.input.VirtualTouchscreenConfig;
+import android.media.AudioManager;
+import android.media.audiopolicy.AudioMix;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.LocaleList;
@@ -110,6 +114,8 @@ import com.android.server.companion.virtual.GenericWindowPolicyController.Runnin
 import com.android.server.companion.virtual.audio.VirtualAudioController;
 import com.android.server.companion.virtual.camera.VirtualCameraController;
 import com.android.server.inputmethod.InputMethodManagerInternal;
+
+import dalvik.annotation.optimization.FastNative;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -210,7 +216,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                     mActivityListener.onTopActivityChanged(displayId, topActivity,
                             UserHandle.USER_NULL);
                 } catch (RemoteException e) {
-                    Slog.w(TAG, "Unable to call mActivityListener", e);
+                    Slog.w(TAG, "Unable to call mActivityListener for display: " + displayId, e);
                 }
             }
 
@@ -220,7 +226,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                 try {
                     mActivityListener.onTopActivityChanged(displayId, topActivity, userId);
                 } catch (RemoteException e) {
-                    Slog.w(TAG, "Unable to call mActivityListener", e);
+                    Slog.w(TAG, "Unable to call mActivityListener for display: " + displayId, e);
                 }
             }
 
@@ -229,7 +235,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                 try {
                     mActivityListener.onDisplayEmpty(displayId);
                 } catch (RemoteException e) {
-                    Slog.w(TAG, "Unable to call mActivityListener", e);
+                    Slog.w(TAG, "Unable to call mActivityListener for display: " + displayId, e);
                 }
             }
         };
@@ -265,7 +271,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                 runningAppsChangedCallback,
                 params,
                 DisplayManagerGlobal.getInstance(),
-                Flags.virtualCamera()
+                isVirtualCameraEnabled()
                         ? new VirtualCameraController(params.getDevicePolicy(POLICY_TYPE_CAMERA))
                         : null);
     }
@@ -1060,6 +1066,37 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
     }
 
     @Override
+    public boolean hasCustomAudioInputSupport() throws RemoteException {
+        if (!Flags.vdmPublicApis()) {
+            return false;
+        }
+
+        if (!android.media.audiopolicy.Flags.audioMixTestApi()) {
+            return false;
+        }
+        if (!android.media.audiopolicy.Flags.recordAudioDeviceAwarePermission()) {
+            return false;
+        }
+
+        if (getDevicePolicy(POLICY_TYPE_AUDIO) == VirtualDeviceParams.DEVICE_POLICY_DEFAULT) {
+            return false;
+        }
+        final long token = Binder.clearCallingIdentity();
+        try {
+            AudioManager audioManager = mContext.getSystemService(AudioManager.class);
+            for (AudioMix mix : audioManager.getRegisteredPolicyMixes()) {
+                if (mix.matchesVirtualDeviceId(getDeviceId())
+                        && mix.getMixType() == AudioMix.MIX_TYPE_RECORDERS) {
+                    return true;
+                }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+        return false;
+    }
+
+    @Override
     protected void dump(FileDescriptor fd, PrintWriter fout, String[] args) {
         String indent = "    ";
         fout.println("  VirtualDevice: ");
@@ -1213,7 +1250,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         mContext.startActivityAsUser(
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK),
                 ActivityOptions.makeBasic().setLaunchDisplayId(displayId).toBundle(),
-                mContext.getUser());
+                UserHandle.SYSTEM);
     }
 
     private void onSecureWindowShown(int displayId, int uid) {
@@ -1535,4 +1572,13 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
             return mToken;
         }
     }
+
+    private static boolean isVirtualCameraEnabled() {
+        return Flags.virtualCamera() && virtualCameraServiceDiscovery()
+                && nativeVirtualCameraServiceBuildFlagEnabled();
+    }
+
+    // Returns true if virtual_camera service is enabled in this build.
+    @FastNative
+    private static native boolean nativeVirtualCameraServiceBuildFlagEnabled();
 }

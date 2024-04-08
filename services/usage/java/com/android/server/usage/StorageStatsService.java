@@ -383,7 +383,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
             return queryStatsForUid(volumeUuid, appInfo.uid, callingPackage);
         } else {
             // Multiple packages means we need to go manual
-            final int appId = UserHandle.getUserId(appInfo.uid);
+            final int appId = UserHandle.getAppId(appInfo.uid);
             final String[] packageNames = new String[] { packageName };
             final long[] ceDataInodes = new long[1];
             String[] codePaths = new String[0];
@@ -968,22 +968,20 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
         stats.libSize += getDirBytes(new File(sourceDirName + "/lib/"));
 
         // Get dexopt, current profle and reference profile sizes.
-        if (SystemProperties.getBoolean("dalvik.vm.features.art_managed_file_stats", false)) {
-            ArtManagedFileStats artManagedFileStats;
-            try (var snapshot = getPackageManagerLocal().withFilteredSnapshot()) {
-                artManagedFileStats =
-                    getArtManagerLocal().getArtManagedFileStats(snapshot, packageName);
-            }
-
-            stats.dexoptSize +=
-                artManagedFileStats
-                    .getTotalSizeBytesByType(ArtManagedFileStats.TYPE_DEXOPT_ARTIFACT);
-            stats.refProfSize +=
-                artManagedFileStats
-                    .getTotalSizeBytesByType(ArtManagedFileStats.TYPE_REF_PROFILE);
-            stats.curProfSize +=
-                artManagedFileStats
-                    .getTotalSizeBytesByType(ArtManagedFileStats.TYPE_CUR_PROFILE);
+        ArtManagedFileStats artManagedFileStats;
+        try (var snapshot = getPackageManagerLocal().withFilteredSnapshot()) {
+            artManagedFileStats =
+                getArtManagerLocal().getArtManagedFileStats(snapshot, packageName);
         }
+
+        stats.dexoptSize +=
+            artManagedFileStats
+                .getTotalSizeBytesByType(ArtManagedFileStats.TYPE_DEXOPT_ARTIFACT);
+        stats.refProfSize +=
+            artManagedFileStats
+                .getTotalSizeBytesByType(ArtManagedFileStats.TYPE_REF_PROFILE);
+        stats.curProfSize +=
+            artManagedFileStats
+                .getTotalSizeBytesByType(ArtManagedFileStats.TYPE_CUR_PROFILE);
     }
 }

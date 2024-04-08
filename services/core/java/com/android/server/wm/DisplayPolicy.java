@@ -27,6 +27,7 @@ import static android.view.InsetsFrameProvider.SOURCE_DISPLAY;
 import static android.view.InsetsFrameProvider.SOURCE_FRAME;
 import static android.view.ViewRootImpl.CLIENT_IMMERSIVE_CONFIRMATION;
 import static android.view.ViewRootImpl.CLIENT_TRANSIENT;
+import static android.view.WindowInsetsController.APPEARANCE_FORCE_LIGHT_NAVIGATION_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_LOW_PROFILE_BARS;
@@ -49,6 +50,7 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_INTERCEPT_GLO
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_LAYOUT_SIZE_EXTENDED_BY_CUTOUT;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_UNRESTRICTED_GESTURE_EXCLUSION;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
@@ -120,6 +122,7 @@ import android.view.InsetsState;
 import android.view.Surface;
 import android.view.View;
 import android.view.ViewDebug;
+import android.view.WindowInsets;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowLayout;
@@ -1118,21 +1121,35 @@ public class DisplayPolicy {
                 break;
 
             case TYPE_BASE_APPLICATION:
-
-                // A non-translucent main app window isn't allowed to fit insets or display cutouts,
-                // as it would create a hole on the display!
                 if (attrs.isFullscreen() && win.mActivityRecord != null
                         && win.mActivityRecord.fillsParent()
-                        && (attrs.privateFlags & PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS) != 0
-                        && (attrs.getFitInsetsTypes() != 0
-                                || (attrs.privateFlags & PRIVATE_FLAG_EDGE_TO_EDGE_ENFORCED) != 0
-                                        && attrs.layoutInDisplayCutoutMode
-                                                != LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS)) {
-                    throw new IllegalArgumentException("Illegal attributes: Main activity window"
-                            + " that isn't translucent trying to fit insets or display cutouts."
-                            + " attrs=" + attrs);
+                        && (attrs.privateFlags & PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS) != 0) {
+                    if (attrs.getFitInsetsTypes() != 0) {
+                        // A non-translucent main app window isn't allowed to fit insets,
+                        // as it would create a hole on the display!
+                        throw new IllegalArgumentException("Illegal attributes: Main window of "
+                                + win.mActivityRecord.getName() + " that isn't translucent trying"
+                                + " to fit insets. fitInsetsTypes=" + WindowInsets.Type.toString(
+                                        attrs.getFitInsetsTypes()));
+                    }
+                    if ((attrs.privateFlags & PRIVATE_FLAG_EDGE_TO_EDGE_ENFORCED) != 0
+                            && attrs.layoutInDisplayCutoutMode
+                                    != LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS) {
+                        // A non-translucent main window of the app enforced to go edge-to-edge
+                        // isn't allowed to fit display cutout, or it will cause software bezels.
+                        throw new IllegalArgumentException("Illegal attributes: Main window of "
+                                + win.mActivityRecord.getName() + " that isn't translucent and"
+                                + " targets SDK level " + win.mActivityRecord.mTargetSdk
+                                + " (>= 35) trying to specify layoutInDisplayCutoutMode as '"
+                                + WindowManager.LayoutParams.layoutInDisplayCutoutModeToString(
+                                        attrs.layoutInDisplayCutoutMode)
+                                + "' instead of 'always'");
+                    }
                 }
                 break;
+        }
+        if ((attrs.insetsFlags.appearance & APPEARANCE_FORCE_LIGHT_NAVIGATION_BARS) != 0) {
+            attrs.insetsFlags.appearance |= APPEARANCE_LIGHT_NAVIGATION_BARS;
         }
 
         if (LayoutParams.isSystemAlertWindowType(attrs.type)) {
@@ -1684,9 +1701,19 @@ public class DisplayPolicy {
         // Check the windows that overlap with system bars to determine system bars' appearance.
         if ((appWindow && attached == null && attrs.isFullscreen())
                 || attrs.type == TYPE_VOICE_INTERACTION) {
-            // Record the top-fullscreen-app-window which will be used to determine system UI
+
+            // If this is the exiting starting window, don't let it control the system bars.
+            // The app window behind it should be the controlling window instead. Reason: when an
+            // activity starts another activity behind a starting window, the app window of the
+            // first activity will lose the window focus. And then mTopFullscreenOpaqueWindowState
+            // will control the system bars. The logic here is to let first app window keep
+            // controlling system bars until the second app window is ready.
+            final boolean exitingStartingWindow =
+                    attrs.type == TYPE_APPLICATION_STARTING && win.mAnimatingExit;
+
+            // Record the top-fullscreen-app-window which will be used to determine the system UI
             // controlling window.
-            if (mTopFullscreenOpaqueWindowState == null) {
+            if (mTopFullscreenOpaqueWindowState == null && !exitingStartingWindow) {
                 mTopFullscreenOpaqueWindowState = win;
             }
 
@@ -2053,6 +2080,11 @@ public class DisplayPolicy {
              */
             final Rect mConfigInsets = new Rect();
 
+            /**
+             * Legacy value of mConfigInsets for app compatibility purpose.
+             */
+            final Rect mLegacyConfigInsets = new Rect();
+
             /** The display frame available after excluding {@link #mNonDecorInsets}. */
             final Rect mNonDecorFrame = new Rect();
 
@@ -2062,6 +2094,11 @@ public class DisplayPolicy {
              * to account for more transient decoration like a status bar.
              */
             final Rect mConfigFrame = new Rect();
+
+            /**
+             * Legacy value of mConfigFrame for app compatibility purpose.
+             */
+            final Rect mLegacyConfigFrame = new Rect();
 
             private boolean mNeedUpdate = true;
 
@@ -2073,15 +2110,26 @@ public class DisplayPolicy {
                 final Rect displayFrame = insetsState.getDisplayFrame();
                 final Insets decor = insetsState.calculateInsets(displayFrame,
                         dc.mWmService.mDecorTypes, true /* ignoreVisibility */);
-                final Insets configInsets = insetsState.calculateInsets(displayFrame,
-                        dc.mWmService.mConfigTypes, true /* ignoreVisibility */);
+                final Insets configInsets = dc.mWmService.mConfigTypes == dc.mWmService.mDecorTypes
+                        ? decor
+                        : insetsState.calculateInsets(displayFrame, dc.mWmService.mConfigTypes,
+                                true /* ignoreVisibility */);
+                final Insets legacyConfigInsets = dc.mWmService.mConfigTypes
+                        == dc.mWmService.mLegacyConfigTypes
+                        ? configInsets
+                        : insetsState.calculateInsets(displayFrame,
+                                dc.mWmService.mLegacyConfigTypes, true /* ignoreVisibility */);
                 mNonDecorInsets.set(decor.left, decor.top, decor.right, decor.bottom);
                 mConfigInsets.set(configInsets.left, configInsets.top, configInsets.right,
                         configInsets.bottom);
+                mLegacyConfigInsets.set(legacyConfigInsets.left, legacyConfigInsets.top,
+                        legacyConfigInsets.right, legacyConfigInsets.bottom);
                 mNonDecorFrame.set(displayFrame);
                 mNonDecorFrame.inset(mNonDecorInsets);
                 mConfigFrame.set(displayFrame);
                 mConfigFrame.inset(mConfigInsets);
+                mLegacyConfigFrame.set(displayFrame);
+                mLegacyConfigFrame.inset(mLegacyConfigInsets);
                 mNeedUpdate = false;
                 return insetsState;
             }
@@ -2089,8 +2137,10 @@ public class DisplayPolicy {
             void set(Info other) {
                 mNonDecorInsets.set(other.mNonDecorInsets);
                 mConfigInsets.set(other.mConfigInsets);
+                mLegacyConfigInsets.set(other.mLegacyConfigInsets);
                 mNonDecorFrame.set(other.mNonDecorFrame);
                 mConfigFrame.set(other.mConfigFrame);
+                mLegacyConfigFrame.set(other.mLegacyConfigFrame);
                 mNeedUpdate = false;
             }
 
@@ -2202,7 +2252,8 @@ public class DisplayPolicy {
         final DecorInsets.Info newInfo = mDecorInsets.mTmpInfo;
         final InsetsState newInsetsState = newInfo.update(mDisplayContent, rotation, dw, dh);
         final DecorInsets.Info currentInfo = getDecorInsetsInfo(rotation, dw, dh);
-        if (newInfo.mConfigFrame.equals(currentInfo.mConfigFrame)) {
+        if (newInfo.mConfigFrame.equals(currentInfo.mConfigFrame)
+                && newInfo.mLegacyConfigFrame.equals(currentInfo.mLegacyConfigFrame)) {
             // Even if the config frame is not changed in current rotation, it may change the
             // insets in other rotations if the frame of insets source is changed.
             final InsetsState currentInsetsState = mDisplayContent.mDisplayFrames.mInsetsState;

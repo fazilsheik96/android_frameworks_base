@@ -796,7 +796,7 @@ public class Activity extends ContextThemeWrapper
     private static final String SAVED_DIALOGS_TAG = "android:savedDialogs";
     private static final String SAVED_DIALOG_KEY_PREFIX = "android:dialog_";
     private static final String SAVED_DIALOG_ARGS_KEY_PREFIX = "android:dialog_args_";
-    private static final String HAS_CURENT_PERMISSIONS_REQUEST_KEY =
+    private static final String HAS_CURRENT_PERMISSIONS_REQUEST_KEY =
             "android:hasCurrentPermissionsRequest";
 
     private static final String REQUEST_PERMISSIONS_WHO_PREFIX = "@android:requestPermissions:";
@@ -1002,6 +1002,9 @@ public class Activity extends ContextThemeWrapper
             new ActivityManager.TaskDescription();
     private int mLastTaskDescriptionHashCode;
 
+    @ActivityInfo.ScreenOrientation
+    private int mLastRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSET;
+
     protected static final int[] FOCUSED_STATE_SET = {com.android.internal.R.attr.state_focused};
 
     @SuppressWarnings("unused")
@@ -1123,8 +1126,8 @@ public class Activity extends ContextThemeWrapper
          * @hide
          */
         @Override
-        public void updateStatusBarAppearance(int appearance) {
-            mTaskDescription.setStatusBarAppearance(appearance);
+        public void updateSystemBarsAppearance(int appearance) {
+            mTaskDescription.setSystemBarsAppearance(appearance);
             setTaskDescription(mTaskDescription);
         }
 
@@ -1251,12 +1254,23 @@ public class Activity extends ContextThemeWrapper
         return mApplication;
     }
 
-    /** Is this activity embedded inside of another activity? */
+    /**
+     * Whether this is a child {@link Activity} of an {@link ActivityGroup}.
+     *
+     * @deprecated {@link ActivityGroup} is deprecated.
+     */
+    @Deprecated
     public final boolean isChild() {
         return mParent != null;
     }
 
-    /** Return the parent activity if this view is an embedded child. */
+    /**
+     * Returns the parent {@link Activity} if this is a child {@link Activity} of an
+     * {@link ActivityGroup}.
+     *
+     * @deprecated {@link ActivityGroup} is deprecated.
+     */
+    @Deprecated
     public final Activity getParent() {
         return mParent;
     }
@@ -5532,6 +5546,15 @@ public class Activity extends ContextThemeWrapper
         }
 
         a.recycle();
+        if (first && mTaskDescription.getSystemBarsAppearance() == 0
+                && mWindow != null && mWindow.getSystemBarAppearance() != 0) {
+            // When the theme is applied for the first time during the activity re-creation process,
+            // the attached window restores the system bars appearance from the old window/activity.
+            // Make sure to restore this appearance in TaskDescription too, to prevent the
+            // #setTaskDescription() call below from incorrectly sending an empty value to the
+            // server.
+            mTaskDescription.setSystemBarsAppearance(mWindow.getSystemBarAppearance());
+        }
         setTaskDescription(mTaskDescription);
     }
 
@@ -7450,7 +7473,7 @@ public class Activity extends ContextThemeWrapper
      *               intent.
      */
     @FlaggedApi(android.security.Flags.FLAG_CONTENT_URI_PERMISSION_APIS)
-    public void onActivityResult(int requestCode, int resultCode, @NonNull Intent data,
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data,
             @NonNull ComponentCaller caller) {
         onActivityResult(requestCode, resultCode, data);
     }
@@ -7530,11 +7553,15 @@ public class Activity extends ContextThemeWrapper
      * {@link ActivityInfo#screenOrientation ActivityInfo.screenOrientation}.
      */
     public void setRequestedOrientation(@ActivityInfo.ScreenOrientation int requestedOrientation) {
+        if (requestedOrientation == mLastRequestedOrientation) {
+            return;
+        }
         if (mParent == null) {
             ActivityClient.getInstance().setRequestedOrientation(mToken, requestedOrientation);
         } else {
             mParent.setRequestedOrientation(requestedOrientation);
         }
+        mLastRequestedOrientation = requestedOrientation;
     }
 
     /**
@@ -7548,6 +7575,9 @@ public class Activity extends ContextThemeWrapper
      */
     @ActivityInfo.ScreenOrientation
     public int getRequestedOrientation() {
+        if (mLastRequestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSET) {
+            return mLastRequestedOrientation;
+        }
         if (mParent == null) {
             return ActivityClient.getInstance().getRequestedOrientation(mToken);
         } else {
@@ -9288,14 +9318,14 @@ public class Activity extends ContextThemeWrapper
 
     private void storeHasCurrentPermissionRequest(Bundle bundle) {
         if (bundle != null && mHasCurrentPermissionsRequest) {
-            bundle.putBoolean(HAS_CURENT_PERMISSIONS_REQUEST_KEY, true);
+            bundle.putBoolean(HAS_CURRENT_PERMISSIONS_REQUEST_KEY, true);
         }
     }
 
     private void restoreHasCurrentPermissionRequest(Bundle bundle) {
         if (bundle != null) {
             mHasCurrentPermissionsRequest = bundle.getBoolean(
-                    HAS_CURENT_PERMISSIONS_REQUEST_KEY, false);
+                    HAS_CURRENT_PERMISSIONS_REQUEST_KEY, false);
         }
     }
 
@@ -9591,9 +9621,9 @@ public class Activity extends ContextThemeWrapper
      * Specifies whether the activities below this one in the task can also start other activities
      * or finish the task.
      * <p>
-     * Starting from Target SDK Level {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE}, apps
-     * are blocked from starting new activities or finishing their task unless the top activity of
-     * such task belong to the same UID for security reasons.
+     * Starting from Target SDK Level {@link android.os.Build.VERSION_CODES#VANILLA_ICE_CREAM}, apps
+     * may be blocked from starting new activities or finishing their task unless the top activity
+     * of such task belong to the same UID for security reasons.
      * <p>
      * Setting this flag to {@code true} will allow the launching app to ignore the restriction if
      * this activity is on top. Apps matching the UID of this activity are always exempt.

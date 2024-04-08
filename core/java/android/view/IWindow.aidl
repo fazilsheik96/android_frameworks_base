@@ -30,6 +30,7 @@ import android.view.IScrollCaptureResponseListener;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.inputmethod.ImeTracker;
+import android.window.ActivityWindowInfo;
 import android.window.ClientWindowFrames;
 
 import com.android.internal.os.IResultReceiver;
@@ -61,7 +62,8 @@ oneway interface IWindow {
     void resized(in ClientWindowFrames frames, boolean reportDraw,
             in MergedConfiguration newMergedConfiguration, in InsetsState insetsState,
             boolean forceLayout, boolean alwaysConsumeSystemBars, int displayId,
-            int syncSeqId, boolean dragResizing);
+            int syncSeqId, boolean dragResizing,
+            in @nullable ActivityWindowInfo activityWindowInfo);
 
     /**
      * Called when this window retrieved control over a specified set of insets sources.
@@ -73,7 +75,7 @@ oneway interface IWindow {
      *
      * @param types internal insets types (WindowInsets.Type.InsetsType) to show
      * @param fromIme true if this request originated from IME (InputMethodService).
-     * @param statsToken the token tracking the current IME show request or {@code null} otherwise.
+     * @param statsToken the token tracking the current IME request or {@code null} otherwise.
      */
     void showInsets(int types, boolean fromIme, in @nullable ImeTracker.Token statsToken);
 
@@ -82,7 +84,7 @@ oneway interface IWindow {
      *
      * @param types internal insets types (WindowInsets.Type.InsetsType) to hide
      * @param fromIme true if this request originated from IME (InputMethodService).
-     * @param statsToken the token tracking the current IME hide request or {@code null} otherwise.
+     * @param statsToken the token tracking the current IME request or {@code null} otherwise.
      */
     void hideInsets(int types, boolean fromIme, in @nullable ImeTracker.Token statsToken);
 
@@ -126,9 +128,4 @@ oneway interface IWindow {
      * @param callbacks to receive responses
      */
     void requestScrollCapture(in IScrollCaptureResponseListener callbacks);
-
-    /**
-     * Device Integration: Dispatch Key event to black screen
-     */
-    void dispatchBlackScreenKeyEvent(in KeyEvent event);
 }

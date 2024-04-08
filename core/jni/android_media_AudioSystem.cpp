@@ -18,6 +18,8 @@
 //#define LOG_NDEBUG 0
 
 #define LOG_TAG "AudioSystem-JNI"
+#include <android/binder_ibinder_jni.h>
+#include <android/binder_libbinder.h>
 #include <android/media/AudioVibratorInfo.h>
 #include <android/media/INativeSpatializerCallback.h>
 #include <android/media/ISpatializer.h>
@@ -25,6 +27,7 @@
 #include <android_media_audiopolicy.h>
 #include <android_os_Parcel.h>
 #include <audiomanager/AudioManager.h>
+#include <binder/IBinder.h>
 #include <jni.h>
 #include <media/AidlConversion.h>
 #include <media/AudioContainers.h>
@@ -150,13 +153,15 @@ static struct {
 static jclass gAudioMixClass;
 static jmethodID gAudioMixCstor;
 static struct {
-    jfieldID    mRule;
-    jfieldID    mFormat;
-    jfieldID    mRouteFlags;
-    jfieldID    mDeviceType;
-    jfieldID    mDeviceAddress;
-    jfieldID    mMixType;
-    jfieldID    mCallbackFlags;
+    jfieldID mRule;
+    jfieldID mFormat;
+    jfieldID mRouteFlags;
+    jfieldID mDeviceType;
+    jfieldID mDeviceAddress;
+    jfieldID mMixType;
+    jfieldID mCallbackFlags;
+    jfieldID mToken;
+    jfieldID mVirtualDeviceId;
 } gAudioMixFields;
 
 static jclass gAudioFormatClass;
@@ -2300,11 +2305,15 @@ static jint convertAudioMixFromNative(JNIEnv *env, jobject *jAudioMix, const Aud
     if (status != AUDIO_JAVA_SUCCESS) {
         return status;
     }
+    std::unique_ptr<AIBinder, decltype(&AIBinder_decStrong)> aiBinder(AIBinder_fromPlatformBinder(
+                                                                              nAudioMix.mToken),
+                                                                      &AIBinder_decStrong);
+    jobject jBinderToken = AIBinder_toJavaBinder(env, aiBinder.get());
 
     jstring deviceAddress = env->NewStringUTF(nAudioMix.mDeviceAddress.c_str());
     *jAudioMix = env->NewObject(gAudioMixClass, gAudioMixCstor, jAudioMixingRule, jAudioFormat,
                                 nAudioMix.mRouteFlags, nAudioMix.mCbFlags, nAudioMix.mDeviceType,
-                                deviceAddress);
+                                deviceAddress, jBinderToken, nAudioMix.mVirtualDeviceId);
     return AUDIO_JAVA_SUCCESS;
 }
 
@@ -2333,6 +2342,13 @@ static jint convertAudioMixToNative(JNIEnv *env, AudioMix *nAudioMix, const jobj
     nAudioMix->mVoiceCommunicationCaptureAllowed =
             env->GetBooleanField(jRule, gAudioMixingRuleFields.mVoiceCommunicationCaptureAllowed);
 
+    jobject jToken = env->GetObjectField(jAudioMix, gAudioMixFields.mToken);
+
+    std::unique_ptr<AIBinder, decltype(&AIBinder_decStrong)>
+            aiBinder(AIBinder_fromJavaBinder(env, jToken), &AIBinder_decStrong);
+    nAudioMix->mToken = AIBinder_toPlatformBinder(aiBinder.get());
+
+    nAudioMix->mVirtualDeviceId = env->GetIntField(jAudioMix, gAudioMixFields.mVirtualDeviceId);
     jint status = convertAudioMixingRuleToNative(env, jRule, &(nAudioMix->mCriteria));
 
     env->DeleteLocalRef(jRule);
@@ -3659,9 +3675,10 @@ int register_android_media_AudioSystem(JNIEnv *env)
     jclass audioMixClass = FindClassOrDie(env, "android/media/audiopolicy/AudioMix");
     gAudioMixClass = MakeGlobalRefOrDie(env, audioMixClass);
     if (audio_flags::audio_mix_test_api()) {
-        gAudioMixCstor = GetMethodIDOrDie(env, audioMixClass, "<init>",
-                                          "(Landroid/media/audiopolicy/AudioMixingRule;Landroid/"
-                                          "media/AudioFormat;IIILjava/lang/String;)V");
+        gAudioMixCstor =
+                GetMethodIDOrDie(env, audioMixClass, "<init>",
+                                 "(Landroid/media/audiopolicy/AudioMixingRule;Landroid/"
+                                 "media/AudioFormat;IIILjava/lang/String;Landroid/os/IBinder;I)V");
     }
     gAudioMixFields.mRule = GetFieldIDOrDie(env, audioMixClass, "mRule",
                                                 "Landroid/media/audiopolicy/AudioMixingRule;");
@@ -3673,6 +3690,8 @@ int register_android_media_AudioSystem(JNIEnv *env)
                                                       "Ljava/lang/String;");
     gAudioMixFields.mMixType = GetFieldIDOrDie(env, audioMixClass, "mMixType", "I");
     gAudioMixFields.mCallbackFlags = GetFieldIDOrDie(env, audioMixClass, "mCallbackFlags", "I");
+    gAudioMixFields.mToken = GetFieldIDOrDie(env, audioMixClass, "mToken", "Landroid/os/IBinder;");
+    gAudioMixFields.mVirtualDeviceId = GetFieldIDOrDie(env, audioMixClass, "mVirtualDeviceId", "I");
 
     jclass audioFormatClass = FindClassOrDie(env, "android/media/AudioFormat");
     gAudioFormatClass = MakeGlobalRefOrDie(env, audioFormatClass);

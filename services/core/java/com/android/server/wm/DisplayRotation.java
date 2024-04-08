@@ -19,6 +19,8 @@ package com.android.server.wm;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+import static android.view.Display.TYPE_EXTERNAL;
+import static android.view.Display.TYPE_OVERLAY;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_CROSSFADE;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE;
@@ -700,13 +702,17 @@ public class DisplayRotation {
 
         if (mDisplayContent.mTransitionController.isShellTransitionsEnabled()) {
             final boolean wasCollecting = mDisplayContent.mTransitionController.isCollecting();
-            final TransitionRequestInfo.DisplayChange change = wasCollecting ? null
-                    : new TransitionRequestInfo.DisplayChange(mDisplayContent.getDisplayId(),
-                            oldRotation, mRotation);
-
-            mDisplayContent.requestChangeTransitionIfNeeded(
-                    ActivityInfo.CONFIG_WINDOW_CONFIGURATION, change);
-            if (wasCollecting) {
+            if (!wasCollecting) {
+                if (mDisplayContent.getLastHasContent()) {
+                    final TransitionRequestInfo.DisplayChange change =
+                            new TransitionRequestInfo.DisplayChange(mDisplayContent.getDisplayId(),
+                                    oldRotation, mRotation);
+                    mDisplayContent.requestChangeTransition(
+                            ActivityInfo.CONFIG_WINDOW_CONFIGURATION, change);
+                }
+            } else {
+                mDisplayContent.collectDisplayChange(
+                        mDisplayContent.mTransitionController.getCollectingTransition());
                 // Use remote-rotation infra since the transition has already been requested
                 // TODO(shell-transitions): Remove this once lifecycle management can cover all
                 //                          rotation cases.
@@ -982,6 +988,11 @@ public class DisplayRotation {
                     + " for " + mDisplayContent);
             userRotation = Surface.ROTATION_0;
         }
+        final int userRotationOverride = getUserRotationOverride();
+        if (userRotationOverride != 0) {
+            userRotationMode = WindowManagerPolicy.USER_ROTATION_LOCKED;
+            userRotation = userRotationOverride;
+        }
         mUserRotationMode = userRotationMode;
         mUserRotation = userRotation;
     }
@@ -1032,6 +1043,13 @@ public class DisplayRotation {
         if (changed) {
             mService.updateRotation(false /* alwaysSendConfiguration */,
                     false /* forceRelayout */);
+            // ContentRecorder.onConfigurationChanged and Device.setProjectionLocked are called
+            // during updateRotation above. But onConfigurationChanged is called before
+            // Device.setProjectionLocked, which means that the onConfigurationChanged will
+            // not have the new rotation when it calls getDisplaySurfaceDefaultSize.
+            // To make sure that mirroring takes the new rotation of the output surface
+            // into account we need to call onConfigurationChanged again.
+            mDisplayContent.onMirrorOutputSurfaceOrientationChanged();
         }
     }
 
@@ -1848,6 +1866,23 @@ public class DisplayRotation {
         if (mFoldController != null) {
             mFoldController.onPhysicalDisplayChanged();
         }
+    }
+
+    @Surface.Rotation
+    private int getUserRotationOverride() {
+        final int userRotationOverride = SystemProperties.getInt("persist.demo.userrotation",
+                Surface.ROTATION_0);
+        if (userRotationOverride == Surface.ROTATION_0) {
+            return userRotationOverride;
+        }
+
+        final var display = mDisplayContent.mDisplay;
+        if (display.getType() == TYPE_EXTERNAL || display.getType() == TYPE_OVERLAY) {
+            // TODO b/329442350 add chromecast virtual displays here
+            return userRotationOverride;
+        }
+
+        return Surface.ROTATION_0;
     }
 
     @VisibleForTesting

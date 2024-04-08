@@ -224,16 +224,26 @@ public interface StatusBarManagerInternal {
     void showRearDisplayDialog(int currentBaseState);
 
     /**
-     * Called when requested to go to fullscreen from the active split app.
+     * Called when requested to go to fullscreen from the focused app.
+     *
+     * @param displayId of the current display.
      */
-    void goToFullscreenFromSplit();
+    void moveFocusedTaskToFullscreen(int displayId);
 
     /**
      * Enters stage split from a current running app.
      *
-     * @see com.android.internal.statusbar.IStatusBar#enterStageSplitFromRunningApp
+     * @see com.android.internal.statusbar.IStatusBar#moveFocusedTaskToStageSplit
      */
-    void enterStageSplitFromRunningApp(boolean leftOrTop);
+    void moveFocusedTaskToStageSplit(int displayId, boolean leftOrTop);
+
+    /**
+     * Change the split screen focus to the left / top app or the right / bottom app based on
+     * {@param leftOrTop}.
+     *
+     * @see com.android.internal.statusbar.IStatusBar#setSplitscreenFocus
+     */
+    void setSplitscreenFocus(boolean leftOrTop);
 
     /**
      * Shows the media output switcher dialog.
@@ -257,7 +267,7 @@ public interface StatusBarManagerInternal {
     void removeQsTile(ComponentName tile);
 
     /**
-     * Called when requested to enter desktop from an app.
+     * Called when requested to enter desktop from a focused app.
      */
-    void enterDesktop(int displayId);
+    void moveFocusedTaskToDesktop(int displayId);
 }

@@ -95,6 +95,7 @@ cc_library_shared_for_libandroid_runtime {
     shared_libs: [
         "libbase",
         "libcutils",
+        "libtracing_perfetto",
         "libharfbuzz_ng",
         "liblog",
         "libminikin",
@@ -165,6 +166,7 @@ cc_library_shared_for_libandroid_runtime {
                 "android_view_Surface.cpp",
                 "android_view_SurfaceControl.cpp",
                 "android_view_SurfaceControlHdrLayerInfoListener.cpp",
+                "android_view_WindowManagerGlobal.cpp",
                 "android_graphics_BLASTBufferQueue.cpp",
                 "android_view_SurfaceSession.cpp",
                 "android_view_TextureView.cpp",
@@ -267,6 +269,7 @@ cc_library_shared_for_libandroid_runtime {
                 "fd_utils.cpp",
                 "android_hardware_input_InputWindowHandle.cpp",
                 "android_hardware_input_InputApplicationHandle.cpp",
+                "android_window_InputTransferToken.cpp",
                 "android_window_WindowInfosListener.cpp",
                 "android_window_ScreenCapture.cpp",
                 "jni_common.cpp",
@@ -360,6 +363,7 @@ cc_library_shared_for_libandroid_runtime {
                 "libimage_io",
                 "libultrahdr",
                 "libperfetto_c",
+                "libtracing_perfetto",
             ],
             export_shared_lib_headers: [
                 // our headers include libnativewindow's public headers
@@ -402,6 +406,7 @@ cc_library_shared_for_libandroid_runtime {
                 "libbinary_parse",
                 "libdng_sdk",
                 "libft2",
+                "libhostgraphics",
                 "libhwui",
                 "libimage_type_recognition",
                 "libjpeg",

@@ -45,14 +45,15 @@ import static android.Manifest.permission.MANAGE_DEVICE_POLICY_SECURITY_LOGGING;
 import static android.Manifest.permission.MANAGE_DEVICE_POLICY_STATUS_BAR;
 import static android.Manifest.permission.MANAGE_DEVICE_POLICY_SUPPORT_MESSAGE;
 import static android.Manifest.permission.MANAGE_DEVICE_POLICY_SYSTEM_UPDATES;
-import static android.Manifest.permission.MANAGE_DEVICE_POLICY_THEFT_DETECTION;
 import static android.Manifest.permission.MANAGE_DEVICE_POLICY_USB_DATA_SIGNALLING;
 import static android.Manifest.permission.MANAGE_DEVICE_POLICY_WIFI;
 import static android.Manifest.permission.MANAGE_DEVICE_POLICY_WIPE_DATA;
 import static android.Manifest.permission.QUERY_ADMIN_POLICY;
+import static android.Manifest.permission.QUERY_DEVICE_STOLEN_STATE;
 import static android.Manifest.permission.REQUEST_PASSWORD_COMPLEXITY;
 import static android.Manifest.permission.SET_TIME;
 import static android.Manifest.permission.SET_TIME_ZONE;
+import static android.app.admin.DeviceAdminInfo.HEADLESS_DEVICE_OWNER_MODE_UNSUPPORTED;
 import static android.app.admin.flags.Flags.FLAG_DEVICE_THEFT_API_ENABLED;
 import static android.app.admin.flags.Flags.FLAG_ESIM_MANAGEMENT_ENABLED;
 import static android.app.admin.flags.Flags.FLAG_DEVICE_POLICY_SIZE_TRACKING_ENABLED;
@@ -93,6 +94,7 @@ import android.app.Activity;
 import android.app.IServiceConnection;
 import android.app.KeyguardManager;
 import android.app.admin.SecurityLog.SecurityEvent;
+import android.app.admin.flags.Flags;
 import android.app.compat.CompatChanges;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
@@ -5950,7 +5952,8 @@ public class DevicePolicyManager {
      * <p>
      * This method can be called on the {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set a value on the parent
-     * profile.
+     * profile. This allows a profile wipe after too many incorrect device-unlock password have
+     * been entered on the parent profile even if each profile has a separate challenge.
      * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
      * password is always empty and this method has no effect - i.e. the policy is not set.
      *
@@ -6542,8 +6545,10 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Flag for {@link #wipeData(int)}: also erase the device's external
-     * storage (such as SD cards).
+     * Flag for {@link #wipeData(int)}: also erase the device's adopted external storage (such as
+     * adopted SD cards).
+     * @see <a href="{@docRoot}about/versions/marshmallow/android-6.0.html#adoptable-storage">
+     *     Adoptable Storage Devices</a>
      */
     public static final int WIPE_EXTERNAL_STORAGE = 0x0001;
 
@@ -9977,16 +9982,21 @@ public class DevicePolicyManager {
     /**
      * Called by a profile owner or device owner or holder of the permission
      * {@link android.Manifest.permission#MANAGE_DEVICE_POLICY_LOCK_TASK}. to set a default activity
-     * that the system selects to handle intents that match the given {@link IntentFilter}.
+     * that the system selects to handle intents that match the given {@link IntentFilter} instead
+     * of showing the default disambiguation mechanism.
      * This activity will remain the default intent handler even if the set of potential event
      * handlers for the intent filter changes and if the intent preferences are reset.
      * <p>
-     * Note that the caller should still declare the activity in the manifest, the API just sets
-     * the activity to be the default one to handle the given intent filter.
+     * Note that the target application should still declare the activity in the manifest, the API
+     * just sets the activity to be the default one to handle the given intent filter.
      * <p>
      * The default disambiguation mechanism takes over if the activity is not installed (anymore).
      * When the activity is (re)installed, it is automatically reset as default intent handler for
      * the filter.
+     * <p>
+     * Note that calling this API to set a default intent handler, only allow to avoid the default
+     * disambiguation mechanism. Implicit intents that do not trigger this mechanism (like invoking
+     * the browser) cannot be configured as they are controlled by other configurations.
      * <p>
      * The calling device admin must be a profile owner or device owner. If it is not, a security
      * exception will be thrown.
@@ -12741,6 +12751,10 @@ public class DevicePolicyManager {
      * <li>{@link android.provider.Settings.System#SCREEN_OFF_TIMEOUT}</li>
      * </ul>
      * <p>
+     * Starting from Android {@link android.os.Build.VERSION_CODES#VANILLA_ICE_CREAM}, a
+     * profile owner on an organization-owned device can call this method on the parent
+     * {@link DevicePolicyManager} instance returned by
+     * {@link #getParentProfileInstance(ComponentName)} to set system settings on the parent user.
      *
      * @see android.provider.Settings.System#SCREEN_OFF_TIMEOUT
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
@@ -12750,10 +12764,9 @@ public class DevicePolicyManager {
      */
     public void setSystemSetting(@NonNull ComponentName admin,
             @NonNull @SystemSettingsWhitelist String setting, String value) {
-        throwIfParentInstance("setSystemSetting");
         if (mService != null) {
             try {
-                mService.setSystemSetting(admin, setting, value);
+                mService.setSystemSetting(admin, setting, value, mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -14071,7 +14084,7 @@ public class DevicePolicyManager {
     public void setAuditLogEnabled(boolean enabled) {
         throwIfParentInstance("setAuditLogEnabled");
         try {
-            mService.setAuditLogEnabled(mContext.getPackageName(), true);
+            mService.setAuditLogEnabled(mContext.getPackageName(), enabled);
         } catch (RemoteException re) {
             re.rethrowFromSystemServer();
         }
@@ -14090,9 +14103,7 @@ public class DevicePolicyManager {
         try {
             return mService.isAuditLogEnabled(mContext.getPackageName());
         } catch (RemoteException re) {
-            re.rethrowFromSystemServer();
-            // unreachable
-            return false;
+            throw re.rethrowFromSystemServer();
         }
     }
 
@@ -14102,8 +14113,8 @@ public class DevicePolicyManager {
      * is enforced by the caller. Disabling the policy clears the callback. Each time a new callback
      * is set, it will first be invoked with all the audit log events available at the time.
      *
-     * @param callback callback to invoke when new audit log events become available or {@code null}
-     *                 to clear the callback.
+     * @param callback The callback to invoke when new audit log events become available.
+     * @param executor The executor through which the callback should be invoked.
      * @hide
      */
     @SystemApi
@@ -14111,11 +14122,10 @@ public class DevicePolicyManager {
     @RequiresPermission(permission.MANAGE_DEVICE_POLICY_AUDIT_LOGGING)
     public void setAuditLogEventCallback(
             @NonNull @CallbackExecutor Executor executor,
-            @Nullable Consumer<List<SecurityEvent>> callback) {
+            @NonNull Consumer<List<SecurityEvent>> callback) {
         throwIfParentInstance("setAuditLogEventCallback");
-        final IAuditLogEventsCallback wrappedCallback = callback == null
-                ? null
-                : new IAuditLogEventsCallback.Stub() {
+        final IAuditLogEventsCallback wrappedCallback =
+                new IAuditLogEventsCallback.Stub() {
                     @Override
                     public void onNewAuditLogEvents(List<SecurityEvent> events) {
                         executor.execute(() -> callback.accept(events));
@@ -14124,7 +14134,25 @@ public class DevicePolicyManager {
         try {
             mService.setAuditLogEventsCallback(mContext.getPackageName(), wrappedCallback);
         } catch (RemoteException re) {
-            re.rethrowFromSystemServer();
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Clears audit log event callback. If a callback was set previously, it may still get invoked
+     * after this call returns if it was already scheduled.
+     *
+     * @hide
+     */
+    @SystemApi
+    @FlaggedApi(FLAG_SECURITY_LOG_V2_ENABLED)
+    @RequiresPermission(permission.MANAGE_DEVICE_POLICY_AUDIT_LOGGING)
+    public void clearAuditLogEventCallback() {
+        throwIfParentInstance("clearAuditLogEventCallback");
+        try {
+            mService.setAuditLogEventsCallback(mContext.getPackageName(), null);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
         }
     }
 
@@ -17135,15 +17163,15 @@ public class DevicePolicyManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(value = MANAGE_DEVICE_POLICY_THEFT_DETECTION)
+    @RequiresPermission(value = QUERY_DEVICE_STOLEN_STATE)
     @FlaggedApi(FLAG_DEVICE_THEFT_API_ENABLED)
-    public boolean isTheftDetectionTriggered() {
-        throwIfParentInstance("isTheftDetectionTriggered");
+    public boolean isDevicePotentiallyStolen() {
+        throwIfParentInstance("isDevicePotentiallyStolen");
         if (mService == null) {
             return false;
         }
         try {
-            return mService.isTheftDetectionTriggered(mContext.getPackageName());
+            return mService.isDevicePotentiallyStolen(mContext.getPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -17442,24 +17470,24 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Returns the subscription ids of all subscriptions which was downloaded by the calling
+     * Returns the subscription ids of all subscriptions which were downloaded by the calling
      * admin.
      *
      * <p> This returns only the subscriptions which were downloaded by the calling admin via
      *      {@link android.telephony.euicc.EuiccManager#downloadSubscription}.
-     *      If a susbcription is returned by this method then in it subject to management controls
+     *      If a subscription is returned by this method then in it subject to management controls
      *      and cannot be removed by users.
      *
      * <p> Callable by device owners and profile owners.
      *
-     * @throws SecurityException if the caller is not authorized to call this method
-     * @return ids of all managed subscriptions currently downloaded by an admin on the device
+     * @throws SecurityException if the caller is not authorized to call this method.
+     * @return ids of all managed subscriptions currently downloaded by an admin on the device.
      */
     @FlaggedApi(FLAG_ESIM_MANAGEMENT_ENABLED)
     @RequiresPermission(android.Manifest.permission.MANAGE_DEVICE_POLICY_MANAGED_SUBSCRIPTIONS)
     @NonNull
-    public Set<Integer> getSubscriptionsIds() {
-        throwIfParentInstance("getSubscriptionsIds");
+    public Set<Integer> getSubscriptionIds() {
+        throwIfParentInstance("getSubscriptionIds");
         if (mService != null) {
             try {
                 return intArrayToSet(mService.getSubscriptionIds(mContext.getPackageName()));
@@ -17510,5 +17538,26 @@ public class DevicePolicyManager {
             }
         }
         return -1;
+    }
+
+    /**
+     * @return The headless device owner mode for the current set DO, returns
+     * {@link DeviceAdminInfo#HEADLESS_DEVICE_OWNER_MODE_UNSUPPORTED} if no DO is set.
+     *
+     * @hide
+     */
+    @DeviceAdminInfo.HeadlessDeviceOwnerMode
+    public int getHeadlessDeviceOwnerMode() {
+        if (!Flags.headlessDeviceOwnerProvisioningFixEnabled()) {
+            return HEADLESS_DEVICE_OWNER_MODE_UNSUPPORTED;
+        }
+        if (mService != null) {
+            try {
+                return mService.getHeadlessDeviceOwnerMode(mContext.getPackageName());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return HEADLESS_DEVICE_OWNER_MODE_UNSUPPORTED;
     }
 }

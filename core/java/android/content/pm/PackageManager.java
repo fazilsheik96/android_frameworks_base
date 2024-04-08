@@ -895,7 +895,7 @@ public abstract class PackageManager {
             GET_DISABLED_COMPONENTS,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
-            MATCH_CLONE_PROFILE,
+            MATCH_CLONE_PROFILE_LONG,
             MATCH_QUARANTINED_COMPONENTS,
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -1235,10 +1235,11 @@ public abstract class PackageManager {
     public static final int MATCH_DEBUG_TRIAGED_MISSING = MATCH_DIRECT_BOOT_AUTO;
 
     /**
-     * Use {@link #MATCH_CLONE_PROFILE_LONG} instead.
+     * @deprecated Use {@link #MATCH_CLONE_PROFILE_LONG} instead.
      *
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final int MATCH_CLONE_PROFILE = 0x20000000;
 
@@ -3974,9 +3975,7 @@ public abstract class PackageManager {
      * The device is capable of communicating with other devices via
      * <a href="https://www.threadgroup.org">Thread</a> networking protocol.
      */
-    // TODO (b/325886480): update the flag to
-    // "com.android.net.thread.platform.flags.Flags.FLAG_THREAD_ENABLED_PLATFORM"
-    @FlaggedApi("com.android.net.thread.flags.thread_enabled_platform")
+    @FlaggedApi(com.android.net.thread.platform.flags.Flags.FLAG_THREAD_ENABLED_PLATFORM)
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_THREAD_NETWORK = "android.hardware.thread_network";
 
@@ -4201,15 +4200,6 @@ public abstract class PackageManager {
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_INPUT_METHODS = "android.software.input_methods";
-
-    /**
-     * Feature for {@link #getSystemAvailableFeatures} and
-     * {@link #hasSystemFeature}: The device supports multiple concurrent IME sessions.
-     */
-    @FlaggedApi("android.view.inputmethod.concurrent_input_methods")
-    @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_CONCURRENT_INPUT_METHODS =
-            "android.software.concurrent_input_methods";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and

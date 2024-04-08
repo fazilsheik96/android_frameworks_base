@@ -22,6 +22,9 @@ import android.os.PowerManager;
 import com.android.server.display.DisplayBrightnessState;
 import com.android.server.display.brightness.BrightnessReason;
 import com.android.server.display.brightness.BrightnessUtils;
+import com.android.server.display.brightness.StrategySelectionNotifyRequest;
+
+import java.io.PrintWriter;
 
 /**
  * Manages the brightness of the display when the system is in the invalid state.
@@ -38,5 +41,14 @@ public class InvalidBrightnessStrategy implements DisplayBrightnessStrategy {
     @Override
     public String getName() {
         return "InvalidBrightnessStrategy";
+    }
+
+    @Override
+    public void dump(PrintWriter writer) {}
+
+    @Override
+    public void strategySelectionPostProcessor(
+            StrategySelectionNotifyRequest strategySelectionNotifyRequest) {
+        // DO NOTHING
     }
 }

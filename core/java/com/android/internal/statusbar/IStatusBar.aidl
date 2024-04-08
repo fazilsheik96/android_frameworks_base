@@ -360,15 +360,26 @@ oneway interface IStatusBar
     /** Shows rear display educational dialog */
     void showRearDisplayDialog(int currentBaseState);
 
-    /** Called when requested to go to fullscreen from the active split app. */
-    void goToFullscreenFromSplit();
+    /**
+     *  Called when requested to go to fullscreen from the focused app.
+     *
+     *  @param displayId the id of the current display.
+     */
+    void moveFocusedTaskToFullscreen(int displayId);
 
     /**
      * Enters stage split from a current running app.
      *
+     * @param displayId the id of the current display.
      * @param leftOrTop indicates where the stage split is.
      */
-    void enterStageSplitFromRunningApp(boolean leftOrTop);
+    void moveFocusedTaskToStageSplit(int displayId, boolean leftOrTop);
+
+    /**
+     * Set the split screen focus to the left / top app or the right / bottom app based on
+     * {@param leftOrTop}.
+     */
+    void setSplitscreenFocus(boolean leftOrTop);
 
     /**
      * Shows the media output switcher dialog.
@@ -377,9 +388,9 @@ oneway interface IStatusBar
      */
     void showMediaOutputSwitcher(String packageName);
 
-    /** Enters desktop mode.
+    /** Enters desktop mode from the current focused app.
     *
     * @param displayId the id of the current display.
     */
-    void enterDesktop(int displayId);
+    void moveFocusedTaskToDesktop(int displayId);
 }

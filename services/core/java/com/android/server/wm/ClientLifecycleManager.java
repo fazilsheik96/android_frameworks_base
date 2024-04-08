@@ -18,13 +18,19 @@ package com.android.server.wm;
 
 import android.annotation.NonNull;
 import android.app.IApplicationThread;
+import android.app.compat.CompatChanges;
 import android.app.servertransaction.ActivityLifecycleItem;
 import android.app.servertransaction.ClientTransaction;
 import android.app.servertransaction.ClientTransactionItem;
+import android.app.servertransaction.LaunchActivityItem;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledSince;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.Trace;
+import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.Slog;
 
@@ -40,6 +46,15 @@ import com.android.window.flags.Flags;
 class ClientLifecycleManager {
 
     private static final String TAG = "ClientLifecycleManager";
+
+    /**
+     * To prevent any existing apps from having app compat issue with the non-sdk usages of
+     * {@link ClientTransaction#getActivityToken()}, only allow bundling {@link LaunchActivityItem}
+     * for apps with targetSDK of V and above.
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    private static final long ENABLE_BUNDLE_LAUNCH_ACTIVITY_ITEM = 324203798L;
 
     /** Mapping from client process binder to its pending transaction. */
     @VisibleForTesting
@@ -179,6 +194,22 @@ class ClientLifecycleManager {
         Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
     }
 
+    /** Executes the pending transaction for the given client process. */
+    void dispatchPendingTransaction(@NonNull IApplicationThread client) {
+        if (!Flags.bundleClientTransactionFlag()) {
+            return;
+        }
+        final ClientTransaction pendingTransaction = mPendingTransactions.remove(client.asBinder());
+        if (pendingTransaction != null) {
+            try {
+                scheduleTransaction(pendingTransaction);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to deliver pending transaction", e);
+                // TODO(b/323801078): apply cleanup for individual transaction item if needed.
+            }
+        }
+    }
+
     /**
      * Called to when {@link WindowSurfacePlacer#continueLayout}.
      * Dispatches all pending transactions unless there is an ongoing/scheduled layout, in which
@@ -232,5 +263,13 @@ class ClientLifecycleManager {
         return !mWms.mWindowPlacerLocked.isLayoutDeferred()
                 && !mWms.mWindowPlacerLocked.isTraversalScheduled()
                 && !mWms.mWindowPlacerLocked.isInLayout();
+    }
+
+    /** Guards bundling {@link LaunchActivityItem} with targetSDK. */
+    static boolean shouldDispatchLaunchActivityItemIndependently(
+            @NonNull String appPackageName, int appUid) {
+        return !CompatChanges.isChangeEnabled(ENABLE_BUNDLE_LAUNCH_ACTIVITY_ITEM,
+                appPackageName,
+                UserHandle.getUserHandleForUid(appUid));
     }
 }

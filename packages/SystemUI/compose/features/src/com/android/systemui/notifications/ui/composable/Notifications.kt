@@ -42,7 +42,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -58,6 +57,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -71,10 +71,10 @@ import com.android.systemui.common.ui.compose.windowinsets.LocalScreenCornerRadi
 import com.android.systemui.notifications.ui.composable.Notifications.Form
 import com.android.systemui.notifications.ui.composable.Notifications.TransitionThresholds.EXPANSION_FOR_MAX_CORNER_RADIUS
 import com.android.systemui.notifications.ui.composable.Notifications.TransitionThresholds.EXPANSION_FOR_MAX_SCRIM_ALPHA
-import com.android.systemui.scene.ui.composable.Gone
-import com.android.systemui.scene.ui.composable.Shade
+import com.android.systemui.res.R
+import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.shade.ui.composable.ShadeHeader
-import com.android.systemui.statusbar.notification.stack.ui.viewbinder.NotificationStackAppearanceViewBinder.SCRIM_CORNER_RADIUS
+import com.android.systemui.statusbar.notification.stack.shared.model.StackRounding
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.NotificationsPlaceholderViewModel
 import kotlin.math.roundToInt
 
@@ -141,6 +141,7 @@ fun SceneScope.NotificationScrollingStack(
 ) {
     val density = LocalDensity.current
     val screenCornerRadius = LocalScreenCornerRadius.current
+    val scrimCornerRadius = dimensionResource(R.dimen.notification_scrim_corner_radius)
     val scrollState = rememberScrollState()
     val syntheticScroll = viewModel.syntheticScroll.collectAsState(0f)
     val expansionFraction by viewModel.expandFraction.collectAsState(0f)
@@ -157,6 +158,8 @@ fun SceneScope.NotificationScrollingStack(
         } + navBarHeight
 
     val contentHeight = viewModel.intrinsicContentHeight.collectAsState()
+
+    val stackRounding = viewModel.stackRounding.collectAsState(StackRounding())
 
     // the offset for the notifications scrim. Its upper bound is 0, and its lower bound is
     // calculated in minScrimOffset. The scrim is the same height as the screen minus the
@@ -214,7 +217,7 @@ fun SceneScope.NotificationScrollingStack(
                     // in step with the transition so that it is 0 when it completes.
                     if (
                         scrimOffset.value < 0 &&
-                            layoutState.isTransitioning(from = Shade, to = Gone)
+                            layoutState.isTransitioning(from = Scenes.Shade, to = Scenes.Gone)
                     ) {
                         IntOffset(x = 0, y = (scrimOffset.value * expansionFraction).roundToInt())
                     } else {
@@ -224,16 +227,12 @@ fun SceneScope.NotificationScrollingStack(
                 .graphicsLayer {
                     shape =
                         calculateCornerRadius(
+                                scrimCornerRadius,
                                 screenCornerRadius,
                                 { expansionFraction },
-                                layoutState.isTransitioningBetween(Gone, Shade)
+                                layoutState.isTransitioningBetween(Scenes.Gone, Scenes.Shade)
                             )
-                            .let {
-                                RoundedCornerShape(
-                                    topStart = it,
-                                    topEnd = it,
-                                )
-                            }
+                            .let { stackRounding.value.toRoundedCornerShape(it) }
                     clip = true
                 }
     ) {
@@ -250,7 +249,7 @@ fun SceneScope.NotificationScrollingStack(
                 Modifier.fillMaxSize()
                     .graphicsLayer {
                         alpha =
-                            if (layoutState.isTransitioningBetween(Gone, Shade)) {
+                            if (layoutState.isTransitioningBetween(Scenes.Gone, Scenes.Shade)) {
                                 (expansionFraction / EXPANSION_FOR_MAX_SCRIM_ALPHA).coerceAtMost(1f)
                             } else 1f
                     }
@@ -356,22 +355,12 @@ private fun SceneScope.NotificationPlaceholder(
                     )
                 }
     ) {
-        content {
-            if (viewModel.isPlaceholderTextVisible) {
-                Box(Modifier.fillMaxSize()) {
-                    Text(
-                        text = "Notifications",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                }
-            }
-        }
+        content {}
     }
 }
 
 private fun calculateCornerRadius(
+    scrimCornerRadius: Dp,
     screenCornerRadius: Dp,
     expansionFraction: () -> Float,
     transitioning: Boolean,
@@ -379,12 +368,12 @@ private fun calculateCornerRadius(
     return if (transitioning) {
         lerp(
                 start = screenCornerRadius.value,
-                stop = SCRIM_CORNER_RADIUS,
-                fraction = (expansionFraction() / EXPANSION_FOR_MAX_CORNER_RADIUS).coerceAtMost(1f),
+                stop = scrimCornerRadius.value,
+                fraction = (expansionFraction() / EXPANSION_FOR_MAX_CORNER_RADIUS).coerceIn(0f, 1f),
             )
             .dp
     } else {
-        SCRIM_CORNER_RADIUS.dp
+        scrimCornerRadius
     }
 }
 
@@ -406,6 +395,17 @@ private fun Modifier.debugBackground(
     } else {
         this
     }
+
+fun StackRounding.toRoundedCornerShape(radius: Dp): RoundedCornerShape {
+    val topRadius = if (roundTop) radius else 0.dp
+    val bottomRadius = if (roundBottom) radius else 0.dp
+    return RoundedCornerShape(
+        topStart = topRadius,
+        topEnd = topRadius,
+        bottomStart = bottomRadius,
+        bottomEnd = bottomRadius,
+    )
+}
 
 private const val TAG = "FlexiNotifs"
 private val DEBUG_COLOR = Color(1f, 0f, 0f, 0.2f)

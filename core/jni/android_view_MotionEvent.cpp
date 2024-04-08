@@ -85,9 +85,24 @@ static void android_view_MotionEvent_setNativePtr(JNIEnv* env, ScopedLocalRef<jo
 
 ScopedLocalRef<jobject> android_view_MotionEvent_obtainAsCopy(JNIEnv* env,
                                                               const MotionEvent& event) {
-    std::unique_ptr<MotionEvent> destEvent = std::make_unique<MotionEvent>();
+    ScopedLocalRef<jobject> eventObj(env,
+                                     env->CallStaticObjectMethod(gMotionEventClassInfo.clazz,
+                                                                 gMotionEventClassInfo.obtain));
+    if (env->ExceptionCheck() || !eventObj.get()) {
+        ALOGE("An exception occurred while obtaining a motion event.");
+        LOGE_EX(env);
+        env->ExceptionClear();
+        return ScopedLocalRef<jobject>(env);
+    }
+
+    MotionEvent* destEvent = android_view_MotionEvent_getNativePtr(env, eventObj.get());
+    if (!destEvent) {
+        destEvent = new MotionEvent();
+        android_view_MotionEvent_setNativePtr(env, eventObj, destEvent);
+    }
+
     destEvent->copyFrom(&event, true);
-    return android_view_MotionEvent_obtainFromNative(env, std::move(destEvent));
+    return eventObj;
 }
 
 ScopedLocalRef<jobject> android_view_MotionEvent_obtainFromNative(
@@ -396,8 +411,8 @@ static void android_view_MotionEvent_nativeAddBatch(JNIEnv* env, jclass clazz,
             jniThrowNullPointerException(env, "pointerCoords");
             return;
         }
-        pointerCoordsToNative(env, pointerCoordsObj,
-                event->getXOffset(), event->getYOffset(), &rawPointerCoords[i]);
+        pointerCoordsToNative(env, pointerCoordsObj, event->getRawXOffset(), event->getRawYOffset(),
+                              &rawPointerCoords[i]);
         env->DeleteLocalRef(pointerCoordsObj);
     }
 
@@ -607,6 +622,18 @@ static jlong android_view_MotionEvent_nativeCopy(jlong destNativePtr, jlong sour
     return reinterpret_cast<jlong>(destEvent);
 }
 
+static jlong android_view_MotionEvent_nativeSplit(jlong destNativePtr, jlong sourceNativePtr,
+                                                  jint idBits) {
+    MotionEvent* destEvent = reinterpret_cast<MotionEvent*>(destNativePtr);
+    if (!destEvent) {
+        destEvent = new MotionEvent();
+    }
+    MotionEvent* sourceEvent = reinterpret_cast<MotionEvent*>(sourceNativePtr);
+    destEvent->splitFrom(*sourceEvent, static_cast<std::bitset<MAX_POINTER_ID + 1>>(idBits),
+                         InputEvent::nextId());
+    return reinterpret_cast<jlong>(destEvent);
+}
+
 static jint android_view_MotionEvent_nativeGetId(jlong nativePtr) {
     MotionEvent* event = reinterpret_cast<MotionEvent*>(nativePtr);
     return event->getId();
@@ -708,14 +735,14 @@ static void android_view_MotionEvent_nativeOffsetLocation(jlong nativePtr, jfloa
     return event->offsetLocation(deltaX, deltaY);
 }
 
-static jfloat android_view_MotionEvent_nativeGetXOffset(jlong nativePtr) {
+static jfloat android_view_MotionEvent_nativeGetRawXOffset(jlong nativePtr) {
     MotionEvent* event = reinterpret_cast<MotionEvent*>(nativePtr);
-    return event->getXOffset();
+    return event->getRawXOffset();
 }
 
-static jfloat android_view_MotionEvent_nativeGetYOffset(jlong nativePtr) {
+static jfloat android_view_MotionEvent_nativeGetRawYOffset(jlong nativePtr) {
     MotionEvent* event = reinterpret_cast<MotionEvent*>(nativePtr);
-    return event->getYOffset();
+    return event->getRawYOffset();
 }
 
 static jfloat android_view_MotionEvent_nativeGetXPrecision(jlong nativePtr) {
@@ -822,6 +849,7 @@ static const JNINativeMethod gMotionEventMethods[] = {
         // --------------- @CriticalNative ------------------
 
         {"nativeCopy", "(JJZ)J", (void*)android_view_MotionEvent_nativeCopy},
+        {"nativeSplit", "(JJI)J", (void*)android_view_MotionEvent_nativeSplit},
         {"nativeGetId", "(J)I", (void*)android_view_MotionEvent_nativeGetId},
         {"nativeGetDeviceId", "(J)I", (void*)android_view_MotionEvent_nativeGetDeviceId},
         {"nativeGetSource", "(J)I", (void*)android_view_MotionEvent_nativeGetSource},
@@ -843,8 +871,8 @@ static const JNINativeMethod gMotionEventMethods[] = {
         {"nativeGetClassification", "(J)I",
          (void*)android_view_MotionEvent_nativeGetClassification},
         {"nativeOffsetLocation", "(JFF)V", (void*)android_view_MotionEvent_nativeOffsetLocation},
-        {"nativeGetXOffset", "(J)F", (void*)android_view_MotionEvent_nativeGetXOffset},
-        {"nativeGetYOffset", "(J)F", (void*)android_view_MotionEvent_nativeGetYOffset},
+        {"nativeGetRawXOffset", "(J)F", (void*)android_view_MotionEvent_nativeGetRawXOffset},
+        {"nativeGetRawYOffset", "(J)F", (void*)android_view_MotionEvent_nativeGetRawYOffset},
         {"nativeGetXPrecision", "(J)F", (void*)android_view_MotionEvent_nativeGetXPrecision},
         {"nativeGetYPrecision", "(J)F", (void*)android_view_MotionEvent_nativeGetYPrecision},
         {"nativeGetXCursorPosition", "(J)F",

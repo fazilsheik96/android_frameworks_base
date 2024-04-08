@@ -18,6 +18,7 @@ package com.android.server.devicepolicy;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.AppGlobals;
 import android.app.admin.DevicePolicyCache;
 import android.app.admin.DevicePolicyManager;
@@ -65,6 +66,10 @@ final class PolicyEnforcerCallbacks {
     private static final String LOG_TAG = "PolicyEnforcerCallbacks";
 
     static boolean setAutoTimezoneEnabled(@Nullable Boolean enabled, @NonNull Context context) {
+        if (!DevicePolicyManagerService.isUnicornFlagEnabled()) {
+            Slogf.w(LOG_TAG, "Trying to enforce setAutoTimezoneEnabled while flag is off.");
+            return true;
+        }
         return Binder.withCleanCallingIdentity(() -> {
             Objects.requireNonNull(context);
 
@@ -78,6 +83,10 @@ final class PolicyEnforcerCallbacks {
     static boolean setPermissionGrantState(
             @Nullable Integer grantState, @NonNull Context context, int userId,
             @NonNull PolicyKey policyKey) {
+        if (!DevicePolicyManagerService.isUnicornFlagEnabled()) {
+            Slogf.w(LOG_TAG, "Trying to enforce setPermissionGrantState while flag is off.");
+            return true;
+        }
         return Boolean.TRUE.equals(Binder.withCleanCallingIdentity(() -> {
             if (!(policyKey instanceof PackagePermissionPolicyKey)) {
                 throw new IllegalArgumentException("policyKey is not of type "
@@ -279,6 +288,21 @@ final class PolicyEnforcerCallbacks {
                 updateScreenCaptureDisabled();
             }
         });
+        return true;
+    }
+
+    static boolean setContentProtectionPolicy(
+            @Nullable Integer value,
+            @NonNull Context context,
+            @UserIdInt Integer userId,
+            @NonNull PolicyKey policyKey) {
+        Binder.withCleanCallingIdentity(
+                () -> {
+                    DevicePolicyCache cache = DevicePolicyCache.getInstance();
+                    if (cache instanceof DevicePolicyCacheImpl cacheImpl) {
+                        cacheImpl.setContentProtectionPolicy(userId, value);
+                    }
+                });
         return true;
     }
 

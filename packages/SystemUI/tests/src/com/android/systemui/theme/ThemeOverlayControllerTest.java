@@ -718,7 +718,8 @@ public class ThemeOverlayControllerTest extends SysuiTestCase {
 
     @Test
     public void onPrivateProfileAdded_ignoresUntilStartComplete() {
-        mSetFlagsRule.enableFlags(FLAG_ALLOW_PRIVATE_PROFILE);
+        mSetFlagsRule.enableFlags(FLAG_ALLOW_PRIVATE_PROFILE,
+                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         reset(mDeviceProvisionedController);
         when(mUserManager.isManagedProfile(anyInt())).thenReturn(false);
         mBroadcastReceiver.getValue().onReceive(null,
@@ -984,7 +985,7 @@ public class ThemeOverlayControllerTest extends SysuiTestCase {
         FabricatedOverlay neutrals = overlays[1];
         FabricatedOverlay dynamic = overlays[2];
 
-        final int colorsPerPalette = 12;
+        final int colorsPerPalette = 13;
 
         // Color resources were added for all 3 accent palettes
         verify(accents, times(colorsPerPalette * 3))

@@ -2345,6 +2345,15 @@ final public class MediaCodec {
             throw new IllegalArgumentException("Can't use crypto and descrambler together!");
         }
 
+        // at the moment no codecs support detachable surface
+        if (android.media.codec.Flags.nullOutputSurface()) {
+            // Detached surface flag is only meaningful if surface is null. Otherwise, it is
+            // ignored.
+            if (surface == null && (flags & CONFIGURE_FLAG_DETACHED_SURFACE) != 0) {
+                throw new IllegalArgumentException("Codec does not support detached surface");
+            }
+        }
+
         String[] keys = null;
         Object[] values = null;
 
@@ -2419,7 +2428,8 @@ final public class MediaCodec {
      *  output.
      *
      *  @throws IllegalStateException if the codec was not
-     *                                configured in surface mode.
+     *            configured in surface mode or if the codec does not support
+     *            detaching the output surface.
      *  @see CONFIGURE_FLAG_DETACHED_SURFACE
      */
     @FlaggedApi(FLAG_NULL_OUTPUT_SURFACE)
@@ -2429,6 +2439,7 @@ final public class MediaCodec {
         }
         // note: we still have a surface in detached mode, so keep mHasSurface
         // we also technically allow calling detachOutputSurface multiple times in a row
+        throw new IllegalStateException("codec does not support detaching output surface");
         // native_detachSurface();
     }
 
@@ -4750,6 +4761,9 @@ final public class MediaCodec {
         }
 
         void setBufferInfo(MediaCodec.BufferInfo info) {
+            // since any of setBufferInfo(s) should translate to getBufferInfos,
+            // mBufferInfos needs to be reset for every setBufferInfo(s)
+            mBufferInfos.clear();
             mPresentationTimeUs = info.presentationTimeUs;
             mFlags = info.flags;
         }
@@ -5087,7 +5101,7 @@ final public class MediaCodec {
      * size is larger than 16x16, then the qpOffset information of all 16x16 blocks that
      * encompass the coding unit is combined and used. The QP of target block will be calculated
      * as 'frameQP + offsetQP'. If the result exceeds minQP or maxQP configured then the value
-     * may be clamped. Negative offset results in blocks encoded at lower QP than frame QP and
+     * will be clamped. Negative offset results in blocks encoded at lower QP than frame QP and
      * positive offsets will result in encoding blocks at higher QP than frame QP. If the areas
      * of negative QP and positive QP are chosen wisely, the overall viewing experience can be
      * improved.
@@ -5114,7 +5128,7 @@ final public class MediaCodec {
      * quantization parameter (QP) offset of the blocks in the bounding box. The bounding box
      * will get stretched outwards to align to LCU boundaries during encoding. The Qp Offset is
      * integral and shall be in the range [-128, 127]. The QP of target block will be calculated
-     * as frameQP + offsetQP. If the result exceeds minQP or maxQP configured then the value may
+     * as frameQP + offsetQP. If the result exceeds minQP or maxQP configured then the value will
      * be clamped. Negative offset results in blocks encoded at lower QP than frame QP and
      * positive offsets will result in blocks encoded at higher QP than frame QP. If the areas of
      * negative QP and positive QP are chosen wisely, the overall viewing experience can be

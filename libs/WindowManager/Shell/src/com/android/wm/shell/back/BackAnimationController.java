@@ -64,6 +64,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.LatencyTracker;
 import com.android.internal.view.AppearanceRegion;
+import com.android.wm.shell.R;
 import com.android.wm.shell.animation.FlingAnimationUtils;
 import com.android.wm.shell.common.ExternalInterfaceBinder;
 import com.android.wm.shell.common.RemoteCallable;
@@ -114,6 +115,8 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
     /** Tracks if we should start the back gesture on the next motion move event */
     private boolean mShouldStartOnNextMoveEvent = false;
     private boolean mOnBackStartDispatched = false;
+    private boolean mPointerPilfered = false;
+    private final boolean mRequirePointerPilfer;
 
     private final FlingAnimationUtils mFlingAnimationUtils;
 
@@ -219,6 +222,8 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
         mActivityTaskManager = activityTaskManager;
         mContext = context;
         mContentResolver = contentResolver;
+        mRequirePointerPilfer =
+                context.getResources().getBoolean(R.bool.config_backAnimationRequiresPointerPilfer);
         mBgHandler = bgHandler;
         shellInit.addInitCallback(this::onInit, this);
         mAnimationBackground = backAnimationBackground;
@@ -404,11 +409,12 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
 
     @VisibleForTesting
     void onPilferPointers() {
+        mPointerPilfered = true;
         // Dispatch onBackStarted, only to app callbacks.
         // System callbacks will receive onBackStarted when the remote animation starts.
         if (!shouldDispatchToAnimator() && mActiveCallback != null) {
             mCurrentTracker.updateStartLocation();
-            tryDispatchAppOnBackStarted(mActiveCallback, mCurrentTracker.createStartEvent(null));
+            tryDispatchOnBackStarted(mActiveCallback, mCurrentTracker.createStartEvent(null));
         }
     }
 
@@ -511,7 +517,7 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
             mActiveCallback = mBackNavigationInfo.getOnBackInvokedCallback();
             // App is handling back animation. Cancel system animation latency tracking.
             cancelLatencyTracking();
-            tryDispatchAppOnBackStarted(mActiveCallback, touchTracker.createStartEvent(null));
+            tryDispatchOnBackStarted(mActiveCallback, touchTracker.createStartEvent(null));
         }
     }
 
@@ -555,14 +561,15 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
                 && mBackNavigationInfo.isPrepareRemoteAnimation();
     }
 
-    private void tryDispatchAppOnBackStarted(
+    private void tryDispatchOnBackStarted(
             IOnBackInvokedCallback callback,
             BackMotionEvent backEvent) {
-        if (mOnBackStartDispatched && callback != null) {
+        if (mOnBackStartDispatched
+                || callback == null
+                || (!mPointerPilfered && mRequirePointerPilfer)) {
             return;
         }
         dispatchOnBackStarted(callback, backEvent);
-        mOnBackStartDispatched = true;
     }
 
     private void dispatchOnBackStarted(
@@ -573,6 +580,7 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
         }
         try {
             callback.onBackStarted(backEvent);
+            mOnBackStartDispatched = true;
         } catch (RemoteException e) {
             Log.e(TAG, "dispatchOnBackStarted error: ", e);
         }
@@ -872,6 +880,7 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
         mActiveCallback = null;
         mShouldStartOnNextMoveEvent = false;
         mOnBackStartDispatched = false;
+        mPointerPilfered = false;
         mShellBackAnimationRegistry.resetDefaultCrossActivity();
         cancelLatencyTracking();
         if (mBackNavigationInfo != null) {
@@ -957,15 +966,7 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
                                         mCurrentTracker.updateStartLocation();
                                         BackMotionEvent startEvent =
                                                 mCurrentTracker.createStartEvent(apps[0]);
-                                        // {@code mActiveCallback} is the callback from
-                                        // the BackAnimationRunners and not a real app-side
-                                        // callback. We also dispatch to the app-side callback
-                                        // (which should be a system callback with PRIORITY_SYSTEM)
-                                        // to keep consistent with app registered callbacks.
                                         dispatchOnBackStarted(mActiveCallback, startEvent);
-                                        tryDispatchAppOnBackStarted(
-                                                mBackNavigationInfo.getOnBackInvokedCallback(),
-                                                startEvent);
                                     }
 
                                     // Dispatch the first progress after animation start for
@@ -1011,6 +1012,8 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
         pw.println(prefix + "  mBackGestureStarted=" + mBackGestureStarted);
         pw.println(prefix + "  mPostCommitAnimationInProgress=" + mPostCommitAnimationInProgress);
         pw.println(prefix + "  mShouldStartOnNextMoveEvent=" + mShouldStartOnNextMoveEvent);
+        pw.println(prefix + "  mPointerPilfered=" + mPointerPilfered);
+        pw.println(prefix + "  mRequirePointerPilfer=" + mRequirePointerPilfer);
         pw.println(prefix + "  mCurrentTracker state:");
         mCurrentTracker.dump(pw, prefix + "    ");
         pw.println(prefix + "  mQueuedTracker state:");

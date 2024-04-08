@@ -16,9 +16,6 @@
 
 package com.android.systemui.mediaprojection
 
-import android.compat.annotation.ChangeId
-import android.compat.annotation.Disabled
-import android.compat.annotation.Overridable
 import android.content.Context
 import android.media.projection.IMediaProjection
 import android.media.projection.IMediaProjectionManager
@@ -27,25 +24,15 @@ import android.media.projection.ReviewGrantedConsentResult
 import android.os.RemoteException
 import android.os.ServiceManager
 import android.util.Log
+import android.window.WindowContainerToken
+import javax.inject.Inject
 
 /**
  * Helper class that handles the media projection service related actions. It simplifies invoking
  * the MediaProjectionManagerService and updating the permission consent.
  */
-class MediaProjectionServiceHelper {
+class MediaProjectionServiceHelper @Inject constructor() {
     companion object {
-        /**
-         * This change id ensures that users are presented with a choice of capturing a single app
-         * or the entire screen when initiating a MediaProjection session, overriding the usage of
-         * MediaProjectionConfig#createConfigForDefaultDisplay.
-         *
-         * @hide
-         */
-        @ChangeId
-        @Overridable
-        @Disabled
-        const val OVERRIDE_DISABLE_MEDIA_PROJECTION_SINGLE_APP_OPTION = 316897322L // buganizer id
-
         private const val TAG = "MediaProjectionServiceHelper"
         private val service =
             IMediaProjectionManager.Stub.asInterface(
@@ -103,6 +90,18 @@ class MediaProjectionServiceHelper {
                     Log.e(TAG, "Unable to set required consent result for token re-use", e)
                 }
             }
+        }
+    }
+
+    /** Updates the projected task to the task that has a matching [WindowContainerToken]. */
+    fun updateTaskRecordingSession(token: WindowContainerToken): Boolean {
+        return try {
+            true
+            // TODO: actually call the service once it is implemented
+            // service.updateTaskRecordingSession(token)
+        } catch (e: RemoteException) {
+            Log.e(TAG, "Unable to updateTaskRecordingSession", e)
+            false
         }
     }
 }

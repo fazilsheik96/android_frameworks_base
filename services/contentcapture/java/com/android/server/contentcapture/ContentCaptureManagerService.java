@@ -50,7 +50,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityThread;
-import android.app.admin.DevicePolicyManagerInternal;
+import android.app.admin.DevicePolicyCache;
 import android.app.assist.ActivityId;
 import android.content.ComponentName;
 import android.content.ContentCaptureOptions;
@@ -940,7 +940,7 @@ public class ContentCaptureManagerService extends
         return new ContentProtectionConsentManager(
                 BackgroundThread.getHandler(),
                 getContext().getContentResolver(),
-                LocalServices.getService(DevicePolicyManagerInternal.class));
+                DevicePolicyCache.getInstance());
     }
 
     @Nullable
@@ -1297,15 +1297,19 @@ public class ContentCaptureManagerService extends
 
         @Override
         public void onLoginDetected(@NonNull ParceledListSlice<ContentCaptureEvent> events) {
-            RemoteContentProtectionService service = createRemoteContentProtectionService();
-            if (service == null) {
-                return;
-            }
-            try {
-                service.onLoginDetected(events);
-            } catch (Exception ex) {
-                Slog.e(TAG, "Failed to call remote service", ex);
-            }
+            Binder.withCleanCallingIdentity(
+                    () -> {
+                        RemoteContentProtectionService service =
+                                createRemoteContentProtectionService();
+                        if (service == null) {
+                            return;
+                        }
+                        try {
+                            service.onLoginDetected(events);
+                        } catch (Exception ex) {
+                            Slog.e(TAG, "Failed to call remote service", ex);
+                        }
+                    });
         }
     }
 

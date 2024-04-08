@@ -75,10 +75,11 @@ import com.android.systemui.power.domain.interactor.PowerInteractor;
 import com.android.systemui.power.domain.interactor.PowerInteractorFactory;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.shade.ShadeControllerImpl;
-import com.android.systemui.shade.ShadeViewController;
 import com.android.systemui.shade.data.repository.FakeShadeRepository;
 import com.android.systemui.shade.data.repository.ShadeAnimationRepository;
+import com.android.systemui.shade.domain.interactor.PanelExpansionInteractor;
 import com.android.systemui.shade.domain.interactor.ShadeAnimationInteractorLegacyImpl;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationClickNotifier;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
@@ -129,6 +130,8 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     private AssistManager mAssistManager;
     @Mock
     private ActivityStarter mActivityStarter;
+    @Mock
+    private CommandQueue mCommandQueue;
     @Mock
     private NotificationClickNotifier mClickNotifier;
     @Mock
@@ -236,6 +239,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
                         mVisibilityProvider,
                         headsUpManager,
                         mActivityStarter,
+                        mCommandQueue,
                         mClickNotifier,
                         mStatusBarKeyguardViewManager,
                         mock(KeyguardManager.class),
@@ -253,11 +257,13 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
                         new StatusBarNotificationActivityStarterLogger(logcatLogBuffer()),
                         mOnUserInteractionCallback,
                         mock(NotificationPresenter.class),
-                        mock(ShadeViewController.class),
+                        mock(PanelExpansionInteractor.class),
                         mock(NotificationShadeWindowController.class),
                         mActivityTransitionAnimator,
                         new ShadeAnimationInteractorLegacyImpl(
-                                new ShadeAnimationRepository(), new FakeShadeRepository()),
+                                new ShadeAnimationRepository(),
+                                new FakeShadeRepository()
+                        ),
                         notificationAnimationProvider,
                         mock(LaunchFullScreenIntentProvider.class),
                         mPowerInteractor,

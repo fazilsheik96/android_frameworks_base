@@ -29,6 +29,7 @@ import android.window.SystemPerformanceHinter;
 
 import com.android.internal.logging.UiEventLogger;
 import com.android.launcher3.icons.IconProvider;
+import com.android.window.flags.Flags;
 import com.android.wm.shell.ProtoLogController;
 import com.android.wm.shell.R;
 import com.android.wm.shell.RootDisplayAreaOrganizer;
@@ -326,7 +327,8 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static MultiInstanceHelper provideMultiInstanceHelper(Context context) {
-        return new MultiInstanceHelper(context, context.getPackageManager());
+        return new MultiInstanceHelper(context, context.getPackageManager(),
+                Flags.supportsMultiInstanceSystemUi());
     }
 
     //
@@ -846,8 +848,10 @@ public abstract class WMShellBaseModule {
     static ShellController provideShellController(Context context,
             ShellInit shellInit,
             ShellCommandHandler shellCommandHandler,
+            DisplayInsetsController displayInsetsController,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return new ShellController(context, shellInit, shellCommandHandler, mainExecutor);
+        return new ShellController(context, shellInit, shellCommandHandler,
+                displayInsetsController, mainExecutor);
     }
 
     //

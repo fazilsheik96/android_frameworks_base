@@ -28,6 +28,7 @@ import android.testing.AndroidTestingRunner;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.settingslib.flags.Flags;
 import com.android.settingslib.media.MediaOutputConstants;
 import com.android.systemui.SysuiTestCase;
 
@@ -41,16 +42,16 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
 
     private MediaOutputDialogReceiver mMediaOutputDialogReceiver;
 
-    private final MediaOutputDialogFactory mMockMediaOutputDialogFactory =
-            mock(MediaOutputDialogFactory.class);
+    private final MediaOutputDialogManager mMockMediaOutputDialogManager =
+            mock(MediaOutputDialogManager.class);
 
-    private final MediaOutputBroadcastDialogFactory mMockMediaOutputBroadcastDialogFactory =
-            mock(MediaOutputBroadcastDialogFactory.class);
+    private final MediaOutputBroadcastDialogManager mMockMediaOutputBroadcastDialogManager =
+            mock(MediaOutputBroadcastDialogManager.class);
 
     @Before
     public void setup() {
-        mMediaOutputDialogReceiver = new MediaOutputDialogReceiver(mMockMediaOutputDialogFactory,
-                mMockMediaOutputBroadcastDialogFactory);
+        mMediaOutputDialogReceiver = new MediaOutputDialogReceiver(mMockMediaOutputDialogManager,
+                mMockMediaOutputBroadcastDialogManager);
     }
 
     @Test
@@ -59,9 +60,10 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         intent.putExtra(MediaOutputConstants.EXTRA_PACKAGE_NAME, getContext().getPackageName());
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
-        verify(mMockMediaOutputDialogFactory, times(1))
-                .create(getContext().getPackageName(), false, null);
-        verify(mMockMediaOutputBroadcastDialogFactory, never()).create(any(), anyBoolean(), any());
+        verify(mMockMediaOutputDialogManager, times(1))
+                .createAndShow(getContext().getPackageName(), false, null);
+        verify(mMockMediaOutputBroadcastDialogManager, never())
+                .createAndShow(any(), anyBoolean(), any());
     }
 
     @Test
@@ -70,8 +72,9 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         intent.putExtra("Wrong Package Name Key", getContext().getPackageName());
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
-        verify(mMockMediaOutputDialogFactory, never()).create(any(), anyBoolean(), any());
-        verify(mMockMediaOutputBroadcastDialogFactory, never()).create(any(), anyBoolean(), any());
+        verify(mMockMediaOutputDialogManager, never()).createAndShow(any(), anyBoolean(), any());
+        verify(mMockMediaOutputBroadcastDialogManager, never())
+                .createAndShow(any(), anyBoolean(), any());
     }
 
     @Test
@@ -79,41 +82,60 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         Intent intent = new Intent(MediaOutputConstants.ACTION_LAUNCH_MEDIA_OUTPUT_DIALOG);
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
-        verify(mMockMediaOutputDialogFactory, never()).create(any(), anyBoolean(), any());
-        verify(mMockMediaOutputBroadcastDialogFactory, never()).create(any(), anyBoolean(), any());
+        verify(mMockMediaOutputDialogManager, never()).createAndShow(any(), anyBoolean(), any());
+        verify(mMockMediaOutputBroadcastDialogManager, never())
+                .createAndShow(any(), anyBoolean(), any());
     }
 
     @Test
-    public void launchMediaOutputBroadcastDialog_ExtraPackageName_BroadcastDialogFactoryCalled() {
+    public void launchMediaOutputBroadcastDialog_flagOff_broadcastDialogFactoryNotCalled() {
+        mSetFlagsRule.disableFlags(Flags.FLAG_LEGACY_LE_AUDIO_SHARING);
         Intent intent = new Intent(
                 MediaOutputConstants.ACTION_LAUNCH_MEDIA_OUTPUT_BROADCAST_DIALOG);
         intent.putExtra(MediaOutputConstants.EXTRA_PACKAGE_NAME, getContext().getPackageName());
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
-        verify(mMockMediaOutputDialogFactory, never()).create(any(), anyBoolean(), any());
-        verify(mMockMediaOutputBroadcastDialogFactory, times(1))
-                .create(getContext().getPackageName(), true, null);
+        verify(mMockMediaOutputDialogManager, never()).createAndShow(any(), anyBoolean(), any());
+        verify(mMockMediaOutputBroadcastDialogManager, never())
+                .createAndShow(any(), anyBoolean(), any());
+    }
+
+    @Test
+    public void launchMediaOutputBroadcastDialog_ExtraPackageName_BroadcastDialogFactoryCalled() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_LEGACY_LE_AUDIO_SHARING);
+        Intent intent = new Intent(
+                MediaOutputConstants.ACTION_LAUNCH_MEDIA_OUTPUT_BROADCAST_DIALOG);
+        intent.putExtra(MediaOutputConstants.EXTRA_PACKAGE_NAME, getContext().getPackageName());
+        mMediaOutputDialogReceiver.onReceive(getContext(), intent);
+
+        verify(mMockMediaOutputDialogManager, never()).createAndShow(any(), anyBoolean(), any());
+        verify(mMockMediaOutputBroadcastDialogManager, times(1))
+                .createAndShow(getContext().getPackageName(), true, null);
     }
 
     @Test
     public void launchMediaOutputBroadcastDialog_WrongExtraKey_DialogBroadcastFactoryNotCalled() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_LEGACY_LE_AUDIO_SHARING);
         Intent intent = new Intent(
                 MediaOutputConstants.ACTION_LAUNCH_MEDIA_OUTPUT_BROADCAST_DIALOG);
         intent.putExtra("Wrong Package Name Key", getContext().getPackageName());
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
-        verify(mMockMediaOutputDialogFactory, never()).create(any(), anyBoolean(), any());
-        verify(mMockMediaOutputBroadcastDialogFactory, never()).create(any(), anyBoolean(), any());
+        verify(mMockMediaOutputDialogManager, never()).createAndShow(any(), anyBoolean(), any());
+        verify(mMockMediaOutputBroadcastDialogManager, never())
+                .createAndShow(any(), anyBoolean(), any());
     }
 
     @Test
     public void launchMediaOutputBroadcastDialog_NoExtra_BroadcastDialogFactoryNotCalled() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_LEGACY_LE_AUDIO_SHARING);
         Intent intent = new Intent(
                 MediaOutputConstants.ACTION_LAUNCH_MEDIA_OUTPUT_BROADCAST_DIALOG);
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
-        verify(mMockMediaOutputDialogFactory, never()).create(any(), anyBoolean(), any());
-        verify(mMockMediaOutputBroadcastDialogFactory, never()).create(any(), anyBoolean(), any());
+        verify(mMockMediaOutputDialogManager, never()).createAndShow(any(), anyBoolean(), any());
+        verify(mMockMediaOutputBroadcastDialogManager, never())
+                .createAndShow(any(), anyBoolean(), any());
     }
 
     @Test
@@ -123,8 +145,9 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         intent.putExtra(MediaOutputConstants.EXTRA_PACKAGE_NAME, getContext().getPackageName());
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
-        verify(mMockMediaOutputDialogFactory, never()).create(any(), anyBoolean(), any());
-        verify(mMockMediaOutputBroadcastDialogFactory, never()).create(any(), anyBoolean(), any());
+        verify(mMockMediaOutputDialogManager, never()).createAndShow(any(), anyBoolean(), any());
+        verify(mMockMediaOutputBroadcastDialogManager, never())
+                .createAndShow(any(), anyBoolean(), any());
     }
 
     @Test
@@ -132,7 +155,8 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         Intent intent = new Intent("UnKnown Action");
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
-        verify(mMockMediaOutputDialogFactory, never()).create(any(), anyBoolean(), any());
-        verify(mMockMediaOutputBroadcastDialogFactory, never()).create(any(), anyBoolean(), any());
+        verify(mMockMediaOutputDialogManager, never()).createAndShow(any(), anyBoolean(), any());
+        verify(mMockMediaOutputBroadcastDialogManager, never())
+                .createAndShow(any(), anyBoolean(), any());
     }
 }

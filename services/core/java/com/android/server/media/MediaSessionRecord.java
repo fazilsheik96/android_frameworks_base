@@ -96,7 +96,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * MediaSession wrapper class instead.
  */
 // TODO(jaewan): Do not call service method directly -- introduce listener instead.
-public class MediaSessionRecord implements IBinder.DeathRecipient, MediaSessionRecordImpl {
+public class MediaSessionRecord extends MediaSessionRecordImpl implements IBinder.DeathRecipient {
 
     /**
      * {@link android.media.session.MediaSession#setMediaButtonBroadcastReceiver(
@@ -223,10 +223,19 @@ public class MediaSessionRecord implements IBinder.DeathRecipient, MediaSessionR
 
     private int mPolicies;
 
-    public MediaSessionRecord(int ownerPid, int ownerUid, int userId, String ownerPackageName,
-            ISessionCallback cb, String tag, Bundle sessionInfo,
-            MediaSessionService service, Looper handlerLooper, int policies)
+    public MediaSessionRecord(
+            int ownerPid,
+            int ownerUid,
+            int userId,
+            String ownerPackageName,
+            ISessionCallback cb,
+            String tag,
+            Bundle sessionInfo,
+            MediaSessionService service,
+            Looper handlerLooper,
+            int policies)
             throws RemoteException {
+        mUniqueId = sNextMediaSessionRecordId.getAndIncrement();
         mOwnerPid = ownerPid;
         mOwnerUid = ownerUid;
         mUserId = userId;
@@ -678,32 +687,25 @@ public class MediaSessionRecord implements IBinder.DeathRecipient, MediaSessionR
 
     private static String toVolumeControlTypeString(
             @VolumeProvider.ControlType int volumeControlType) {
-        switch (volumeControlType) {
-            case VOLUME_CONTROL_FIXED:
-                return "FIXED";
-            case VOLUME_CONTROL_RELATIVE:
-                return "RELATIVE";
-            case VOLUME_CONTROL_ABSOLUTE:
-                return "ABSOLUTE";
-            default:
-                return TextUtils.formatSimple("unknown(%d)", volumeControlType);
-        }
+        return switch (volumeControlType) {
+            case VOLUME_CONTROL_FIXED -> "FIXED";
+            case VOLUME_CONTROL_RELATIVE -> "RELATIVE";
+            case VOLUME_CONTROL_ABSOLUTE -> "ABSOLUTE";
+            default -> TextUtils.formatSimple("unknown(%d)", volumeControlType);
+        };
     }
 
     private static String toVolumeTypeString(@PlaybackInfo.PlaybackType int volumeType) {
-        switch (volumeType) {
-            case PLAYBACK_TYPE_LOCAL:
-                return "LOCAL";
-            case PLAYBACK_TYPE_REMOTE:
-                return "REMOTE";
-            default:
-                return TextUtils.formatSimple("unknown(%d)", volumeType);
-        }
+        return switch (volumeType) {
+            case PLAYBACK_TYPE_LOCAL -> "LOCAL";
+            case PLAYBACK_TYPE_REMOTE -> "REMOTE";
+            default -> TextUtils.formatSimple("unknown(%d)", volumeType);
+        };
     }
 
     @Override
     public String toString() {
-        return mPackageName + "/" + mTag + " (userId=" + mUserId + ")";
+        return mPackageName + "/" + mTag + "/" + getUniqueId() + " (userId=" + mUserId + ")";
     }
 
     @Override

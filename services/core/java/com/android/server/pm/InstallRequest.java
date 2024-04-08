@@ -35,7 +35,6 @@ import android.apex.ApexInfo;
 import android.app.AppOpsManager;
 import android.content.pm.ArchivedPackageParcel;
 import android.content.pm.DataLoaderType;
-import android.content.pm.Flags;
 import android.content.pm.IPackageInstallObserver2;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
@@ -692,6 +691,14 @@ final class InstallRequest {
         }
     }
 
+    public void setPostInstallRunnable(Runnable runnable) {
+        mPostInstallRunnable = runnable;
+    }
+
+    public boolean hasPostInstallRunnable() {
+        return mPostInstallRunnable != null;
+    }
+
     public void runPostInstallRunnable() {
         if (mPostInstallRunnable != null) {
             mPostInstallRunnable.run();
@@ -753,6 +760,7 @@ final class InstallRequest {
 
     public void setNewUsers(int[] newUsers) {
         mNewUsers = newUsers;
+        populateBroadcastUsers();
     }
 
     public void setOriginPackage(String originPackage) {
@@ -829,10 +837,11 @@ final class InstallRequest {
     }
 
     /**
-     *  Determine the set of users who are adding this package for the first time vs. those who are
-     *  seeing an update.
+     *  Determine the set of users who are adding this package for the first time (aka "new" users)
+     *  vs. those who are seeing an update (aka "update" users). The lists can be calculated as soon
+     *  as the "new" users are set.
      */
-    public void populateBroadcastUsers() {
+    private void populateBroadcastUsers() {
         assertScanResultExists();
         mFirstTimeBroadcastUserIds = EMPTY_INT_ARRAY;
         mFirstTimeBroadcastInstantUserIds = EMPTY_INT_ARRAY;
@@ -941,7 +950,7 @@ final class InstallRequest {
         // Only report external profile warnings when installing from adb. The goal is to warn app
         // developers if they have provided bad external profiles, so it's not beneficial to report
         // those warnings in the normal app install workflow.
-        if (isInstallFromAdb() && Flags.useArtServiceV2()) {
+        if (isInstallFromAdb()) {
             var externalProfileErrors = new LinkedHashSet<String>();
             for (PackageDexoptResult packageResult : dexoptResult.getPackageDexoptResults()) {
                 for (DexContainerFileDexoptResult fileResult :

@@ -207,6 +207,13 @@ struct ClipRegion final : Op {
     SkClipOp op;
     void draw(SkCanvas* c, const SkMatrix&) const { c->clipRegion(region, op); }
 };
+struct ClipShader final : Op {
+    static const auto kType = Type::ClipShader;
+    ClipShader(const sk_sp<SkShader>& shader, SkClipOp op) : shader(shader), op(op) {}
+    sk_sp<SkShader> shader;
+    SkClipOp op;
+    void draw(SkCanvas* c, const SkMatrix&) const { c->clipShader(shader, op); }
+};
 struct ResetClip final : Op {
     static const auto kType = Type::ResetClip;
     ResetClip() {}
@@ -566,9 +573,9 @@ struct DrawSkMesh final : Op {
 struct DrawMesh final : Op {
     static const auto kType = Type::DrawMesh;
     DrawMesh(const Mesh& mesh, sk_sp<SkBlender> blender, const SkPaint& paint)
-            : mesh(mesh), blender(std::move(blender)), paint(paint) {}
+            : mesh(mesh.takeSnapshot()), blender(std::move(blender)), paint(paint) {}
 
-    const Mesh& mesh;
+    Mesh::Snapshot mesh;
     sk_sp<SkBlender> blender;
     SkPaint paint;
 
@@ -821,6 +828,9 @@ void DisplayListData::clipRRect(const SkRRect& rrect, SkClipOp op, bool aa) {
 }
 void DisplayListData::clipRegion(const SkRegion& region, SkClipOp op) {
     this->push<ClipRegion>(0, region, op);
+}
+void DisplayListData::clipShader(const sk_sp<SkShader>& shader, SkClipOp op) {
+    this->push<ClipShader>(0, shader, op);
 }
 void DisplayListData::resetClip() {
     this->push<ResetClip>(0);
@@ -1134,6 +1144,11 @@ void RecordingCanvas::onClipRegion(const SkRegion& region, SkClipOp op) {
     fDL->clipRegion(region, op);
     this->INHERITED::onClipRegion(region, op);
 }
+void RecordingCanvas::onClipShader(sk_sp<SkShader> shader, SkClipOp op) {
+    setClipMayBeComplex();
+    fDL->clipShader(shader, op);
+    this->INHERITED::onClipShader(shader, op);
+}
 void RecordingCanvas::onResetClip() {
     // This is part of "replace op" emulation, but rely on the following intersection
     // clip to potentially mark the clip as complex. If we are already complex, we do
@@ -1279,15 +1294,6 @@ void RecordingCanvas::drawVectorDrawable(VectorDrawableRoot* tree) {
 
 void RecordingCanvas::drawWebView(skiapipeline::FunctorDrawable* drawable) {
     fDL->drawWebView(drawable);
-}
-
-[[nodiscard]] const SkMesh& DrawMeshPayload::getSkMesh() const {
-    LOG_FATAL_IF(!meshWrapper && !mesh, "One of Mesh or Mesh must be non-null");
-    if (meshWrapper) {
-        return meshWrapper->getSkMesh();
-    } else {
-        return *mesh;
-    }
 }
 
 }  // namespace uirenderer

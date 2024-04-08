@@ -23,7 +23,7 @@ import static android.app.WindowConfiguration.WINDOW_CONFIG_BOUNDS;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.window.TaskFragmentOperation.OP_TYPE_CLEAR_ADJACENT_TASK_FRAGMENTS;
 import static android.window.TaskFragmentOperation.OP_TYPE_CREATE_TASK_FRAGMENT;
-import static android.window.TaskFragmentOperation.OP_TYPE_CREATE_TASK_FRAGMENT_DECOR_SURFACE;
+import static android.window.TaskFragmentOperation.OP_TYPE_CREATE_OR_MOVE_TASK_FRAGMENT_DECOR_SURFACE;
 import static android.window.TaskFragmentOperation.OP_TYPE_DELETE_TASK_FRAGMENT;
 import static android.window.TaskFragmentOperation.OP_TYPE_REMOVE_TASK_FRAGMENT_DECOR_SURFACE;
 import static android.window.TaskFragmentOperation.OP_TYPE_REORDER_TO_BOTTOM_OF_TASK;
@@ -34,6 +34,7 @@ import static android.window.TaskFragmentOperation.OP_TYPE_REQUEST_FOCUS_ON_TASK
 import static android.window.TaskFragmentOperation.OP_TYPE_SET_ADJACENT_TASK_FRAGMENTS;
 import static android.window.TaskFragmentOperation.OP_TYPE_SET_ANIMATION_PARAMS;
 import static android.window.TaskFragmentOperation.OP_TYPE_SET_COMPANION_TASK_FRAGMENT;
+import static android.window.TaskFragmentOperation.OP_TYPE_SET_DECOR_SURFACE_BOOSTED;
 import static android.window.TaskFragmentOperation.OP_TYPE_SET_DIM_ON_TASK;
 import static android.window.TaskFragmentOperation.OP_TYPE_SET_ISOLATED_NAVIGATION;
 import static android.window.TaskFragmentOperation.OP_TYPE_SET_MOVE_TO_BOTTOM_IF_CLEAR_WHEN_LAUNCH;
@@ -124,6 +125,7 @@ import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ArrayUtils;
 import com.android.server.LocalServices;
 import com.android.server.pm.LauncherAppsService.LauncherAppsServiceInternal;
+import com.android.window.flags.Flags;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -329,15 +331,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                                         deferred);
                                 wctApplied.meet();
                                 if (needsSetReady) {
-                                    // TODO(b/294925498): Remove this once we have accurate ready
-                                    //                    tracking.
-                                    if (hasActivityLaunch(wct) && !mService.mRootWindowContainer
-                                            .allPausedActivitiesComplete()) {
-                                        // WCT is launching an activity, so we need to wait for its
-                                        // lifecycle events.
-                                        return;
-                                    }
-                                    nextTransition.setAllReady();
+                                    setAllReadyIfNeeded(nextTransition, wct);
                                 }
                             });
                     return nextTransition.getToken();
@@ -390,13 +384,53 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         }
     }
 
-    private static boolean hasActivityLaunch(WindowContainerTransaction wct) {
+    private static boolean hasActivityLaunch(@NonNull WindowContainerTransaction wct) {
         for (int i = 0; i < wct.getHierarchyOps().size(); ++i) {
             if (wct.getHierarchyOps().get(i).getType() == HIERARCHY_OP_TYPE_LAUNCH_TASK) {
                 return true;
             }
         }
         return false;
+    }
+
+    private boolean isCreatedTaskFragmentReady(@NonNull WindowContainerTransaction wct) {
+        for (int i = 0; i < wct.getHierarchyOps().size(); ++i) {
+            final WindowContainerTransaction.HierarchyOp op = wct.getHierarchyOps().get(i);
+            if (op.getType() != HIERARCHY_OP_TYPE_ADD_TASK_FRAGMENT_OPERATION
+                    || op.getTaskFragmentOperation().getOpType()
+                    != OP_TYPE_CREATE_TASK_FRAGMENT) {
+                continue;
+            }
+            final IBinder tfToken = op.getTaskFragmentOperation()
+                    .getTaskFragmentCreationParams().getFragmentToken();
+            final TaskFragment taskFragment = getTaskFragment(tfToken);
+            if (taskFragment != null && !taskFragment.isReadyToTransit()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void setAllReadyIfNeeded(@NonNull Transition transition,
+            @NonNull WindowContainerTransaction wct) {
+        // TODO(b/294925498): Remove this once we have accurate ready tracking.
+        if (hasActivityLaunch(wct) && !mService.mRootWindowContainer
+                .allPausedActivitiesComplete()) {
+            // WCT is launching an activity, so we need to wait for its
+            // lifecycle events.
+            return;
+        }
+        if (!isCreatedTaskFragmentReady(wct)) {
+            // When the organizer intercepts a #startActivity, it will create an empty TaskFragment
+            // for that specific incoming starting activity. We don't want to set all ready here,
+            // because we requires that #startActivity to be included in this transition, and NOT be
+            // in its own transition.
+            // TODO(b/232042367): explicitly ensure the #startActivity and this transaction are in
+            // the same transition instead of relying on this possible racing condition.
+            return;
+        }
+
+        transition.setAllReady();
     }
 
     @Override
@@ -529,7 +563,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 }
                 mTransitionController.requestStartTransition(transition, null /* startTask */,
                         remoteTransition, null /* displayChange */);
-                transition.setAllReady();
+                setAllReadyIfNeeded(transition, wct);
             };
             mTransitionController.startCollectOrQueue(transition, doApply);
         } finally {
@@ -1524,14 +1558,12 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 }
                 break;
             }
-            case OP_TYPE_CREATE_TASK_FRAGMENT_DECOR_SURFACE: {
-                final Task task = taskFragment.getTask();
-                task.moveOrCreateDecorSurfaceFor(taskFragment);
+            case OP_TYPE_CREATE_OR_MOVE_TASK_FRAGMENT_DECOR_SURFACE: {
+                taskFragment.getTask().moveOrCreateDecorSurfaceFor(taskFragment);
                 break;
             }
             case OP_TYPE_REMOVE_TASK_FRAGMENT_DECOR_SURFACE: {
-                final Task task = taskFragment.getTask();
-                task.removeDecorSurface();
+                taskFragment.getTask().removeDecorSurface();
                 break;
             }
             case OP_TYPE_SET_DIM_ON_TASK: {
@@ -1543,6 +1575,23 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             case OP_TYPE_SET_MOVE_TO_BOTTOM_IF_CLEAR_WHEN_LAUNCH: {
                 taskFragment.setMoveToBottomIfClearWhenLaunch(
                         operation.isMoveToBottomIfClearWhenLaunch());
+                break;
+            }
+            case OP_TYPE_SET_DECOR_SURFACE_BOOSTED: {
+                if (Flags.activityEmbeddingInteractiveDividerFlag()) {
+                    final SurfaceControl.Transaction clientTransaction =
+                            operation.getSurfaceTransaction();
+                    if (clientTransaction != null) {
+                        // Sanitize the client transaction. sanitize() silently removes invalid
+                        // operations and does not throw or provide signal about whether there are
+                        // any invalid operations.
+                        clientTransaction.sanitize(caller.mPid, caller.mUid);
+                    }
+                    taskFragment.getTask().setDecorSurfaceBoosted(
+                            taskFragment,
+                            operation.getBooleanValue() /* isBoosted */,
+                            clientTransaction);
+                }
                 break;
             }
         }
@@ -1578,19 +1627,6 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             final Throwable exception = new SecurityException(
                     "Only a system organizer can perform OP_TYPE_REORDER_TO_BOTTOM_OF_TASK or "
                             + "OP_TYPE_REORDER_TO_TOP_OF_TASK."
-            );
-            sendTaskFragmentOperationFailure(organizer, errorCallbackToken, taskFragment,
-                    opType, exception);
-            return false;
-        }
-
-        // TODO (b/293654166) remove the decor surface checks once we clear security reviews
-        if ((opType == OP_TYPE_CREATE_TASK_FRAGMENT_DECOR_SURFACE
-                || opType == OP_TYPE_REMOVE_TASK_FRAGMENT_DECOR_SURFACE)
-                && !mTaskFragmentOrganizerController.isSystemOrganizer(organizer.asBinder())) {
-            final Throwable exception = new SecurityException(
-                    "Only a system organizer can perform OP_TYPE_CREATE_TASK_FRAGMENT_DECOR_SURFACE"
-                            + " or OP_TYPE_REMOVE_TASK_FRAGMENT_DECOR_SURFACE."
             );
             sendTaskFragmentOperationFailure(organizer, errorCallbackToken, taskFragment,
                     opType, exception);
@@ -1734,6 +1770,13 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 throw new RuntimeException("Reparenting leaf Tasks is not supported now. " + task);
             }
         } else {
+            if (hop.getToTop() && task.isRootTask()) {
+                final ActivityRecord pipCandidate = task.findEnterPipOnTaskSwitchCandidate(
+                        task.getDisplayArea().getTopRootTask());
+                task.enableEnterPipOnTaskSwitch(pipCandidate, task, null /* toFrontActivity */,
+                        null /* options */);
+            }
+
             task.getParent().positionChildAt(
                     hop.getToTop() ? POSITION_TOP : POSITION_BOTTOM,
                     task, false /* includingParents */);
@@ -1986,6 +2029,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         try {
             callback.onTransactionReady(syncId, t);
         } catch (RemoteException e) {
+            Slog.e(TAG, "Failed to notify transaction (" + syncId + ") ready", e);
             // If there's an exception when trying to send the mergedTransaction to the client, we
             // should immediately apply it here so the transactions aren't lost.
             t.apply();

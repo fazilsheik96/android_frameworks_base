@@ -666,24 +666,18 @@
     <string name="fingerprint_authenticated" msgid="2024862866860283100">"Gjurma e gishtit u vërtetua"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="8867889115112348167">"Fytyra u vërtetua"</string>
     <string name="face_authenticated_confirmation_required" msgid="6872632732508013755">"Fytyra u vërtetua, shtyp \"Konfirmo\""</string>
-    <!-- no translation found for fingerprint_error_hw_not_available (7755729484334001137) -->
-    <skip />
+    <string name="fingerprint_error_hw_not_available" msgid="7755729484334001137">"Hardueri i gjurmës së gishtit nuk ofrohet"</string>
     <string name="fingerprint_error_no_space" msgid="7285481581905967580">"Nuk mund të konfigurohet gjurma e gishtit"</string>
     <string name="fingerprint_error_timeout" msgid="7361192266621252164">"Konfigurimi i gjurmës së gishtit skadoi. Provo përsëri."</string>
-    <!-- no translation found for fingerprint_error_canceled (5541771463159727513) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_user_canceled (2017941773466506863) -->
-    <skip />
+    <string name="fingerprint_error_canceled" msgid="5541771463159727513">"Veprimi i gjurmës së gishtit u anulua"</string>
+    <string name="fingerprint_error_user_canceled" msgid="2017941773466506863">"Veprimi i gjurmës së gishtit u anulua nga përdoruesi"</string>
     <string name="fingerprint_error_lockout" msgid="6626753679019351368">"Shumë përpjekje. Përdor më mirë kyçjen e ekranit."</string>
     <string name="fingerprint_error_lockout_permanent" msgid="9060651300306264843">"Shumë përpjekje. Përdor më mirë kyçjen e ekranit."</string>
     <string name="fingerprint_error_unable_to_process" msgid="2446280592818621224">"Gjurma e gishtit nuk mund të përpunohet. Provo përsëri."</string>
-    <!-- no translation found for fingerprint_error_no_fingerprints (3144806556204061862) -->
-    <skip />
+    <string name="fingerprint_error_no_fingerprints" msgid="3144806556204061862">"Nuk ka asnjë gjurmë gishti të regjistruar"</string>
     <string name="fingerprint_error_hw_not_present" msgid="5898827259419366359">"Kjo pajisje nuk ka sensor të gjurmës së gishtit"</string>
-    <!-- no translation found for fingerprint_error_security_update_required (8440349108169661934) -->
-    <skip />
-    <!-- no translation found for fingerprint_error_bad_calibration (6770614925736183528) -->
-    <skip />
+    <string name="fingerprint_error_security_update_required" msgid="8440349108169661934">"Sensori është çaktivizuar përkohësisht"</string>
+    <string name="fingerprint_error_bad_calibration" msgid="6770614925736183528">"Sensori i gjurmës së gishtit nuk mund të përdoret. Vizito një ofrues të shërbimit të riparimit."</string>
     <string name="fingerprint_error_power_pressed" msgid="5479524500542129414">"Butoni i energjisë u shtyp"</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"Gishti <xliff:g id="FINGERID">%d</xliff:g>"</string>
     <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"Përdor gjurmën e gishtit"</string>
@@ -1992,6 +1986,9 @@
     <string name="work_mode_off_title" msgid="6367463960165135829">"Hiq nga pauza apl. e punës?"</string>
     <string name="work_mode_turn_on" msgid="5316648862401307800">"Hiq nga pauza"</string>
     <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"Urgjenca"</string>
+    <string name="set_up_screen_lock_title" msgid="8346083801616474030">"Cakto një kyçje ekrani"</string>
+    <string name="set_up_screen_lock_action_label" msgid="2687634803649209367">"Cakto kyçjen e ekranit"</string>
+    <string name="private_space_set_up_screen_lock_message" msgid="1109956797005149814">"Për të përdorur hapësirën private, cakto një kyçje ekrani në këtë pajisje"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"Aplikacioni nuk ofrohet"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> nuk ofrohet për momentin."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> nuk ofrohet"</string>
@@ -2396,4 +2393,5 @@
     <string name="satellite_notification_summary" msgid="5207364139430767162">"Mund të dërgosh dhe të marrësh mesazhe pa një rrjet celular apo rrjet Wi-Fi"</string>
     <string name="satellite_notification_open_message" msgid="4149234979688273729">"Hap \"Mesazhet\""</string>
     <string name="satellite_notification_how_it_works" msgid="3132069321977520519">"Si funksionon"</string>
+    <string name="unarchival_session_app_label" msgid="6811856981546348205">"Në pritje..."</string>
 </resources>

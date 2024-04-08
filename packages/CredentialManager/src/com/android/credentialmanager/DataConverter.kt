@@ -20,6 +20,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.credentials.GetCredentialRequest
 import android.credentials.selection.CreateCredentialProviderData
 import android.credentials.selection.DisabledProviderData
 import android.credentials.selection.Entry
@@ -44,6 +45,9 @@ import androidx.credentials.CreateCredentialRequest
 import androidx.credentials.CreateCustomCredentialRequest
 import androidx.credentials.CreatePasswordRequest
 import androidx.credentials.CreatePublicKeyCredentialRequest
+import androidx.credentials.PasswordCredential
+import androidx.credentials.PriorityHints
+import androidx.credentials.PublicKeyCredential
 import androidx.credentials.provider.CreateEntry
 import androidx.credentials.provider.RemoteEntry
 import org.json.JSONObject
@@ -162,6 +166,25 @@ private fun getPackageInfo(
 /** Utility functions for converting CredentialManager data structures to or from UI formats. */
 class GetFlowUtils {
     companion object {
+        fun extractTypePriorityMap(request: GetCredentialRequest): Map<String, Int> {
+            val typePriorityMap = mutableMapOf<String, Int>()
+            request.credentialOptions.forEach {option ->
+                // TODO(b/280085288) - use jetpack conversion method when exposed, rather than
+                // parsing from the raw Bundle
+                val priority = option.candidateQueryData.getInt(
+                        "androidx.credentials.BUNDLE_KEY_TYPE_PRIORITY_VALUE",
+                        when (option.type) {
+                            PasswordCredential.TYPE_PASSWORD_CREDENTIAL ->
+                                PriorityHints.PRIORITY_PASSWORD_OR_SIMILAR
+                            PublicKeyCredential.TYPE_PUBLIC_KEY_CREDENTIAL -> 100
+                            else -> PriorityHints.PRIORITY_DEFAULT
+                        }
+                )
+                typePriorityMap[option.type] = priority
+            }
+            return typePriorityMap
+        }
+
         // Returns the list (potentially empty) of enabled provider.
         fun toProviderList(
             providerDataList: List<GetCredentialProviderData>,
@@ -193,6 +216,9 @@ class GetFlowUtils {
                         null
                     }
                 }
+
+            val typePriorityMap = extractTypePriorityMap(getCredentialRequest)
+
             return com.android.credentialmanager.getflow.RequestDisplayInfo(
                 appName = originName?.ifEmpty { null }
                     ?: getAppLabel(context.packageManager, requestInfo.packageName)
@@ -203,6 +229,7 @@ class GetFlowUtils {
                     // exposed.
                     "androidx.credentials.BUNDLE_KEY_PREFER_IDENTITY_DOC_UI"),
                 preferTopBrandingContent = preferTopBrandingContent,
+                typePriorityMap = typePriorityMap,
             )
         }
     }
@@ -282,6 +309,8 @@ class CreateFlowUtils {
             val appPreferredDefaultProviderId: String? =
                 if (!requestInfo.hasPermissionToOverrideDefault()) null
                 else createCredentialRequestJetpack?.displayInfo?.preferDefaultProvider
+            val typeDisplayIcon = createCredentialRequestJetpack?.displayInfo?.credentialTypeIcon
+                    ?.loadDrawable(context)
             return when (createCredentialRequestJetpack) {
                 is CreatePasswordRequest -> RequestDisplayInfo(
                     createCredentialRequestJetpack.id,
@@ -302,7 +331,6 @@ class CreateFlowUtils {
                     newRequestDisplayInfoFromPasskeyJson(
                         requestJson = createCredentialRequestJetpack.requestJson,
                         appLabel = appLabel,
-                        context = context,
                         preferImmediatelyAvailableCredentials =
                         createCredentialRequestJetpack.preferImmediatelyAvailableCredentials,
                         appPreferredDefaultProviderId = appPreferredDefaultProviderId,
@@ -311,6 +339,7 @@ class CreateFlowUtils {
                         // the passkey type. For now, directly parse it ourselves.
                         isAutoSelectRequest = createCredentialRequest.credentialData.getBoolean(
                             Constants.BUNDLE_KEY_PREFER_IMMEDIATELY_AVAILABLE_CREDENTIALS, false),
+                        typeIcon = context.getDrawable(R.drawable.ic_passkey_24) ?: return null,
                     )
                 }
                 is CreateCustomCredentialRequest -> {
@@ -323,7 +352,7 @@ class CreateFlowUtils {
                         subtitle = displayInfo.userDisplayName?.toString(),
                         type = CredentialType.UNKNOWN,
                         appName = appLabel,
-                        typeIcon = displayInfo.credentialTypeIcon?.loadDrawable(context)
+                        typeIcon = typeDisplayIcon
                             ?: context.getDrawable(R.drawable.ic_other_sign_in_24) ?: return null,
                         preferImmediatelyAvailableCredentials =
                         createCredentialRequestJetpack.preferImmediatelyAvailableCredentials,
@@ -474,6 +503,8 @@ class CreateFlowUtils {
                         it.hasHint("androidx.credentials.provider.createEntry.SLICE_HINT_AUTO_" +
                             "SELECT_ALLOWED")
                     }?.text == "true",
+                    // TODO(b/326243754) : Handle this when the create flow is added; for now the
+                    // create flow does not support biometric values
                 )
                 )
             }
@@ -502,7 +533,7 @@ class CreateFlowUtils {
         private fun newRequestDisplayInfoFromPasskeyJson(
             requestJson: String,
             appLabel: String,
-            context: Context,
+            typeIcon: Drawable,
             preferImmediatelyAvailableCredentials: Boolean,
             appPreferredDefaultProviderId: String?,
             userSetDefaultProviderIds: Set<String>,
@@ -525,7 +556,7 @@ class CreateFlowUtils {
                 displayname,
                 CredentialType.PASSKEY,
                 appLabel,
-                context.getDrawable(R.drawable.ic_passkey_24) ?: return null,
+                typeIcon,
                 preferImmediatelyAvailableCredentials,
                 appPreferredDefaultProviderId,
                 userSetDefaultProviderIds,

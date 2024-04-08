@@ -16,28 +16,35 @@
 
 package com.android.systemui.communal.widgets
 
-import android.appwidget.AppWidgetManager
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.RemoteException
 import android.util.Log
 import android.view.IWindowManager
 import android.view.WindowInsets
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
+import com.android.app.tracing.coroutines.launch
+import com.android.compose.theme.LocalAndroidColorScheme
+import com.android.compose.theme.PlatformTheme
 import com.android.internal.logging.UiEventLogger
 import com.android.systemui.communal.shared.log.CommunalUiEvent
-import com.android.systemui.communal.shared.model.CommunalSceneKey
+import com.android.systemui.communal.shared.model.CommunalScenes
+import com.android.systemui.communal.ui.compose.CommunalHub
 import com.android.systemui.communal.ui.viewmodel.CommunalEditModeViewModel
 import com.android.systemui.communal.util.WidgetPickerIntentUtils.getWidgetExtraFromIntent
-import com.android.systemui.compose.ComposeFacade.setCommunalEditWidgetActivityContent
 import com.android.systemui.log.LogBuffer
 import com.android.systemui.log.core.Logger
 import com.android.systemui.log.dagger.CommunalLog
-import com.android.systemui.res.R
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 /** An Activity for editing the widgets that appear in hub mode. */
 class EditWidgetsActivity
@@ -50,11 +57,8 @@ constructor(
     @CommunalLog logBuffer: LogBuffer,
 ) : ComponentActivity() {
     companion object {
-        private const val EXTRA_IS_PENDING_WIDGET_DRAG = "is_pending_widget_drag"
-        private const val EXTRA_DESIRED_WIDGET_WIDTH = "desired_widget_width"
-        private const val EXTRA_DESIRED_WIDGET_HEIGHT = "desired_widget_height"
-
         private const val TAG = "EditWidgetsActivity"
+        private const val EXTRA_IS_PENDING_WIDGET_DRAG = "is_pending_widget_drag"
         const val EXTRA_PRESELECTED_KEY = "preselected_key"
     }
 
@@ -110,56 +114,42 @@ constructor(
         val preselectedKey = intent.getStringExtra(EXTRA_PRESELECTED_KEY)
         communalViewModel.setSelectedKey(preselectedKey)
 
-        setCommunalEditWidgetActivityContent(
-            activity = this,
-            viewModel = communalViewModel,
-            widgetConfigurator = widgetConfigurator,
-            onOpenWidgetPicker = {
-                val intent =
-                    Intent(Intent.ACTION_MAIN).also { it.addCategory(Intent.CATEGORY_HOME) }
-                packageManager
-                    .resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                    ?.activityInfo
-                    ?.packageName
-                    ?.let { packageName ->
-                        try {
-                            addWidgetActivityLauncher.launch(
-                                Intent(Intent.ACTION_PICK).apply {
-                                    setPackage(packageName)
-                                    putExtra(
-                                        EXTRA_DESIRED_WIDGET_WIDTH,
-                                        resources.getDimensionPixelSize(
-                                            R.dimen.communal_widget_picker_desired_width
-                                        )
-                                    )
-                                    putExtra(
-                                        EXTRA_DESIRED_WIDGET_HEIGHT,
-                                        resources.getDimensionPixelSize(
-                                            R.dimen.communal_widget_picker_desired_height
-                                        )
-                                    )
-                                    putExtra(
-                                        AppWidgetManager.EXTRA_CATEGORY_FILTER,
-                                        communalViewModel.getCommunalWidgetCategories
-                                    )
-                                }
-                            )
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to launch widget picker activity", e)
-                        }
-                    }
-                    ?: run { Log.e(TAG, "Couldn't resolve launcher package name") }
-            },
-            onEditDone = {
-                try {
-                    communalViewModel.onSceneChanged(CommunalSceneKey.Communal)
-                    checkNotNull(windowManagerService).lockNow(/* options */ null)
-                    finish()
-                } catch (e: RemoteException) {
-                    Log.e(TAG, "Couldn't lock the device as WindowManager is dead.")
+        setContent {
+            PlatformTheme {
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize()
+                            .background(LocalAndroidColorScheme.current.outlineVariant),
+                ) {
+                    CommunalHub(
+                        viewModel = communalViewModel,
+                        onOpenWidgetPicker = ::onOpenWidgetPicker,
+                        widgetConfigurator = widgetConfigurator,
+                        onEditDone = ::onEditDone,
+                    )
                 }
             }
-        )
+        }
+    }
+
+    private fun onOpenWidgetPicker() {
+        lifecycleScope.launch {
+            communalViewModel.onOpenWidgetPicker(
+                resources,
+                packageManager,
+                addWidgetActivityLauncher
+            )
+        }
+    }
+
+    private fun onEditDone() {
+        try {
+            communalViewModel.onSceneChanged(CommunalScenes.Communal)
+            checkNotNull(windowManagerService).lockNow(/* options */ null)
+            finish()
+        } catch (e: RemoteException) {
+            Log.e(TAG, "Couldn't lock the device as WindowManager is dead.")
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
