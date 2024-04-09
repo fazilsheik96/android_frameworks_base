@@ -304,7 +304,7 @@ public class PropImitationHooks {
             if (has && sPixelFeatures.stream().anyMatch(name::contains)) {
                 dlog("Blocked system feature " + name + " for Google Photos");
                 has = false;
-            } else if (!has && name.equalsIgnoreCase(FEATURE_NEXUS_PRELOAD)) {
+            } else if (!has && SystemProperties.getBoolean(spoofGPhotos, false) && name.equalsIgnoreCase(FEATURE_NEXUS_PRELOAD)) {
                 dlog("Enabled system feature " + name + " for Google Photos");
                 has = true;
             }
