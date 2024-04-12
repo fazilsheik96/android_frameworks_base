@@ -115,6 +115,7 @@ open class QSTileViewImpl @JvmOverloads constructor(
     protected lateinit var sideView: ViewGroup
     private lateinit var customDrawableView: ImageView
     private lateinit var chevronView: ImageView
+    private lateinit var appArrowView: ImageView
     private var mQsLogger: QSLogger? = null
 
     /**
@@ -208,6 +209,10 @@ open class QSTileViewImpl @JvmOverloads constructor(
             height = iconSize
             width = iconSize
         }
+        (appArrowView.layoutParams as MarginLayoutParams).apply {
+            height = iconSize
+            width = iconSize
+        }
 
         val padding = resources.getDimensionPixelSize(R.dimen.qs_tile_padding)
         val startPadding = resources.getDimensionPixelSize(R.dimen.qs_tile_start_padding)
@@ -257,6 +262,7 @@ open class QSTileViewImpl @JvmOverloads constructor(
                 .inflate(R.layout.qs_tile_side_icon, this, false) as ViewGroup
         customDrawableView = sideView.requireViewById(R.id.customDrawable)
         chevronView = sideView.requireViewById(R.id.chevron)
+        appArrowView = sideView.requireViewById(R.id.appArrow)
         setChevronColor(getChevronColorForState(QSTile.State.DEFAULT_STATE))
         addView(sideView)
     }
@@ -578,6 +584,7 @@ open class QSTileViewImpl @JvmOverloads constructor(
 
     private fun setChevronColor(color: Int) {
         chevronView.imageTintList = ColorStateList.valueOf(color)
+        appArrowView.imageTintList = ColorStateList.valueOf(color)
     }
 
     private fun loadSideViewDrawableIfNecessary(state: QSTile.State) {
@@ -585,14 +592,18 @@ open class QSTileViewImpl @JvmOverloads constructor(
             customDrawableView.setImageDrawable(state.sideViewCustomDrawable)
             customDrawableView.visibility = VISIBLE
             chevronView.visibility = GONE
+            appArrowView.visibility = GONE
         } else if (state !is BooleanState || state.forceExpandIcon) {
+            val isApp = state.isAppAdded
             customDrawableView.setImageDrawable(null)
             customDrawableView.visibility = GONE
-            chevronView.visibility = VISIBLE
+            chevronView.visibility = if (isApp) GONE else VISIBLE
+            appArrowView.visibility = if (isApp) VISIBLE else GONE
         } else {
             customDrawableView.setImageDrawable(null)
             customDrawableView.visibility = GONE
             chevronView.visibility = GONE
+            appArrowView.visibility = GONE
         }
     }
 
