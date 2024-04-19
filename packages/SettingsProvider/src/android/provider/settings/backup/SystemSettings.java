@@ -103,6 +103,9 @@ public class SystemSettings {
         Settings.System.SCREEN_FLASH_NOTIFICATION_COLOR,
         Settings.System.RINGTONE_VIBRATION_PATTERN,
         Settings.System.NOTIFICATION_VIBRATION_PATTERN,
-        Settings.System.BACK_GESTURE_HEIGHT
+        Settings.System.BACK_GESTURE_HEIGHT,
+        Settings.System.LOCKSCREEN_WEATHER_PROVIDER,
+        Settings.System.LOCKSCREEN_WEATHER_LOCATION,
+        Settings.System.LOCKSCREEN_WEATHER_TEXT
     };
 }

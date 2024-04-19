@@ -234,5 +234,8 @@ public class SystemSettingsValidators {
         VALIDATORS.put(System.DOUBLE_TAP_SLEEP_GESTURE, BOOLEAN_VALIDATOR);
         VALIDATORS.put(System.BACK_GESTURE_HEIGHT, new InclusiveIntegerRangeValidator(0, 5));
         VALIDATORS.put(System.CLICK_PARTIAL_SCREENSHOT, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(System.LOCKSCREEN_WEATHER_PROVIDER, new InclusiveIntegerRangeValidator(0, 2));
+        VALIDATORS.put(System.LOCKSCREEN_WEATHER_LOCATION, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(System.LOCKSCREEN_WEATHER_TEXT, BOOLEAN_VALIDATOR);
     }
 }
