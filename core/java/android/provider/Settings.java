@@ -5919,6 +5919,16 @@ public final class Settings {
         public static final String DOUBLE_TAP_SLEEP_GESTURE = "double_tap_sleep_gesture";
 
         /**
+         * Provider for lockscreen weather
+         * Currently supported values:
+         * {@link #LOCKSCREEN_WEATHER_PROVIDER_NONE}
+         * {@link #LOCKSCREEN_WEATHER_PROVIDER_DEFAULT}
+         * {@link #LOCKSCREEN_WEATHER_PROVIDER_OMNI}
+         * @hide
+         */
+        public static final String LOCKSCREEN_WEATHER_PROVIDER = "lockscreen_weather_provider";
+
+        /**
          * IMPORTANT: If you add a new public settings you also have to add it to
          * PUBLIC_SETTINGS below. If the new setting is hidden you have to add
          * it to PRIVATE_SETTINGS below. Also add a validator that can validate
@@ -6149,16 +6159,34 @@ public final class Settings {
         public static final String BACK_GESTURE_HEIGHT = "back_gesture_height";
 
         /**
+         * Value for {@link #LOCKSCREEN_WEATHER_PROVIDER}
+         * default - aka smartspace / at a glance
          * @hide
          */
-        public static final String LOCKSCREEN_WEATHER_ENABLED = "lockscreen_weather_enabled";
+        public static final int LOCKSCREEN_WEATHER_PROVIDER_NONE = 0;
 
         /**
+         * Value for {@link #LOCKSCREEN_WEATHER_PROVIDER}
+         * default - aka smartspace / at a glance
+         * @hide
+         */
+        public static final int LOCKSCREEN_WEATHER_PROVIDER_DEFAULT = 1;
+
+        /**
+         * Value for {@link #LOCKSCREEN_WEATHER_PROVIDER}
+         * OmniJaws
+         * @hide
+         */
+        public static final int LOCKSCREEN_WEATHER_PROVIDER_OMNI = 2;
+
+        /**
+         * Location for OmniJaws
          * @hide
          */
         public static final String LOCKSCREEN_WEATHER_LOCATION = "lockscreen_weather_location";
 
         /**
+         * Text for OmniJaws
          * @hide
          */
         public static final String LOCKSCREEN_WEATHER_TEXT = "lockscreen_weather_text";

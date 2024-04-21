@@ -108,6 +108,9 @@ public class SystemSettings {
         Settings.System.NETWORK_TRAFFIC_STATE,
         Settings.System.NETWORK_TRAFFIC_AUTOHIDE_THRESHOLD,
         Settings.System.OMNI_ADVANCED_REBOOT,
-        Settings.System.BACK_GESTURE_HEIGHT
+        Settings.System.BACK_GESTURE_HEIGHT,
+        Settings.System.LOCKSCREEN_WEATHER_PROVIDER,
+        Settings.System.LOCKSCREEN_WEATHER_LOCATION,
+        Settings.System.LOCKSCREEN_WEATHER_TEXT
     };
 }

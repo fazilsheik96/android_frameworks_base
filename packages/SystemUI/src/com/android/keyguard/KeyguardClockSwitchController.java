@@ -26,6 +26,7 @@ import static com.android.systemui.util.kotlin.JavaAdapterKt.collectFlow;
 
 import android.annotation.Nullable;
 import android.database.ContentObserver;
+import android.net.Uri;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -109,7 +110,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private final KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
 
     private CurrentWeatherView mCurrentWeatherView;
-    private boolean mOmniWeather;
+    private int mWeatherProvider;
 
     private boolean mShownOnSecondaryDisplay = false;
     private boolean mOnlyClock = false;
@@ -135,16 +136,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     };
     private final ContentObserver mShowWeatherObserver = new ContentObserver(null) {
         @Override
-        public void onChange(boolean change) {
-            if (!mOmniWeather) {
-                setWeatherVisibility();
-            }
-        }
-    };
-    private final ContentObserver mOmniWeatherObserver = new ContentObserver(null) {
-        @Override
-        public void onChange(boolean change) {
-                updateOmniWeather();
+        public void onChange(boolean change, Uri uri) {
+            updateWeatherView();
         }
     };
 
@@ -294,14 +287,12 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
                 UserHandle.USER_ALL
         );
 
-        mBgExecutor.execute(() -> {
-            mSystemSettings.registerContentObserverForUser(
-                    Settings.System.LOCKSCREEN_WEATHER_ENABLED,
-                    false, /* notifyForDescendants */
-                    mOmniWeatherObserver,
-                    UserHandle.USER_ALL
-            );
-        });
+        mSystemSettings.registerContentObserverForUser(
+                Settings.System.LOCKSCREEN_WEATHER_PROVIDER,
+                false, /* notifyForDescendants */
+                mShowWeatherObserver,
+                UserHandle.USER_ALL
+        );
 
         mSecureSettings.registerContentObserverForUser(
                 Settings.Secure.LOCK_SCREEN_WEATHER_ENABLED,
@@ -310,7 +301,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
                 UserHandle.USER_ALL
         );
         updateDoubleLineClock();
-        updateOmniWeather();
+        updateWeatherView();
 
         mKeyguardUnlockAnimationController.addKeyguardUnlockAnimationListener(
                 mKeyguardUnlockAnimationListener);
@@ -323,16 +314,17 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
             removeViewsFromStatusArea();
 
             View ksv = mView.findViewById(R.id.keyguard_slice_view);
-            int viewIndex = mStatusArea.indexOfChild(ksv);
-            ksv.setVisibility(mOmniWeather ? View.VISIBLE : View.GONE);
+            ksv.setVisibility(mWeatherProvider == Settings.System.LOCKSCREEN_WEATHER_PROVIDER_OMNI
+                    ? View.VISIBLE : View.GONE);
 
-            if (!mOmniWeather) {
-                addSmartspaceView();
-                if (mSmartspaceController.isDateWeatherDecoupled() && !migrateClocksToBlueprint()) {
-                    addDateWeatherView();
-                    setDateWeatherVisibility();
-                    setWeatherVisibility();
-                }
+            if (mWeatherProvider != Settings.System.LOCKSCREEN_WEATHER_PROVIDER_DEFAULT)
+                return;
+
+            addSmartspaceView();
+            if (mSmartspaceController.isDateWeatherDecoupled()) {
+                addDateWeatherView();
+                setDateWeatherVisibility();
+                setWeatherVisibility();
             }
         }
     }
@@ -347,18 +339,19 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         mClockEventController.unregisterListeners();
         setClock(null);
 
-        mBgExecutor.execute(() -> {
-            mSystemSettings.unregisterContentObserver(mOmniWeatherObserver);
-        });
-
         mKeyguardUnlockAnimationController.removeKeyguardUnlockAnimationListener(
                 mKeyguardUnlockAnimationListener);
     }
 
     public void updateWeatherView() {
+        mWeatherProvider = mSystemSettings.getIntForUser(
+                Settings.System.LOCKSCREEN_WEATHER_PROVIDER,
+                Settings.System.LOCKSCREEN_WEATHER_PROVIDER_DEFAULT,
+                UserHandle.USER_CURRENT);
+        final boolean isOmni = mWeatherProvider == Settings.System.LOCKSCREEN_WEATHER_PROVIDER_OMNI;
         mUiExecutor.execute(() -> {
             if (mCurrentWeatherView != null) {
-                if (mOmniWeather && !mOnlyClock) {
+                if (isOmni && !mOnlyClock) {
                     mCurrentWeatherView.enableUpdates();
                     mCurrentWeatherView.setVisibility(View.VISIBLE);
                 } else {
@@ -590,13 +583,6 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         }
     }
 
-    private void updateOmniWeather() {
-        mOmniWeather = mSystemSettings.getIntForUser(
-            Settings.System.LOCKSCREEN_WEATHER_ENABLED, 0,
-            UserHandle.USER_CURRENT) != 0;
-        setWeatherVisibility();
-    }
-
     private void setDateWeatherVisibility() {
         if (mDateWeatherView != null) {
             mUiExecutor.execute(() -> {
@@ -662,8 +648,12 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
             return false;
         }
 
+        final boolean shouldShow =
+                mWeatherProvider != Settings.System.LOCKSCREEN_WEATHER_PROVIDER_OMNI &&
+                mWeatherProvider != Settings.System.LOCKSCREEN_WEATHER_PROVIDER_NONE;
+
         return ((mCurrentClockSize == LARGE) ? clock.getLargeClock() : clock.getSmallClock())
-                .getConfig().getHasCustomWeatherDataDisplay() && !mOmniWeather;
+                .getConfig().getHasCustomWeatherDataDisplay() && shouldShow;
     }
 
     private void removeViewsFromStatusArea() {
