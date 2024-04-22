@@ -136,6 +136,8 @@ object MobileIconBinder {
                                 mobileGroupView,
                                 dotView,
                             )
+
+                            view.requestLayout()
                         }
                     }
 
