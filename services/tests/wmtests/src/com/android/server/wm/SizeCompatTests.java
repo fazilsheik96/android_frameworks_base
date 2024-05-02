@@ -123,12 +123,14 @@ import com.android.internal.policy.SystemBarUtils;
 import com.android.internal.statusbar.LetterboxDetails;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.wm.DeviceStateController.DeviceState;
+import com.android.window.flags.Flags;
 
 import libcore.junit.util.compat.CoreCompatChangeRule.DisableCompatChanges;
 import libcore.junit.util.compat.CoreCompatChangeRule.EnableCompatChanges;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
@@ -703,6 +705,11 @@ public class SizeCompatTests extends WindowTestsBase {
 
     @Test
     public void testFixedAspectRatioBoundsWithDecorInSquareDisplay() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         final int notchHeight = 100;
         setUpApp(new TestDisplayContent.Builder(mAtm, 600, 800).setNotch(notchHeight).build());
 
@@ -922,6 +929,17 @@ public class SizeCompatTests extends WindowTestsBase {
     }
 
     @Test
+    public void testIsLetterboxed_activityFromBubble_returnsFalse() {
+        setUpDisplaySizeWithApp(1000, 2500);
+        mActivity.mDisplayContent.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+        spyOn(mActivity);
+        doReturn(true).when(mActivity).getLaunchedFromBubble();
+        prepareUnresizable(mActivity, SCREEN_ORIENTATION_LANDSCAPE);
+
+        assertFalse(mActivity.areBoundsLetterboxed());
+    }
+
+    @Test
     public void testAspectRatioMatchParentBoundsAndImeAttachable() {
         setUpApp(new TestDisplayContent.Builder(mAtm, 1000, 2000).build());
         prepareUnresizable(mActivity, 2f /* maxAspect */, SCREEN_ORIENTATION_UNSPECIFIED);
@@ -944,6 +962,11 @@ public class SizeCompatTests extends WindowTestsBase {
 
     @Test
     public void testMoveToDifferentOrientationDisplay() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         setUpDisplaySizeWithApp(1000, 2500);
         prepareUnresizable(mActivity, -1.f /* maxAspect */, SCREEN_ORIENTATION_PORTRAIT);
         assertFitted();
@@ -991,6 +1014,11 @@ public class SizeCompatTests extends WindowTestsBase {
 
     @Test
     public void testFixedOrientationRotateCutoutDisplay() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         // Create a display with a notch/cutout
         final int notchHeight = 60;
         final int width = 1000;
@@ -1587,6 +1615,11 @@ public class SizeCompatTests extends WindowTestsBase {
     @EnableCompatChanges({ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO,
             ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_MEDIUM})
     public void testOverrideMinAspectRatioLowerThanManifest() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         final DisplayContent display = new TestDisplayContent.Builder(mAtm, 1400, 1800)
                 .setNotch(200).setSystemDecorations(true).build();
         mTask = new TaskBuilder(mSupervisor).setDisplay(display).build();
@@ -1934,6 +1967,11 @@ public class SizeCompatTests extends WindowTestsBase {
 
     @Test
     public void testLaunchWithFixedRotationTransform() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         final int dw = 1000;
         final int dh = 2500;
         final int notchHeight = 200;
@@ -2323,6 +2361,92 @@ public class SizeCompatTests extends WindowTestsBase {
         assertEquals(WINDOWING_MODE_MULTI_WINDOW, mActivity.getWindowingMode());
         // Checking that there is no size compat mode.
         assertFitted();
+    }
+
+    @Test
+    public void testUserOverrideFullscreenForLandscapeDisplay() {
+        final int displayWidth = 1600;
+        final int displayHeight = 1400;
+        setUpDisplaySizeWithApp(displayWidth, displayHeight);
+        mActivity.mDisplayContent.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+        spyOn(mActivity.mWmService.mLetterboxConfiguration);
+        doReturn(true).when(mActivity.mWmService.mLetterboxConfiguration)
+                .isUserAppAspectRatioFullscreenEnabled();
+
+        // Set user aspect ratio override
+        spyOn(mActivity.mLetterboxUiController);
+        doReturn(USER_MIN_ASPECT_RATIO_FULLSCREEN).when(mActivity.mLetterboxUiController)
+                .getUserMinAspectRatioOverrideCode();
+
+        prepareMinAspectRatio(mActivity, 16 / 9f, SCREEN_ORIENTATION_PORTRAIT);
+
+        final Rect bounds = mActivity.getBounds();
+
+        // bounds should be fullscreen
+        assertEquals(displayHeight, bounds.height());
+        assertEquals(displayWidth, bounds.width());
+    }
+
+    @Test
+    public void testUserOverrideFullscreenForPortraitDisplay() {
+        final int displayWidth = 1400;
+        final int displayHeight = 1600;
+        setUpDisplaySizeWithApp(displayWidth, displayHeight);
+        mActivity.mDisplayContent.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+        spyOn(mActivity.mWmService.mLetterboxConfiguration);
+        doReturn(true).when(mActivity.mWmService.mLetterboxConfiguration)
+                .isUserAppAspectRatioFullscreenEnabled();
+
+        // Set user aspect ratio override
+        spyOn(mActivity.mLetterboxUiController);
+        doReturn(USER_MIN_ASPECT_RATIO_FULLSCREEN).when(mActivity.mLetterboxUiController)
+                .getUserMinAspectRatioOverrideCode();
+
+        prepareMinAspectRatio(mActivity, 16 / 9f, SCREEN_ORIENTATION_LANDSCAPE);
+
+        final Rect bounds = mActivity.getBounds();
+
+        // bounds should be fullscreen
+        assertEquals(displayHeight, bounds.height());
+        assertEquals(displayWidth, bounds.width());
+    }
+
+    @Test
+    public void testSystemFullscreenOverrideForLandscapeDisplay() {
+        final int displayWidth = 1600;
+        final int displayHeight = 1400;
+        setUpDisplaySizeWithApp(displayWidth, displayHeight);
+        mActivity.mDisplayContent.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+        spyOn(mActivity.mLetterboxUiController);
+        doReturn(true).when(mActivity.mLetterboxUiController)
+                .isSystemOverrideToFullscreenEnabled();
+
+        prepareMinAspectRatio(mActivity, 16 / 9f, SCREEN_ORIENTATION_PORTRAIT);
+
+        final Rect bounds = mActivity.getBounds();
+
+        // bounds should be fullscreen
+        assertEquals(displayHeight, bounds.height());
+        assertEquals(displayWidth, bounds.width());
+    }
+
+    @Test
+    public void testSystemFullscreenOverrideForPortraitDisplay() {
+        final int displayWidth = 1400;
+        final int displayHeight = 1600;
+        setUpDisplaySizeWithApp(displayWidth, displayHeight);
+        mActivity.mDisplayContent.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+        spyOn(mActivity.mLetterboxUiController);
+        doReturn(true).when(mActivity.mLetterboxUiController)
+                .isSystemOverrideToFullscreenEnabled();
+
+        prepareMinAspectRatio(mActivity, 16 / 9f, SCREEN_ORIENTATION_LANDSCAPE);
+
+        final Rect bounds = mActivity.getBounds();
+
+        // bounds should be fullscreen
+        assertEquals(displayHeight, bounds.height());
+        assertEquals(displayWidth, bounds.width());
     }
 
     @Test
@@ -3757,6 +3881,11 @@ public class SizeCompatTests extends WindowTestsBase {
 
     @Test
     public void testLetterboxDetailsForStatusBar_letterboxNotOverlappingStatusBar() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         // Align to center so that we don't overlap with the status bar
         mAtm.mWindowManager.mLetterboxConfiguration.setLetterboxVerticalPositionMultiplier(0.5f);
         final DisplayContent display = new TestDisplayContent.Builder(mAtm, 1000, 2800)
@@ -4014,31 +4143,6 @@ public class SizeCompatTests extends WindowTestsBase {
     }
 
     @Test
-    public void testUpdateResolvedBoundsHorizontalPosition_invalidMultiplier_defaultToCenter() {
-        // Display configured as (2800, 1400).
-
-        // Below 0.0.
-        assertHorizontalPositionForDifferentDisplayConfigsForPortraitActivity(
-                /* letterboxHorizontalPositionMultiplier */ -1.0f,
-                // At launch.
-                /* fixedOrientationLetterbox */ new Rect(1050, 0, 1750, 1400),
-                // After 90 degree rotation.
-                /* sizeCompatUnscaled */ new Rect(350, 0, 1050, 1400),
-                // After the display is resized to (700, 1400).
-                /* sizeCompatScaled */ new Rect(525, 0, 875, 700));
-
-        // Above 1.0
-        assertHorizontalPositionForDifferentDisplayConfigsForPortraitActivity(
-                /* letterboxHorizontalPositionMultiplier */ 2.0f,
-                // At launch.
-                /* fixedOrientationLetterbox */ new Rect(1050, 0, 1750, 1400),
-                // After 90 degree rotation.
-                /* sizeCompatUnscaled */ new Rect(350, 0, 1050, 1400),
-                // After the display is resized to (700, 1400).
-                /* sizeCompatScaled */ new Rect(525, 0, 875, 700));
-    }
-
-    @Test
     public void testUpdateResolvedBoundsHorizontalPosition_right() {
         // Display configured as (2800, 1400).
         assertHorizontalPositionForDifferentDisplayConfigsForPortraitActivity(
@@ -4075,7 +4179,13 @@ public class SizeCompatTests extends WindowTestsBase {
     }
 
     @Test
+    @Ignore // TODO(b/330888878): fix test in main
     public void testPortraitCloseToSquareDisplayWithTaskbar_notLetterboxed() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         // Set up portrait close to square display
         setUpDisplaySizeWithApp(2200, 2280);
         final DisplayContent display = mActivity.mDisplayContent;
@@ -4102,6 +4212,11 @@ public class SizeCompatTests extends WindowTestsBase {
 
     @Test
     public void testApplyAspectRatio_activityAlignWithParentAppVertical() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         // The display's app bounds will be (0, 100, 1000, 2350)
         final DisplayContent display = new TestDisplayContent.Builder(mAtm, 1000, 2500)
                 .setCanRotate(false)
@@ -4116,6 +4231,11 @@ public class SizeCompatTests extends WindowTestsBase {
     }
     @Test
     public void testApplyAspectRatio_activityCannotAlignWithParentAppVertical() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         // The display's app bounds will be (0, 100, 1000, 2150)
         final DisplayContent display = new TestDisplayContent.Builder(mAtm, 1000, 2300)
                 .setCanRotate(false)
@@ -4131,6 +4251,11 @@ public class SizeCompatTests extends WindowTestsBase {
 
     @Test
     public void testApplyAspectRatio_activityAlignWithParentAppHorizontal() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         // The display's app bounds will be (100, 0, 2350, 1000)
         final DisplayContent display = new TestDisplayContent.Builder(mAtm, 2500, 1000)
                 .setCanRotate(false)
@@ -4145,6 +4270,11 @@ public class SizeCompatTests extends WindowTestsBase {
     }
     @Test
     public void testApplyAspectRatio_activityCannotAlignWithParentAppHorizontal() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         // The display's app bounds will be (100, 0, 2150, 1000)
         final DisplayContent display = new TestDisplayContent.Builder(mAtm, 2300, 1000)
                 .setCanRotate(false)
@@ -4234,31 +4364,6 @@ public class SizeCompatTests extends WindowTestsBase {
         // Display configured as (1400, 2800).
         assertVerticalPositionForDifferentDisplayConfigsForLandscapeActivity(
                 /* letterboxVerticalPositionMultiplier */ 0.5f,
-                // At launch.
-                /* fixedOrientationLetterbox */ new Rect(0, 1050, 1400, 1750),
-                // After 90 degree rotation.
-                /* sizeCompatUnscaled */ new Rect(700, 350, 2100, 1050),
-                // After the display is resized to (1400, 700).
-                /* sizeCompatScaled */ new Rect(0, 525, 700, 875));
-    }
-
-    @Test
-    public void testUpdateResolvedBoundsVerticalPosition_invalidMultiplier_defaultToCenter() {
-        // Display configured as (1400, 2800).
-
-        // Below 0.0.
-        assertVerticalPositionForDifferentDisplayConfigsForLandscapeActivity(
-                /* letterboxVerticalPositionMultiplier */ -1.0f,
-                // At launch.
-                /* fixedOrientationLetterbox */ new Rect(0, 1050, 1400, 1750),
-                // After 90 degree rotation.
-                /* sizeCompatUnscaled */ new Rect(700, 350, 2100, 1050),
-                // After the display is resized to (1400, 700).
-                /* sizeCompatScaled */ new Rect(0, 525, 700, 875));
-
-        // Above 1.0
-        assertVerticalPositionForDifferentDisplayConfigsForLandscapeActivity(
-                /* letterboxVerticalPositionMultiplier */ 2.0f,
                 // At launch.
                 /* fixedOrientationLetterbox */ new Rect(0, 1050, 1400, 1750),
                 // After 90 degree rotation.
@@ -4393,6 +4498,11 @@ public class SizeCompatTests extends WindowTestsBase {
 
     @Test
     public void testUpdateResolvedBoundsPosition_alignToTop() {
+        if (Flags.insetsDecoupledConfiguration()) {
+            // TODO (b/151861875): Re-enable it. This is disabled temporarily because the config
+            //  bounds no longer contains display cutout.
+            return;
+        }
         final int notchHeight = 100;
         final DisplayContent display = new TestDisplayContent.Builder(mAtm, 1000, 2800)
                 .setNotch(notchHeight)

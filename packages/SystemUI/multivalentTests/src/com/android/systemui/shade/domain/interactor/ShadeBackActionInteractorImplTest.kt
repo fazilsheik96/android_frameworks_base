@@ -22,10 +22,9 @@ import androidx.test.filters.SmallTest
 import com.android.compose.animation.scene.ObservableTransitionState
 import com.android.compose.animation.scene.SceneKey
 import com.android.systemui.SysuiTestCase
-import com.android.systemui.deviceentry.data.repository.fakeDeviceEntryRepository
+import com.android.systemui.flags.EnableSceneContainer
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.scene.domain.interactor.sceneInteractor
-import com.android.systemui.scene.shared.flag.fakeSceneContainerFlags
 import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.shared.recents.utilities.Utilities
 import com.android.systemui.testKosmos
@@ -44,11 +43,11 @@ import org.junit.runner.RunWith
 @SmallTest
 @RunWith(AndroidJUnit4::class)
 @Ignore("b/328827631")
+@EnableSceneContainer
 class ShadeBackActionInteractorImplTest : SysuiTestCase() {
-    val kosmos = testKosmos().apply { fakeSceneContainerFlags.enabled = true }
+    val kosmos = testKosmos()
     val testScope = kosmos.testScope
     val sceneInteractor = kosmos.sceneInteractor
-    val deviceEntryRepository = kosmos.fakeDeviceEntryRepository
     val underTest = kosmos.shadeBackActionInteractor
 
     @Before
@@ -78,7 +77,6 @@ class ShadeBackActionInteractorImplTest : SysuiTestCase() {
     @Test
     fun animateCollapseQs_fullyCollapse_locked() =
         testScope.runTest {
-            deviceEntryRepository.setUnlocked(false)
             setScene(Scenes.QuickSettings)
             underTest.animateCollapseQs(true)
             runCurrent()
@@ -95,7 +93,6 @@ class ShadeBackActionInteractorImplTest : SysuiTestCase() {
         }
 
     private fun enterDevice() {
-        deviceEntryRepository.setUnlocked(true)
         testScope.runCurrent()
         setScene(Scenes.Gone)
     }

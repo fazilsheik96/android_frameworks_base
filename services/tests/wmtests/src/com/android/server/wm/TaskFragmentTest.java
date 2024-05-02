@@ -22,6 +22,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
@@ -752,6 +753,21 @@ public class TaskFragmentTest extends WindowTestsBase {
     }
 
     @Test
+    public void testGetOrientation_reportOverrideOrientation() {
+        final Task task = createTask(mDisplayContent);
+        final TaskFragment tf = createTaskFragmentWithActivity(task);
+        final ActivityRecord activity = tf.getTopMostActivity();
+        tf.setOverrideOrientation(SCREEN_ORIENTATION_BEHIND);
+
+        // Should report the override orientation
+        assertEquals(SCREEN_ORIENTATION_BEHIND, tf.getOrientation(SCREEN_ORIENTATION_UNSET));
+
+        // Should report the override orientation even if the activity requests a different value
+        activity.setRequestedOrientation(SCREEN_ORIENTATION_LANDSCAPE);
+        assertEquals(SCREEN_ORIENTATION_BEHIND, tf.getOrientation(SCREEN_ORIENTATION_UNSET));
+    }
+
+    @Test
     public void testUpdateImeParentForActivityEmbedding() {
         // Setup two activities in ActivityEmbedding.
         final Task task = createTask(mDisplayContent);
@@ -896,6 +912,32 @@ public class TaskFragmentTest extends WindowTestsBase {
             doReturn(3L).when(appLeftTop).getLastWindowCreateTime();
             assertFalse(mWm.moveFocusToAdjacentEmbeddedWindow(winLeftTop));
         }
+    }
+
+    @Test
+    public void testSetResumedActivity() {
+        // Setup two activities in ActivityEmbedding split.
+        final Task task = createTask(mDisplayContent);
+        final TaskFragment taskFragmentLeft = new TaskFragmentBuilder(mAtm)
+                .setParentTask(task)
+                .createActivityCount(1)
+                .build();
+        final TaskFragment taskFragmentRight = new TaskFragmentBuilder(mAtm)
+                .setParentTask(task)
+                .createActivityCount(1)
+                .build();
+        taskFragmentRight.setAdjacentTaskFragment(taskFragmentLeft);
+        taskFragmentLeft.setAdjacentTaskFragment(taskFragmentRight);
+        final ActivityRecord appLeftTop = taskFragmentLeft.getTopMostActivity();
+        final ActivityRecord appRightTop = taskFragmentRight.getTopMostActivity();
+
+        // Ensure the focused app is updated when the right activity resumed.
+        taskFragmentRight.setResumedActivity(appRightTop, "test");
+        assertEquals(appRightTop, task.getDisplayContent().mFocusedApp);
+
+        // Ensure the focused app is updated when the left activity resumed.
+        taskFragmentLeft.setResumedActivity(appLeftTop, "test");
+        assertEquals(appLeftTop, task.getDisplayContent().mFocusedApp);
     }
 
     private WindowState createAppWindow(ActivityRecord app, String name) {

@@ -17,26 +17,52 @@
 
 package com.android.systemui.keyguard.domain.interactor
 
+import android.util.Log
 import com.android.keyguard.ClockEventController
+import com.android.keyguard.KeyguardClockSwitch
 import com.android.keyguard.KeyguardClockSwitch.ClockSize
+import com.android.keyguard.KeyguardClockSwitch.LARGE
+import com.android.keyguard.KeyguardClockSwitch.SMALL
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.keyguard.data.repository.KeyguardClockRepository
+import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.shared.model.SettingsClockSize
+import com.android.systemui.media.controls.domain.pipeline.interactor.MediaCarouselInteractor
 import com.android.systemui.plugins.clocks.ClockController
 import com.android.systemui.plugins.clocks.ClockId
+import com.android.systemui.scene.shared.flag.SceneContainerFlag
+import com.android.systemui.shade.domain.interactor.ShadeInteractor
+import com.android.systemui.shade.shared.model.ShadeMode
+import com.android.systemui.statusbar.notification.domain.interactor.ActiveNotificationsInteractor
+import com.android.systemui.statusbar.notification.domain.interactor.HeadsUpNotificationInteractor
+import com.android.systemui.util.kotlin.combine
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 private val TAG = KeyguardClockInteractor::class.simpleName
-/** Manages keyguard clock for the lockscreen root view. */
-/** Encapsulates business-logic related to the keyguard clock. */
+/** Manages and encapsulates the clock components of the lockscreen root view. */
 @SysUISingleton
 class KeyguardClockInteractor
 @Inject
 constructor(
+    mediaCarouselInteractor: MediaCarouselInteractor,
+    activeNotificationsInteractor: ActiveNotificationsInteractor,
+    shadeInteractor: ShadeInteractor,
+    keyguardInteractor: KeyguardInteractor,
+    keyguardTransitionInteractor: KeyguardTransitionInteractor,
+    headsUpNotificationInteractor: HeadsUpNotificationInteractor,
+    @Application private val applicationScope: CoroutineScope,
     private val keyguardClockRepository: KeyguardClockRepository,
 ) {
+    private val isOnAod: Flow<Boolean> =
+        keyguardTransitionInteractor.currentKeyguardState.map { it == KeyguardState.AOD }
 
     val selectedClockSize: StateFlow<SettingsClockSize> = keyguardClockRepository.selectedClockSize
 
@@ -46,15 +72,85 @@ constructor(
 
     val previewClock: Flow<ClockController> = keyguardClockRepository.previewClock
 
+    val clockEventController: ClockEventController by keyguardClockRepository::clockEventController
+
     var clock: ClockController? by keyguardClockRepository.clockEventController::clock
 
-    val clockSize: StateFlow<Int> = keyguardClockRepository.clockSize
+    // TODO (b/333389512): Convert this into a more readable enum.
+    val clockSize: StateFlow<Int> =
+        if (SceneContainerFlag.isEnabled) {
+            combine(
+                    shadeInteractor.shadeMode,
+                    activeNotificationsInteractor.areAnyNotificationsPresent,
+                    mediaCarouselInteractor.hasActiveMediaOrRecommendation,
+                    keyguardInteractor.isDozing,
+                    isOnAod,
+                ) { shadeMode, hasNotifs, hasMedia, isDozing, isOnAod ->
+                    return@combine when {
+                        keyguardClockRepository.shouldForceSmallClock && !isOnAod -> SMALL
+                        shadeMode == ShadeMode.Single && (hasNotifs || hasMedia) -> SMALL
+                        shadeMode == ShadeMode.Single -> LARGE
+                        hasMedia && !isDozing -> SMALL
+                        else -> LARGE
+                    }
+                }
+                .stateIn(
+                    scope = applicationScope,
+                    started = SharingStarted.WhileSubscribed(),
+                    initialValue = LARGE
+                )
+        } else {
+            SceneContainerFlag.assertInLegacyMode()
+            keyguardClockRepository.clockSize
+        }
+
+    val clockShouldBeCentered: Flow<Boolean> =
+        if (SceneContainerFlag.isEnabled) {
+            combine(
+                shadeInteractor.shadeMode,
+                activeNotificationsInteractor.areAnyNotificationsPresent,
+                keyguardInteractor.isActiveDreamLockscreenHosted,
+                isOnAod,
+                headsUpNotificationInteractor.isHeadsUpOrAnimatingAway,
+                keyguardInteractor.isDozing,
+            ) {
+                shadeMode,
+                areAnyNotificationsPresent,
+                isActiveDreamLockscreenHosted,
+                isOnAod,
+                isHeadsUp,
+                isDozing ->
+                when {
+                    shadeMode != ShadeMode.Split -> true
+                    !areAnyNotificationsPresent -> true
+                    isActiveDreamLockscreenHosted -> true
+                    // Pulsing notification appears on the right. Move clock left to avoid overlap.
+                    isHeadsUp && isDozing -> false
+                    else -> isOnAod
+                }
+            }
+        } else {
+            SceneContainerFlag.assertInLegacyMode()
+            keyguardInteractor.clockShouldBeCentered
+        }
+
     fun setClockSize(@ClockSize size: Int) {
         keyguardClockRepository.setClockSize(size)
     }
 
-    val clockEventController: ClockEventController
+    val renderedClockId: ClockId
         get() {
-            return keyguardClockRepository.clockEventController
+            return clock?.let { clock -> clock.config.id }
+                ?: run {
+                    Log.e(TAG, "No clock is available")
+                    KeyguardClockSwitch.MISSING_CLOCK_ID
+                }
         }
+
+    fun animateFoldToAod(foldFraction: Float) {
+        clock?.let { clock ->
+            clock.smallClock.animations.fold(foldFraction)
+            clock.largeClock.animations.fold(foldFraction)
+        }
+    }
 }

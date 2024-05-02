@@ -77,6 +77,8 @@ import com.android.systemui.util.FakeEventLog
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.mock
 import com.android.systemui.util.settings.FakeGlobalSettings
+import com.android.systemui.util.settings.FakeSettings
+import com.android.systemui.util.settings.SystemSettings
 import com.android.systemui.util.time.FakeSystemClock
 import com.android.systemui.utils.leaks.FakeBatteryController
 import com.android.systemui.utils.leaks.FakeKeyguardStateController
@@ -126,6 +128,7 @@ abstract class VisualInterruptionDecisionProviderTestBase : SysuiTestCase() {
     protected val uiEventLogger = UiEventLoggerFake()
     protected val userTracker = FakeUserTracker()
     protected val avalancheProvider: AvalancheProvider = mock()
+    lateinit var systemSettings: SystemSettings
 
     protected abstract val provider: VisualInterruptionDecisionProvider
 
@@ -153,6 +156,7 @@ abstract class VisualInterruptionDecisionProviderTestBase : SysuiTestCase() {
 
         deviceProvisionedController.currentUser = userId
         userTracker.set(listOf(user), /* currentUserIndex = */ 0)
+        systemSettings = FakeSettings()
 
         provider.start()
     }
@@ -327,6 +331,13 @@ abstract class VisualInterruptionDecisionProviderTestBase : SysuiTestCase() {
     }
 
     @Test
+    fun testShouldNotPeek_appSuspended() {
+        ensurePeekState()
+        assertShouldNotBubble(buildPeekEntry { packageSuspended = true })
+        assertNoEventsLogged()
+    }
+
+    @Test
     fun testShouldNotPeek_hiddenOnKeyguard() {
         ensurePeekState({ keyguardShouldHideNotification = true })
         assertShouldNotHeadsUp(buildPeekEntry())
@@ -408,6 +419,13 @@ abstract class VisualInterruptionDecisionProviderTestBase : SysuiTestCase() {
     fun testShouldNotPulse_importanceLow() {
         ensurePulseState()
         assertShouldNotHeadsUp(buildPulseEntry { importance = IMPORTANCE_LOW })
+        assertNoEventsLogged()
+    }
+
+    @Test
+    fun testShouldNotPulse_appSuspended() {
+        ensurePulseState()
+        assertShouldNotHeadsUp(buildPulseEntry { packageSuspended = true })
         assertNoEventsLogged()
     }
 
@@ -595,16 +613,16 @@ abstract class VisualInterruptionDecisionProviderTestBase : SysuiTestCase() {
     }
 
     @Test
-    fun testShouldNotBubble_hiddenOnKeyguard() {
-        ensureBubbleState({ keyguardShouldHideNotification = true })
-        assertShouldNotBubble(buildBubbleEntry())
+    fun testShouldNotBubble_appSuspended() {
+        ensureBubbleState()
+        assertShouldNotBubble(buildBubbleEntry { packageSuspended = true })
         assertNoEventsLogged()
     }
 
     @Test
-    fun testShouldNotBubble_bubbleAppSuspended() {
-        ensureBubbleState()
-        assertShouldNotBubble(buildBubbleEntry { packageSuspended = true })
+    fun testShouldNotBubble_hiddenOnKeyguard() {
+        ensureBubbleState({ keyguardShouldHideNotification = true })
+        assertShouldNotBubble(buildBubbleEntry())
         assertNoEventsLogged()
     }
 

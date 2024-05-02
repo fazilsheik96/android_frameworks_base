@@ -30,21 +30,29 @@ import android.view.ViewGroup
 import android.view.ViewGroup.OnHierarchyChangeListener
 import android.view.ViewPropertyAnimator
 import android.view.WindowInsets
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.OnBackPressedDispatcherOwner
+import androidx.activity.setViewTreeOnBackPressedDispatcherOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.animation.Interpolators
 import com.android.internal.jank.InteractionJankMonitor
 import com.android.internal.jank.InteractionJankMonitor.CUJ_SCREEN_OFF_SHOW_AOD
-import com.android.keyguard.KeyguardClockSwitch.MISSING_CLOCK_ID
 import com.android.systemui.Flags.newAodTransition
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.common.shared.model.Text
 import com.android.systemui.common.shared.model.TintedIcon
 import com.android.systemui.common.ui.ConfigurationState
+import com.android.systemui.common.ui.view.onApplyWindowInsets
+import com.android.systemui.common.ui.view.onLayoutChanged
+import com.android.systemui.common.ui.view.onTouchListener
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntryHapticsInteractor
 import com.android.systemui.deviceentry.shared.DeviceEntryUdfpsRefactor
 import com.android.systemui.keyguard.KeyguardBottomAreaRefactor
+import com.android.systemui.keyguard.KeyguardViewMediator
 import com.android.systemui.keyguard.MigrateClocksToBlueprint
+import com.android.systemui.keyguard.domain.interactor.KeyguardClockInteractor
+import com.android.systemui.keyguard.shared.ComposeLockscreen
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.shared.model.TransitionState
 import com.android.systemui.keyguard.ui.viewmodel.BurnInParameters
@@ -53,7 +61,6 @@ import com.android.systemui.keyguard.ui.viewmodel.OccludingAppDeviceEntryMessage
 import com.android.systemui.keyguard.ui.viewmodel.ViewStateAccessor
 import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.plugins.FalsingManager
-import com.android.systemui.plugins.clocks.ClockController
 import com.android.systemui.res.R
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
 import com.android.systemui.statusbar.CrossFadeHelper
@@ -63,11 +70,11 @@ import com.android.systemui.statusbar.phone.ScreenOffAnimationController
 import com.android.systemui.temporarydisplay.ViewPriority
 import com.android.systemui.temporarydisplay.chipbar.ChipbarCoordinator
 import com.android.systemui.temporarydisplay.chipbar.ChipbarInfo
+import com.android.systemui.util.kotlin.DisposableHandles
 import com.android.systemui.util.ui.AnimatedValue
 import com.android.systemui.util.ui.isAnimating
 import com.android.systemui.util.ui.stopAnimating
 import com.android.systemui.util.ui.value
-import javax.inject.Provider
 import kotlin.math.min
 import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -81,7 +88,6 @@ import kotlinx.coroutines.launch
 /** Bind occludingAppDeviceEntryMessageViewModel to run whenever the keyguard view is attached. */
 @OptIn(ExperimentalCoroutinesApi::class)
 object KeyguardRootViewBinder {
-
     @SuppressLint("ClickableViewAccessibility")
     @JvmStatic
     fun bind(
@@ -92,30 +98,26 @@ object KeyguardRootViewBinder {
         chipbarCoordinator: ChipbarCoordinator,
         screenOffAnimationController: ScreenOffAnimationController,
         shadeInteractor: ShadeInteractor,
-        clockControllerProvider: Provider<ClockController>?,
+        clockInteractor: KeyguardClockInteractor,
         interactionJankMonitor: InteractionJankMonitor?,
         deviceEntryHapticsInteractor: DeviceEntryHapticsInteractor?,
         vibratorHelper: VibratorHelper?,
         falsingManager: FalsingManager?,
+        keyguardViewMediator: KeyguardViewMediator?,
     ): DisposableHandle {
-        var onLayoutChangeListener: OnLayoutChange? = null
+        val disposables = DisposableHandles()
         val childViews = mutableMapOf<Int, View>()
-        val statusViewId = R.id.keyguard_status_view
-        val burnInLayerId = R.id.burn_in_layer
-        val aodNotificationIconContainerId = R.id.aod_notification_icon_container
-        val largeClockId = R.id.lockscreen_clock_view_large
-        val indicationArea = R.id.keyguard_indication_area
-        val startButton = R.id.start_button
-        val endButton = R.id.end_button
-        val lockIcon = R.id.lock_icon_view
 
         if (KeyguardBottomAreaRefactor.isEnabled) {
-            view.setOnTouchListener { _, event ->
-                if (falsingManager?.isFalseTap(FalsingManager.LOW_PENALTY) == false) {
-                    viewModel.setRootViewLastTapPosition(Point(event.x.toInt(), event.y.toInt()))
+            disposables +=
+                view.onTouchListener { _, event ->
+                    if (falsingManager?.isFalseTap(FalsingManager.LOW_PENALTY) == false) {
+                        viewModel.setRootViewLastTapPosition(
+                            Point(event.x.toInt(), event.y.toInt())
+                        )
+                    }
+                    false
                 }
-                false
-            }
         }
 
         val burnInParams = MutableStateFlow(BurnInParameters())
@@ -124,9 +126,24 @@ object KeyguardRootViewBinder {
                 alpha = { view.alpha },
             )
 
-        val disposableHandle =
+        disposables +=
             view.repeatWhenAttached {
                 repeatOnLifecycle(Lifecycle.State.CREATED) {
+                    if (ComposeLockscreen.isEnabled) {
+                        view.setViewTreeOnBackPressedDispatcherOwner(
+                            object : OnBackPressedDispatcherOwner {
+                                override val onBackPressedDispatcher =
+                                    OnBackPressedDispatcher().apply {
+                                        setOnBackInvokedDispatcher(
+                                            view.viewRootImpl.onBackInvokedDispatcher
+                                        )
+                                    }
+
+                                override val lifecycle: Lifecycle =
+                                    this@repeatWhenAttached.lifecycle
+                            }
+                        )
+                    }
                     launch {
                         occludingAppDeviceEntryMessageViewModel.message.collect { biometricMessage
                             ->
@@ -212,7 +229,7 @@ object KeyguardRootViewBinder {
                                 val px = state.value ?: return@collect
                                 when {
                                     state.isToOrFrom(KeyguardState.AOD) -> {
-                                        childViews[largeClockId]?.translationX = px
+                                        // Large Clock is not translated in the x direction
                                         childViews[burnInLayerId]?.translationX = px
                                         childViews[aodNotificationIconContainerId]?.translationX =
                                             px
@@ -286,20 +303,21 @@ object KeyguardRootViewBinder {
                                 viewModel.goneToAodTransition.collect {
                                     when (it.transitionState) {
                                         TransitionState.STARTED -> {
-                                            val clockId =
-                                                clockControllerProvider?.get()?.config?.id
-                                                    ?: MISSING_CLOCK_ID
+                                            val clockId = clockInteractor.renderedClockId
                                             val builder =
                                                 InteractionJankMonitor.Configuration.Builder
                                                     .withView(CUJ_SCREEN_OFF_SHOW_AOD, view)
                                                     .setTag(clockId)
-
                                             jankMonitor.begin(builder)
                                         }
                                         TransitionState.CANCELED ->
                                             jankMonitor.cancel(CUJ_SCREEN_OFF_SHOW_AOD)
-                                        TransitionState.FINISHED ->
+                                        TransitionState.FINISHED -> {
+                                            if (MigrateClocksToBlueprint.isEnabled) {
+                                                keyguardViewMediator?.maybeHandlePendingLock()
+                                            }
                                             jankMonitor.end(CUJ_SCREEN_OFF_SHOW_AOD)
+                                        }
                                         TransitionState.RUNNING -> Unit
                                     }
                                 }
@@ -344,20 +362,13 @@ object KeyguardRootViewBinder {
                 }
             }
 
-        if (!MigrateClocksToBlueprint.isEnabled) {
-            burnInParams.update { current ->
-                current.copy(clockControllerProvider = clockControllerProvider)
-            }
-        }
-
         if (MigrateClocksToBlueprint.isEnabled) {
             burnInParams.update { current ->
                 current.copy(translationY = { childViews[burnInLayerId]?.translationY })
             }
         }
 
-        onLayoutChangeListener = OnLayoutChange(viewModel, childViews, burnInParams)
-        view.addOnLayoutChangeListener(onLayoutChangeListener)
+        disposables += view.onLayoutChanged(OnLayoutChange(viewModel, childViews, burnInParams))
 
         // Views will be added or removed after the call to bind(). This is needed to avoid many
         // calls to findViewById
@@ -372,24 +383,21 @@ object KeyguardRootViewBinder {
                 }
             }
         )
-
-        view.setOnApplyWindowInsetsListener { v: View, insets: WindowInsets ->
-            val insetTypes = WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
-            burnInParams.update { current ->
-                current.copy(topInset = insets.getInsetsIgnoringVisibility(insetTypes).top)
-            }
-            insets
+        disposables += DisposableHandle {
+            view.setOnHierarchyChangeListener(null)
+            childViews.clear()
         }
 
-        return object : DisposableHandle {
-            override fun dispose() {
-                disposableHandle.dispose()
-                view.removeOnLayoutChangeListener(onLayoutChangeListener)
-                view.setOnHierarchyChangeListener(null)
-                view.setOnApplyWindowInsetsListener(null)
-                childViews.clear()
+        disposables +=
+            view.onApplyWindowInsets { _: View, insets: WindowInsets ->
+                val insetTypes = WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+                burnInParams.update { current ->
+                    current.copy(topInset = insets.getInsetsIgnoringVisibility(insetTypes).top)
+                }
+                insets
             }
-        }
+
+        return disposables
     }
 
     /**
@@ -430,7 +438,7 @@ object KeyguardRootViewBinder {
             oldRight: Int,
             oldBottom: Int
         ) {
-            childViews[R.id.nssl_placeholder]?.let { notificationListPlaceholder ->
+            childViews[nsslPlaceholderId]?.let { notificationListPlaceholder ->
                 // After layout, ensure the notifications are positioned correctly
                 viewModel.onNotificationContainerBoundsChanged(
                     notificationListPlaceholder.top.toFloat(),
@@ -454,14 +462,14 @@ object KeyguardRootViewBinder {
                                 )
                             }
                         } else {
-                            childViews[R.id.keyguard_status_view]?.top ?: 0
+                            childViews[statusViewId]?.top ?: 0
                         }
                 )
             }
         }
 
         private fun isUserVisible(view: View): Boolean {
-            return view.id != R.id.burn_in_layer &&
+            return view.id != burnInLayerId &&
                 view.visibility == VISIBLE &&
                 view.width > 0 &&
                 view.height > 0
@@ -582,6 +590,17 @@ object KeyguardRootViewBinder {
 
     private fun ViewPropertyAnimator.animateInIconTranslation(): ViewPropertyAnimator =
         setInterpolator(Interpolators.DECELERATE_QUINT).translationY(0f)
+
+    private val statusViewId = R.id.keyguard_status_view
+    private val burnInLayerId = R.id.burn_in_layer
+    private val aodNotificationIconContainerId = R.id.aod_notification_icon_container
+    private val largeClockId = R.id.lockscreen_clock_view_large
+    private val smallClockId = R.id.lockscreen_clock_view
+    private val indicationArea = R.id.keyguard_indication_area
+    private val startButton = R.id.start_button
+    private val endButton = R.id.end_button
+    private val lockIcon = R.id.lock_icon_view
+    private val nsslPlaceholderId = R.id.nssl_placeholder
 
     private const val ID = "occluding_app_device_entry_unlock_msg"
     private const val AOD_ICONS_APPEAR_DURATION: Long = 200

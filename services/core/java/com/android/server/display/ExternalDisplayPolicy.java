@@ -91,6 +91,8 @@ class ExternalDisplayPolicy {
 
         @NonNull
         ExternalDisplayStatsService getExternalDisplayStatsService();
+
+        void onExternalDisplayReadyToBeEnabled(int displayId);
     }
 
     @NonNull
@@ -185,6 +187,10 @@ class ExternalDisplayPolicy {
             return;
         }
 
+        if (enabled) {
+            mInjector.onExternalDisplayReadyToBeEnabled(logicalDisplay.getDisplayIdLocked());
+        }
+
         mLogicalDisplayMapper.setDisplayEnabledLocked(logicalDisplay, enabled);
     }
 
@@ -217,12 +223,13 @@ class ExternalDisplayPolicy {
         if ((Build.IS_ENG || Build.IS_USERDEBUG)
                 && SystemProperties.getBoolean(ENABLE_ON_CONNECT, false)) {
             Slog.w(TAG, "External display is enabled by default, bypassing user consent.");
+            mInjector.onExternalDisplayReadyToBeEnabled(logicalDisplay.getDisplayIdLocked());
             mInjector.sendExternalDisplayEventLocked(logicalDisplay, EVENT_DISPLAY_CONNECTED);
             return;
         } else {
             // As external display is enabled by default, need to disable it now.
             // TODO(b/292196201) Remove when the display can be disabled before DPC is created.
-            logicalDisplay.setEnabledLocked(false);
+            mLogicalDisplayMapper.setDisplayEnabledLocked(logicalDisplay, false);
         }
 
         if (!isExternalDisplayAllowed()) {

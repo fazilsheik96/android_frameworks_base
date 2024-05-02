@@ -72,3 +72,58 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 }
+
+flag {
+  name: "secure_allowlist_token"
+  namespace: "systemui"
+  description: "Prevents allowlist_token from leaking out and foreign tokens from being accepted"
+  bug: "328254922"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
+  name: "update_ranking_time"
+  namespace: "systemui"
+  description: "Updates notification sorting criteria to highlight new content while maintaining stability"
+  bug: "326016985"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
+  name: "sort_section_by_time"
+  namespace: "systemui"
+  description: "Changes notification sort order to be by time within a section"
+  bug: "330193582"
+}
+
+flag {
+  name: "restrict_audio_attributes_call"
+  namespace: "systemui"
+  description: "Only CallStyle notifs can use USAGE_NOTIFICATION_RINGTONE"
+  bug: "331793339"
+}
+
+flag {
+  name: "restrict_audio_attributes_alarm"
+  namespace: "systemui"
+  description: "Only alarm category notifs can use USAGE_ALARM"
+  bug: "331793339"
+}
+
+flag {
+  name: "restrict_audio_attributes_media"
+  namespace: "systemui"
+  description: "No notifs can use USAGE_UNKNOWN or USAGE_MEDIA"
+  bug: "331793339"
+}
+
+flag {
+  name: "clean_up_spans_and_new_lines"
+  namespace: "systemui"
+  description: "Cleans up spans and unnecessary new lines from standard notification templates"
+  bug: "313439845"
+}

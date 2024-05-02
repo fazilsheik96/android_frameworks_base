@@ -24,25 +24,18 @@ import com.android.compose.animation.scene.SwipeDirection
 import com.android.compose.animation.scene.UserActionResult
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.coroutines.collectLastValue
-import com.android.systemui.flags.FakeFeatureFlagsClassic
 import com.android.systemui.flags.Flags
+import com.android.systemui.flags.fakeFeatureFlagsClassic
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.qs.FooterActionsController
 import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsViewModel
 import com.android.systemui.qs.ui.adapter.FakeQSSceneAdapter
 import com.android.systemui.res.R
+import com.android.systemui.scene.domain.interactor.sceneInteractor
 import com.android.systemui.scene.shared.model.Scenes
-import com.android.systemui.shade.domain.interactor.privacyChipInteractor
-import com.android.systemui.shade.domain.interactor.shadeHeaderClockInteractor
-import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
+import com.android.systemui.settings.brightness.ui.viewmodel.brightnessMirrorViewModel
+import com.android.systemui.shade.ui.viewmodel.shadeHeaderViewModel
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.notificationsPlaceholderViewModel
-import com.android.systemui.statusbar.pipeline.airplane.data.repository.FakeAirplaneModeRepository
-import com.android.systemui.statusbar.pipeline.airplane.domain.interactor.AirplaneModeInteractor
-import com.android.systemui.statusbar.pipeline.mobile.data.repository.FakeMobileConnectionsRepository
-import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.FakeMobileIconsInteractor
-import com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.MobileIconsViewModel
-import com.android.systemui.statusbar.pipeline.mobile.util.FakeMobileMappingsProxy
-import com.android.systemui.statusbar.pipeline.shared.data.repository.FakeConnectivityRepository
 import com.android.systemui.testKosmos
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.mock
@@ -61,8 +54,6 @@ class QuickSettingsSceneViewModelTest : SysuiTestCase() {
 
     private val kosmos = testKosmos()
     private val testScope = kosmos.testScope
-    private val mobileIconsInteractor = FakeMobileIconsInteractor(FakeMobileMappingsProxy(), mock())
-    private val flags = FakeFeatureFlagsClassic().also { it.set(Flags.NEW_NETWORK_SLICE_UI, false) }
     private val qsFlexiglassAdapter = FakeQSSceneAdapter({ mock() })
     private val footerActionsViewModel = mock<FooterActionsViewModel>()
     private val footerActionsViewModelFactory =
@@ -71,51 +62,28 @@ class QuickSettingsSceneViewModelTest : SysuiTestCase() {
         }
     private val footerActionsController = mock<FooterActionsController>()
 
-    private var mobileIconsViewModel: MobileIconsViewModel =
-        MobileIconsViewModel(
-            logger = mock(),
-            verboseLogger = mock(),
-            interactor = mobileIconsInteractor,
-            airplaneModeInteractor =
-                AirplaneModeInteractor(
-                    FakeAirplaneModeRepository(),
-                    FakeConnectivityRepository(),
-                    FakeMobileConnectionsRepository(),
-                ),
-            constants = mock(),
-            flags,
-            scope = testScope.backgroundScope,
-        )
-
-    private lateinit var shadeHeaderViewModel: ShadeHeaderViewModel
+    private val sceneInteractor = kosmos.sceneInteractor
 
     private lateinit var underTest: QuickSettingsSceneViewModel
 
     @Before
     fun setUp() {
-        shadeHeaderViewModel =
-            ShadeHeaderViewModel(
-                applicationScope = testScope.backgroundScope,
-                context = context,
-                mobileIconsInteractor = mobileIconsInteractor,
-                mobileIconsViewModel = mobileIconsViewModel,
-                privacyChipInteractor = kosmos.privacyChipInteractor,
-                clockInteractor = kosmos.shadeHeaderClockInteractor,
-                broadcastDispatcher = fakeBroadcastDispatcher,
-            )
+        kosmos.fakeFeatureFlagsClassic.set(Flags.NEW_NETWORK_SLICE_UI, false)
 
         underTest =
             QuickSettingsSceneViewModel(
-                shadeHeaderViewModel = shadeHeaderViewModel,
+                brightnessMirrorViewModel = kosmos.brightnessMirrorViewModel,
+                shadeHeaderViewModel = kosmos.shadeHeaderViewModel,
                 qsSceneAdapter = qsFlexiglassAdapter,
                 notifications = kosmos.notificationsPlaceholderViewModel,
                 footerActionsViewModelFactory = footerActionsViewModelFactory,
                 footerActionsController = footerActionsController,
+                sceneInteractor = sceneInteractor,
             )
     }
 
     @Test
-    fun destinationsNotCustomizing() =
+    fun destinations_whenNotCustomizing() =
         testScope.runTest {
             overrideResource(R.bool.config_use_split_notification_shade, false)
             val destinations by collectLastValue(underTest.destinationScenes)
@@ -131,18 +99,36 @@ class QuickSettingsSceneViewModelTest : SysuiTestCase() {
         }
 
     @Test
-    fun destinationsCustomizing() =
+    fun destinations_whenNotCustomizing_withPreviousSceneLockscreen() =
+        testScope.runTest {
+            overrideResource(R.bool.config_use_split_notification_shade, false)
+            qsFlexiglassAdapter.setCustomizing(false)
+            val destinations by collectLastValue(underTest.destinationScenes)
+
+            val currentScene by collectLastValue(sceneInteractor.currentScene)
+            val previousScene by collectLastValue(sceneInteractor.previousScene)
+            sceneInteractor.changeScene(Scenes.Lockscreen, "reason")
+            sceneInteractor.changeScene(Scenes.QuickSettings, "reason")
+            assertThat(currentScene).isEqualTo(Scenes.QuickSettings)
+            assertThat(previousScene).isEqualTo(Scenes.Lockscreen)
+
+            assertThat(destinations)
+                .isEqualTo(
+                    mapOf(
+                        Back to UserActionResult(Scenes.Lockscreen),
+                        Swipe(SwipeDirection.Up) to UserActionResult(Scenes.Lockscreen),
+                    )
+                )
+        }
+
+    @Test
+    fun destinations_whenCustomizing_noDestinations() =
         testScope.runTest {
             overrideResource(R.bool.config_use_split_notification_shade, false)
             val destinations by collectLastValue(underTest.destinationScenes)
             qsFlexiglassAdapter.setCustomizing(true)
 
-            assertThat(destinations)
-                .isEqualTo(
-                    mapOf(
-                        Back to UserActionResult(Scenes.QuickSettings),
-                    )
-                )
+            assertThat(destinations).isEmpty()
         }
 
     @Test
@@ -162,18 +148,13 @@ class QuickSettingsSceneViewModelTest : SysuiTestCase() {
         }
 
     @Test
-    fun destinations_whenCustomizing_inSplitShade() =
+    fun destinations_whenCustomizing_inSplitShade_noDestinations() =
         testScope.runTest {
             overrideResource(R.bool.config_use_split_notification_shade, true)
             val destinations by collectLastValue(underTest.destinationScenes)
             qsFlexiglassAdapter.setCustomizing(true)
 
-            assertThat(destinations)
-                .isEqualTo(
-                    mapOf(
-                        Back to UserActionResult(Scenes.QuickSettings),
-                    )
-                )
+            assertThat(destinations).isEmpty()
         }
 
     @Test

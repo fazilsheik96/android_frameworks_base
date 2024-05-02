@@ -34,15 +34,21 @@ import com.android.systemui.media.controls.domain.pipeline.MediaDeviceManager
 import com.android.systemui.media.controls.domain.pipeline.MediaSessionBasedFilter
 import com.android.systemui.media.controls.domain.pipeline.MediaTimeoutListener
 import com.android.systemui.media.controls.domain.resume.MediaResumeListener
+import com.android.systemui.media.controls.shared.model.MediaCommonModel
+import com.android.systemui.media.controls.shared.model.MediaDataLoadingModel
+import com.android.systemui.media.controls.shared.model.SmartspaceMediaLoadingModel
+import com.android.systemui.media.controls.util.MediaControlsRefactorFlag
 import com.android.systemui.media.controls.util.MediaFlags
 import java.io.PrintWriter
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 
@@ -70,7 +76,7 @@ constructor(
         combine(
                 mediaFilterRepository.selectedUserEntries,
                 mediaFilterRepository.smartspaceMediaData,
-                mediaFilterRepository.reactivatedKey
+                mediaFilterRepository.reactivatedId
             ) { entries, smartspaceMediaData, reactivatedKey ->
                 entries.any { it.value.active } ||
                     (smartspaceMediaData.isActive &&
@@ -109,6 +115,18 @@ constructor(
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.WhileSubscribed(), false)
 
+    /** The most recent list of loaded media controls. */
+    val mediaDataLoadedStates: Flow<List<MediaDataLoadingModel>> =
+        mediaFilterRepository.mediaDataLoadedStates
+
+    /** The most recent change to loaded media recommendations. */
+    val recommendationsLoadingState: Flow<SmartspaceMediaLoadingModel> =
+        mediaFilterRepository.recommendationsLoadingState
+
+    /** The most recent sorted set for user media instances */
+    val sortedMedia: Flow<List<MediaCommonModel>> =
+        mediaFilterRepository.sortedMedia.map { it.values.toList() }
+
     override fun start() {
         if (!mediaFlags.isMediaControlsRefactorEnabled()) {
             return
@@ -139,7 +157,7 @@ constructor(
             mediaDataProcessor.onSessionDestroyed(key)
         }
         mediaResumeListener.setManager(this)
-        mediaDataFilter.mediaDataManager = this
+        mediaDataFilter.mediaDataProcessor = mediaDataProcessor
     }
 
     override fun addListener(listener: MediaDataManager.Listener) {
@@ -150,9 +168,7 @@ constructor(
         mediaDataFilter.removeListener(listener)
     }
 
-    override fun setInactive(key: String, timedOut: Boolean, forceUpdate: Boolean) {
-        mediaDataProcessor.setInactive(key, timedOut, forceUpdate)
-    }
+    override fun setInactive(key: String, timedOut: Boolean, forceUpdate: Boolean) = unsupported
 
     override fun onNotificationAdded(key: String, sbn: StatusBarNotification) {
         mediaDataProcessor.onNotificationAdded(key, sbn)
@@ -198,9 +214,7 @@ constructor(
         return mediaDataProcessor.dismissSmartspaceRecommendation(key, delay)
     }
 
-    override fun setRecommendationInactive(key: String) {
-        mediaDataProcessor.setRecommendationInactive(key)
-    }
+    override fun setRecommendationInactive(key: String) = unsupported
 
     override fun onNotificationRemoved(key: String) {
         mediaDataProcessor.onNotificationRemoved(key)
@@ -230,5 +244,13 @@ constructor(
 
     override fun dump(pw: PrintWriter, args: Array<out String>) {
         mediaDeviceManager.dump(pw)
+    }
+
+    companion object {
+        val unsupported: Nothing
+            get() =
+                error(
+                    "Code path not supported when ${MediaControlsRefactorFlag.FLAG_NAME} is enabled"
+                )
     }
 }

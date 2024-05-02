@@ -83,6 +83,7 @@ aconfig_declarations_group {
         "com.android.internal.pm.pkg.component.flags-aconfig-java",
         "com.android.media.flags.bettertogether-aconfig-java",
         "com.android.media.flags.editing-aconfig-java",
+        "com.android.media.flags.performance-aconfig-java",
         "com.android.media.flags.projection-aconfig-java",
         "com.android.net.thread.platform.flags-aconfig-java",
         "com.android.server.flags.services-aconfig-java",
@@ -170,6 +171,7 @@ java_aconfig_library {
 // DeviceStateManager
 aconfig_declarations {
     name: "android.hardware.devicestate.feature.flags-aconfig",
+    exportable: true,
     package: "android.hardware.devicestate.feature.flags",
     srcs: ["core/java/android/hardware/devicestate/feature/*.aconfig"],
 }
@@ -183,6 +185,7 @@ java_aconfig_library {
 // Input
 aconfig_declarations {
     name: "com.android.hardware.input.input-aconfig",
+    exportable: true,
     package: "com.android.hardware.input",
     srcs: ["core/java/android/hardware/input/*.aconfig"],
 }
@@ -339,6 +342,7 @@ java_aconfig_library {
     apex_available: [
         "//apex_available:platform",
         "com.android.mediaprovider",
+        "com.android.permission",
     ],
 }
 
@@ -454,6 +458,7 @@ cc_aconfig_library {
 // Hardware
 aconfig_declarations {
     name: "android.hardware.flags-aconfig",
+    exportable: true,
     package: "android.hardware.flags",
     srcs: ["core/java/android/hardware/flags/*.aconfig"],
 }
@@ -546,6 +551,7 @@ java_aconfig_library {
 // Media Editing
 aconfig_declarations {
     name: "com.android.media.flags.editing-aconfig",
+    exportable: true,
     package: "com.android.media.editing.flags",
     srcs: [
         "media/java/android/media/flags/editing.aconfig",
@@ -573,9 +579,25 @@ java_aconfig_library {
     defaults: ["framework-minus-apex-aconfig-java-defaults"],
 }
 
+// Media Performance
+aconfig_declarations {
+    name: "com.android.media.flags.performance-aconfig",
+    package: "com.android.media.performance.flags",
+    srcs: [
+        "media/java/android/media/flags/performance.aconfig",
+    ],
+}
+
+java_aconfig_library {
+    name: "com.android.media.flags.performance-aconfig-java",
+    aconfig_declarations: "com.android.media.flags.performance-aconfig",
+    defaults: ["framework-minus-apex-aconfig-java-defaults"],
+}
+
 // Media TV
 aconfig_declarations {
     name: "android.media.tv.flags-aconfig",
+    exportable: true,
     package: "android.media.tv.flags",
     srcs: ["media/java/android/media/tv/flags/media_tv.aconfig"],
 }
@@ -589,6 +611,7 @@ java_aconfig_library {
 // OnDeviceIntelligence
 aconfig_declarations {
     name: "android.app.ondeviceintelligence-aconfig",
+    exportable: true,
     package: "android.app.ondeviceintelligence.flags",
     srcs: ["core/java/android/app/ondeviceintelligence/flags/ondevice_intelligence.aconfig"],
 }
@@ -631,9 +654,16 @@ java_aconfig_library {
     defaults: ["framework-minus-apex-aconfig-java-defaults"],
 }
 
+cc_aconfig_library {
+    name: "android.database.sqlite-aconfig-cc",
+    aconfig_declarations: "android.database.sqlite-aconfig",
+    host_supported: true,
+}
+
 // Biometrics
 aconfig_declarations {
     name: "android.hardware.biometrics.flags-aconfig",
+    exportable: true,
     package: "android.hardware.biometrics",
     srcs: ["core/java/android/hardware/biometrics/flags.aconfig"],
 }
@@ -662,6 +692,11 @@ java_aconfig_library {
     name: "display_flags_lib",
     aconfig_declarations: "display_flags",
     defaults: ["framework-minus-apex-aconfig-java-defaults"],
+}
+
+cc_aconfig_library {
+    name: "android.server.display.flags-aconfig-cc",
+    aconfig_declarations: "display_flags",
 }
 
 java_aconfig_library {
@@ -706,6 +741,7 @@ java_aconfig_library {
 // Broadcast Radio
 aconfig_declarations {
     name: "android.hardware.radio.flags-aconfig",
+    exportable: true,
     package: "android.hardware.radio",
     srcs: ["core/java/android/hardware/radio/*.aconfig"],
 }
@@ -740,6 +776,7 @@ java_aconfig_library {
 // Content Protection
 aconfig_declarations {
     name: "android.view.contentprotection.flags-aconfig",
+    exportable: true,
     package: "android.view.contentprotection.flags",
     srcs: ["core/java/android/view/contentprotection/flags/*.aconfig"],
 }
@@ -766,6 +803,7 @@ java_aconfig_library {
 // App prediction
 aconfig_declarations {
     name: "android.service.appprediction.flags-aconfig",
+    exportable: true,
     package: "android.service.appprediction.flags",
     srcs: ["core/java/android/service/appprediction/flags/*.aconfig"],
 }
@@ -779,6 +817,7 @@ java_aconfig_library {
 // Controls
 aconfig_declarations {
     name: "android.service.controls.flags-aconfig",
+    exportable: true,
     package: "android.service.controls.flags",
     srcs: ["core/java/android/service/controls/flags/*.aconfig"],
 }
@@ -792,6 +831,7 @@ java_aconfig_library {
 // Voice
 aconfig_declarations {
     name: "android.service.voice.flags-aconfig",
+    exportable: true,
     package: "android.service.voice.flags",
     srcs: ["core/java/android/service/voice/flags/*.aconfig"],
 }
@@ -821,6 +861,7 @@ java_aconfig_library {
 // Companion
 aconfig_declarations {
     name: "android.companion.flags-aconfig",
+    exportable: true,
     package: "android.companion",
     srcs: ["core/java/android/companion/*.aconfig"],
 }
@@ -834,6 +875,7 @@ java_aconfig_library {
 // Networking
 aconfig_declarations {
     name: "android.net.platform.flags-aconfig",
+    exportable: true,
     package: "android.net.platform.flags",
     srcs: ["core/java/android/net/flags.aconfig"],
     visibility: [":__subpackages__"],
@@ -842,6 +884,7 @@ aconfig_declarations {
 // Thread network
 aconfig_declarations {
     name: "com.android.net.thread.platform.flags-aconfig",
+    exportable: true,
     package: "com.android.net.thread.platform.flags",
     srcs: ["core/java/android/net/thread/flags.aconfig"],
 }
@@ -939,6 +982,7 @@ java_aconfig_library {
 aconfig_declarations {
     name: "framework-jobscheduler-job.flags-aconfig",
     package: "android.app.job",
+    exportable: true,
     srcs: ["apex/jobscheduler/framework/aconfig/job.aconfig"],
 }
 
@@ -1004,6 +1048,7 @@ java_aconfig_library {
 // Smartspace
 aconfig_declarations {
     name: "android.app.smartspace.flags-aconfig",
+    exportable: true,
     package: "android.app.smartspace.flags",
     srcs: ["core/java/android/app/smartspace/flags.aconfig"],
 }
@@ -1037,6 +1082,7 @@ java_aconfig_library {
 // USB
 aconfig_declarations {
     name: "android.hardware.usb.flags-aconfig",
+    exportable: true,
     package: "android.hardware.usb.flags",
     srcs: ["core/java/android/hardware/usb/flags/*.aconfig"],
 }
@@ -1117,6 +1163,7 @@ java_aconfig_library {
 // Provider
 aconfig_declarations {
     name: "android.provider.flags-aconfig",
+    exportable: true,
     package: "android.provider",
     srcs: ["core/java/android/provider/*.aconfig"],
 }
@@ -1137,6 +1184,7 @@ java_aconfig_library {
 // Speech
 aconfig_declarations {
     name: "android.speech.flags-aconfig",
+    exportable: true,
     package: "android.speech.flags",
     srcs: ["core/java/android/speech/flags/*.aconfig"],
 }
@@ -1157,6 +1205,7 @@ java_aconfig_library {
 // Content
 aconfig_declarations {
     name: "android.content.flags-aconfig",
+    exportable: true,
     package: "android.content.flags",
     srcs: ["core/java/android/content/flags/flags.aconfig"],
 }
@@ -1183,6 +1232,7 @@ java_aconfig_library {
 // CrashRecovery Module
 aconfig_declarations {
     name: "android.crashrecovery.flags-aconfig",
+    exportable: true,
     package: "android.crashrecovery.flags",
     srcs: ["packages/CrashRecovery/aconfig/flags.aconfig"],
 }
@@ -1191,6 +1241,13 @@ java_aconfig_library {
     name: "android.crashrecovery.flags-aconfig-java",
     aconfig_declarations: "android.crashrecovery.flags-aconfig",
     defaults: ["framework-minus-apex-aconfig-java-defaults"],
+}
+
+java_aconfig_library {
+    name: "android.crashrecovery.flags-aconfig-java-host",
+    aconfig_declarations: "android.crashrecovery.flags-aconfig",
+    defaults: ["framework-minus-apex-aconfig-java-defaults"],
+    host_supported: true,
 }
 
 // Backup
@@ -1221,6 +1278,7 @@ java_aconfig_library {
 // Wearable Sensing
 aconfig_declarations {
     name: "android.app.wearable.flags-aconfig",
+    exportable: true,
     package: "android.app.wearable",
     srcs: ["core/java/android/app/wearable/*.aconfig"],
 }

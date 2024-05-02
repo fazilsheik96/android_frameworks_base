@@ -117,7 +117,6 @@ class NotificationIconContainerStatusBarViewModelTest : SysuiTestCase() {
     fun setup() {
         testComponent.apply {
             keyguardRepository.setKeyguardShowing(false)
-            deviceProvisioningRepository.setFactoryResetProtectionActive(false)
             powerRepository.updateWakefulness(
                 rawState = WakefulnessState.AWAKE,
                 lastWakeReason = WakeSleepReason.OTHER,
@@ -125,20 +124,6 @@ class NotificationIconContainerStatusBarViewModelTest : SysuiTestCase() {
             )
         }
     }
-
-    @Test
-    fun animationsEnabled_isFalse_whenFrpIsActive() =
-        testComponent.runTest {
-            deviceProvisioningRepository.setFactoryResetProtectionActive(true)
-            keyguardTransitionRepository.sendTransitionStep(
-                TransitionStep(
-                    transitionState = TransitionState.STARTED,
-                )
-            )
-            val animationsEnabled by collectLastValue(underTest.animationsEnabled)
-            runCurrent()
-            assertThat(animationsEnabled).isFalse()
-        }
 
     @Test
     fun animationsEnabled_isFalse_whenDeviceAsleepAndNotPulsing() =
@@ -210,6 +195,9 @@ class NotificationIconContainerStatusBarViewModelTest : SysuiTestCase() {
     @Test
     fun animationsEnabled_isTrue_whenStartingToSleepAndControlScreenOff() =
         testComponent.runTest {
+            val animationsEnabled by collectLastValue(underTest.animationsEnabled)
+            assertThat(animationsEnabled).isTrue()
+
             powerRepository.updateWakefulness(
                 rawState = WakefulnessState.STARTING_TO_SLEEP,
                 lastWakeReason = WakeSleepReason.POWER_BUTTON,
@@ -223,7 +211,7 @@ class NotificationIconContainerStatusBarViewModelTest : SysuiTestCase() {
                 )
             )
             whenever(dozeParams.shouldControlScreenOff()).thenReturn(true)
-            val animationsEnabled by collectLastValue(underTest.animationsEnabled)
+
             runCurrent()
             assertThat(animationsEnabled).isTrue()
         }

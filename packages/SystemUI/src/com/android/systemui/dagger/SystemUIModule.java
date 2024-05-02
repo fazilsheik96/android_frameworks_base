@@ -32,6 +32,7 @@ import com.android.systemui.CameraProtectionModule;
 import com.android.systemui.SystemUISecondaryUserService;
 import com.android.systemui.accessibility.AccessibilityModule;
 import com.android.systemui.accessibility.data.repository.AccessibilityRepositoryModule;
+import com.android.systemui.ambient.dagger.AmbientModule;
 import com.android.systemui.appops.dagger.AppOpsModule;
 import com.android.systemui.assist.AssistModule;
 import com.android.systemui.authentication.AuthenticationModule;
@@ -43,12 +44,14 @@ import com.android.systemui.biometrics.domain.BiometricsDomainLayerModule;
 import com.android.systemui.bouncer.data.repository.BouncerRepositoryModule;
 import com.android.systemui.bouncer.domain.interactor.BouncerInteractorModule;
 import com.android.systemui.bouncer.ui.BouncerViewModule;
+import com.android.systemui.brightness.dagger.ScreenBrightnessModule;
 import com.android.systemui.classifier.FalsingModule;
 import com.android.systemui.clipboardoverlay.dagger.ClipboardOverlayModule;
 import com.android.systemui.common.data.CommonDataLayerModule;
 import com.android.systemui.communal.dagger.CommunalModule;
 import com.android.systemui.complication.dagger.ComplicationComponent;
 import com.android.systemui.controls.dagger.ControlsModule;
+import com.android.systemui.dagger.qualifiers.Application;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dagger.qualifiers.SystemUser;
 import com.android.systemui.dagger.qualifiers.UiBackground;
@@ -89,6 +92,7 @@ import com.android.systemui.qs.footer.dagger.FooterActionsModule;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recordissue.RecordIssueModule;
 import com.android.systemui.retail.dagger.RetailModeModule;
+import com.android.systemui.scene.shared.model.SceneContainerConfig;
 import com.android.systemui.scene.shared.model.SceneDataSource;
 import com.android.systemui.scene.shared.model.SceneDataSourceDelegator;
 import com.android.systemui.scene.ui.view.WindowRootViewComponent;
@@ -159,6 +163,8 @@ import dagger.Provides;
 import dagger.multibindings.ClassKey;
 import dagger.multibindings.IntoMap;
 
+import kotlinx.coroutines.CoroutineScope;
+
 import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -178,6 +184,7 @@ import javax.inject.Named;
 @Module(includes = {
         AccessibilityModule.class,
         AccessibilityRepositoryModule.class,
+        AmbientModule.class,
         AppOpsModule.class,
         AssistModule.class,
         AuthenticationModule.class,
@@ -225,6 +232,7 @@ import javax.inject.Named;
         RecordIssueModule.class,
         ReferenceModule.class,
         RetailModeModule.class,
+        ScreenBrightnessModule.class,
         ScreenshotModule.class,
         SensorModule.class,
         SecurityRepositoryModule.class,
@@ -401,6 +409,13 @@ public abstract class SystemUIModule {
     @IntoMap
     @ClassKey(SystemUISecondaryUserService.class)
     abstract Service bindsSystemUISecondaryUserService(SystemUISecondaryUserService service);
+
+    @Provides
+    @SysUISingleton
+    static SceneDataSourceDelegator providesSceneDataSourceDelegator(
+            @Application CoroutineScope applicationScope, SceneContainerConfig config) {
+        return new SceneDataSourceDelegator(applicationScope, config);
+    }
 
     @Binds
     abstract SceneDataSource bindSceneDataSource(SceneDataSourceDelegator delegator);

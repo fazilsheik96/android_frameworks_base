@@ -364,6 +364,14 @@ public abstract class DisplayManagerInternal {
     public abstract List<RefreshRateLimitation> getRefreshRateLimitations(int displayId);
 
     /**
+     * Returns if vrr support is enabled for specified display
+     *
+     * @param displayId The id of the display.
+     * @return true if associated display supports dvrr
+     */
+    public abstract boolean isVrrSupportEnabled(int displayId);
+
+    /**
      * For the given displayId, updates if WindowManager is responsible for mirroring on that
      * display. If {@code false}, then SurfaceFlinger performs no layer mirroring to the
      * given display.
@@ -498,6 +506,7 @@ public abstract class DisplayManagerInternal {
         // Overrides the policy for adjusting screen brightness and state while dozing.
         public int dozeScreenState;
         public float dozeScreenBrightness;
+        public int dozeScreenStateReason;
 
         public DisplayPowerRequest() {
             policy = POLICY_BRIGHT;
@@ -508,6 +517,7 @@ public abstract class DisplayManagerInternal {
             blockScreenOn = false;
             dozeScreenBrightness = PowerManager.BRIGHTNESS_INVALID_FLOAT;
             dozeScreenState = Display.STATE_UNKNOWN;
+            dozeScreenStateReason = Display.STATE_REASON_UNKNOWN;
         }
 
         public DisplayPowerRequest(DisplayPowerRequest other) {
@@ -529,6 +539,7 @@ public abstract class DisplayManagerInternal {
             boostScreenBrightness = other.boostScreenBrightness;
             dozeScreenBrightness = other.dozeScreenBrightness;
             dozeScreenState = other.dozeScreenState;
+            dozeScreenStateReason = other.dozeScreenStateReason;
         }
 
         @Override
@@ -551,7 +562,8 @@ public abstract class DisplayManagerInternal {
                     && lowPowerMode == other.lowPowerMode
                     && boostScreenBrightness == other.boostScreenBrightness
                     && floatEquals(dozeScreenBrightness, other.dozeScreenBrightness)
-                    && dozeScreenState == other.dozeScreenState;
+                    && dozeScreenState == other.dozeScreenState
+                    && dozeScreenStateReason == other.dozeScreenStateReason;
         }
 
         private boolean floatEquals(float f1, float f2) {
@@ -575,7 +587,9 @@ public abstract class DisplayManagerInternal {
                     + ", lowPowerMode=" + lowPowerMode
                     + ", boostScreenBrightness=" + boostScreenBrightness
                     + ", dozeScreenBrightness=" + dozeScreenBrightness
-                    + ", dozeScreenState=" + Display.stateToString(dozeScreenState);
+                    + ", dozeScreenState=" + Display.stateToString(dozeScreenState)
+                    + ", dozeScreenStateReason="
+                            + Display.stateReasonToString(dozeScreenStateReason);
         }
 
         public static String policyToString(int policy) {

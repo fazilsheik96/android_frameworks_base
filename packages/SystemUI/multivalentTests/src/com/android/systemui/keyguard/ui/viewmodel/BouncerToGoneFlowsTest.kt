@@ -20,6 +20,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.bouncer.domain.interactor.mockPrimaryBouncerInteractor
+import com.android.systemui.coroutines.collectLastValue
 import com.android.systemui.coroutines.collectValues
 import com.android.systemui.flags.Flags
 import com.android.systemui.flags.fakeFeatureFlagsClassic
@@ -56,10 +57,7 @@ class BouncerToGoneFlowsTest : SysuiTestCase() {
 
     private val kosmos =
         testKosmos().apply {
-            fakeFeatureFlagsClassic.apply {
-                set(Flags.REFACTOR_KEYGUARD_DISMISS_INTENT, false)
-                set(Flags.FULL_SCREEN_USER_SWITCHER, false)
-            }
+            fakeFeatureFlagsClassic.apply { set(Flags.FULL_SCREEN_USER_SWITCHER, false) }
         }
     private val testScope = kosmos.testScope
     private val keyguardTransitionRepository = kosmos.fakeKeyguardTransitionRepository
@@ -71,6 +69,7 @@ class BouncerToGoneFlowsTest : SysuiTestCase() {
     @Before
     fun setUp() {
         MockitoAnnotations.initMocks(this)
+        mSetFlagsRule.disableFlags(com.android.systemui.Flags.FLAG_REFACTOR_KEYGUARD_DISMISS_INTENT)
         whenever(primaryBouncerInteractor.willRunDismissFromKeyguard()).thenReturn(false)
         sysuiStatusBarStateController.setLeaveOpenOnKeyguardHide(false)
     }
@@ -146,6 +145,38 @@ class BouncerToGoneFlowsTest : SysuiTestCase() {
             values.forEach {
                 assertThat(it).isEqualTo(ScrimAlpha(notificationsAlpha = 1f, behindAlpha = 1f))
             }
+        }
+
+    @Test
+    fun showAllNotifications_isTrue_whenLeaveShadeOpen() =
+        testScope.runTest {
+            val showAllNotifications by
+                collectLastValue(underTest.showAllNotifications(500.milliseconds, PRIMARY_BOUNCER))
+
+            sysuiStatusBarStateController.setLeaveOpenOnKeyguardHide(true)
+
+            keyguardTransitionRepository.sendTransitionStep(step(0f, TransitionState.STARTED))
+            keyguardTransitionRepository.sendTransitionStep(step(0.1f))
+
+            assertThat(showAllNotifications).isTrue()
+            keyguardTransitionRepository.sendTransitionStep(step(1f, TransitionState.FINISHED))
+            assertThat(showAllNotifications).isFalse()
+        }
+
+    @Test
+    fun showAllNotifications_isFalse_whenLeaveShadeIsNotOpen() =
+        testScope.runTest {
+            val showAllNotifications by
+                collectLastValue(underTest.showAllNotifications(500.milliseconds, PRIMARY_BOUNCER))
+
+            sysuiStatusBarStateController.setLeaveOpenOnKeyguardHide(false)
+
+            keyguardTransitionRepository.sendTransitionStep(step(0f, TransitionState.STARTED))
+            keyguardTransitionRepository.sendTransitionStep(step(0.1f))
+
+            assertThat(showAllNotifications).isFalse()
+            keyguardTransitionRepository.sendTransitionStep(step(1f, TransitionState.FINISHED))
+            assertThat(showAllNotifications).isFalse()
         }
 
     @Test

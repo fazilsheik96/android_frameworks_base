@@ -235,6 +235,7 @@ public final class AppRestrictionController {
     private final HandlerThread mBgHandlerThread;
     private final BgHandler mBgHandler;
     private final HandlerExecutor mBgExecutor;
+    private final HandlerExecutor mExecutor;
 
     // No lock is needed, as it's immutable after initialization in constructor.
     private final ArrayList<BaseAppStateTracker> mAppStateTrackers = new ArrayList<>();
@@ -1489,6 +1490,7 @@ public final class AppRestrictionController {
         mConstantsObserver = new ConstantsObserver(mBgHandler, mContext);
         mNotificationHelper = new NotificationHelper(this);
         injector.initAppStateTrackers(this);
+        mExecutor = new HandlerExecutor(injector.getDefaultHandler());
     }
 
     void onSystemReady() {
@@ -1506,7 +1508,7 @@ public final class AppRestrictionController {
         mInjector.getAppStateTracker().addBackgroundRestrictedAppListener(
                 mBackgroundRestrictionListener);
         mInjector.getAppStandbyInternal().addListener(mAppIdleStateChangeListener);
-        mInjector.getRoleManager().addOnRoleHoldersChangedListenerAsUser(mBgExecutor,
+        mInjector.getRoleManager().addOnRoleHoldersChangedListenerAsUser(mExecutor,
                 mRoleHolderChangedListener, UserHandle.ALL);
         mInjector.scheduleInitTrackers(mBgHandler, () -> {
             for (int i = 0, size = mAppStateTrackers.size(); i < size; i++) {
@@ -2151,9 +2153,12 @@ public final class AppRestrictionController {
             mRestrictionSettings.update(pkgName, uid, level, reason, subReason);
         }
 
-        if (!allowUpdateBucket || curBucket == STANDBY_BUCKET_EXEMPTED) {
+        if (!android.app.Flags.appRestrictionsApi()
+                && (!allowUpdateBucket || curBucket == STANDBY_BUCKET_EXEMPTED)) {
             return;
         }
+
+        boolean doItNow = true;
         if (level >= RESTRICTION_LEVEL_RESTRICTED_BUCKET
                 && curLevel < RESTRICTION_LEVEL_RESTRICTED_BUCKET) {
             // Moving the app standby bucket to restricted in the meanwhile.
@@ -2166,7 +2171,6 @@ public final class AppRestrictionController {
                     && (mConstantsObserver.mBgAutoRestrictedBucket
                     || level == RESTRICTION_LEVEL_RESTRICTED_BUCKET)) {
                 // restrict the app if it hasn't done so.
-                boolean doIt = true;
                 synchronized (mSettingsLock) {
                     final int index = mActiveUids.indexOfKey(uid, pkgName);
                     if (index >= 0) {
@@ -2180,14 +2184,16 @@ public final class AppRestrictionController {
                             logAppBackgroundRestrictionInfo(pkgName, uid, curLevel, level,
                                     localTrackerInfo, localReason);
                         });
-                        doIt = false;
+                        doItNow = false;
                     }
                 }
-                if (doIt) {
+                if (doItNow) {
                     appStandbyInternal.restrictApp(pkgName, UserHandle.getUserId(uid),
                             reason, subReason);
-                    logAppBackgroundRestrictionInfo(pkgName, uid, curLevel, level, trackerInfo,
-                            reason);
+                    if (!android.app.Flags.appRestrictionsApi()) {
+                        logAppBackgroundRestrictionInfo(pkgName, uid, curLevel, level, trackerInfo,
+                                reason);
+                    }
                 }
             }
         } else if (curLevel >= RESTRICTION_LEVEL_RESTRICTED_BUCKET
@@ -2202,6 +2208,13 @@ public final class AppRestrictionController {
             appStandbyInternal.maybeUnrestrictApp(pkgName, UserHandle.getUserId(uid),
                     prevReason & REASON_MAIN_MASK, prevReason & REASON_SUB_MASK,
                     reason, subReason);
+            if (!android.app.Flags.appRestrictionsApi()) {
+                logAppBackgroundRestrictionInfo(pkgName, uid, curLevel, level, trackerInfo,
+                        reason);
+            }
+        }
+
+        if (doItNow && android.app.Flags.appRestrictionsApi()) {
             logAppBackgroundRestrictionInfo(pkgName, uid, curLevel, level, trackerInfo,
                     reason);
         }
@@ -2896,7 +2909,7 @@ public final class AppRestrictionController {
         for (int i = 0; i < numPhones; i++) {
             final PhoneCarrierPrivilegesCallback callback = new PhoneCarrierPrivilegesCallback(i);
             callbacks.add(callback);
-            telephonyManager.registerCarrierPrivilegesCallback(i, mBgExecutor, callback);
+            telephonyManager.registerCarrierPrivilegesCallback(i, mExecutor, callback);
         }
         mCarrierPrivilegesCallbacks = callbacks;
     }
@@ -3286,6 +3299,10 @@ public final class AppRestrictionController {
 
         @CurrentTimeMillisLong long currentTimeMillis() {
             return System.currentTimeMillis();
+        }
+
+        Handler getDefaultHandler() {
+            return mAppRestrictionController.mActivityManagerService.mHandler;
         }
 
         boolean isTest() {

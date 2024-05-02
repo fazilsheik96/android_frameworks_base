@@ -16,10 +16,12 @@
 
 package com.android.server.inputmethod;
 
+import static android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_DENIED;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityOptions;
 import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
@@ -74,6 +76,7 @@ final class InputMethodBindingController {
     @GuardedBy("ImfLock.class") @Nullable private IInputMethodInvoker mCurMethod;
     @GuardedBy("ImfLock.class") private int mCurMethodUid = Process.INVALID_UID;
     @GuardedBy("ImfLock.class") @Nullable private IBinder mCurToken;
+    @GuardedBy("ImfLock.class") private int mCurSeq;
     @GuardedBy("ImfLock.class") private boolean mVisibleBound;
     @GuardedBy("ImfLock.class") private boolean mSupportsStylusHw;
     @GuardedBy("ImfLock.class") private boolean mSupportsConnectionlessStylusHw;
@@ -191,6 +194,27 @@ final class InputMethodBindingController {
     @Nullable
     Intent getCurIntent() {
         return mCurIntent;
+    }
+
+    /**
+     * The current binding sequence number, incremented every time there is
+     * a new bind performed.
+     */
+    @GuardedBy("ImfLock.class")
+    int getSequenceNumber() {
+        return mCurSeq;
+    }
+
+    /**
+     * Increase the current binding sequence number by one.
+     * Reset to 1 on overflow.
+     */
+    @GuardedBy("ImfLock.class")
+    void advanceSequenceNumber() {
+        mCurSeq += 1;
+        if (mCurSeq <= 0) {
+            mCurSeq = 1;
+        }
     }
 
     /**
@@ -388,7 +412,7 @@ final class InputMethodBindingController {
             Slog.v(TAG,
                     "Removing window token: " + mCurToken + " for display: " + curTokenDisplayId);
         }
-        mWindowManagerInternal.removeWindowToken(mCurToken, false /* removeWindows */,
+        mWindowManagerInternal.removeWindowToken(mCurToken, true /* removeWindows */,
                 false /* animateExit */, curTokenDisplayId);
         mCurToken = null;
     }
@@ -413,11 +437,9 @@ final class InputMethodBindingController {
             mLastBindTime = SystemClock.uptimeMillis();
 
             addFreshWindowToken();
-            final UserData monitor = UserData.getOrCreate(
-                    mService.getCurrentImeUserIdLocked());
             return new InputBindResult(
                     InputBindResult.ResultCode.SUCCESS_WAITING_IME_BINDING,
-                    null, null, null, mCurId, monitor.mSequence.getSequenceNumber(), false);
+                    null, null, null, mCurId, mCurSeq, false);
         }
 
         Slog.w(InputMethodManagerService.TAG,
@@ -432,9 +454,12 @@ final class InputMethodBindingController {
         intent.setComponent(component);
         intent.putExtra(Intent.EXTRA_CLIENT_LABEL,
                 com.android.internal.R.string.input_method_binding_label);
+        var options = ActivityOptions.makeBasic()
+                .setPendingIntentCreatorBackgroundActivityStartMode(
+                        MODE_BACKGROUND_ACTIVITY_START_DENIED);
         intent.putExtra(Intent.EXTRA_CLIENT_INTENT, PendingIntent.getActivity(
                 mContext, 0, new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS),
-                PendingIntent.FLAG_IMMUTABLE));
+                PendingIntent.FLAG_IMMUTABLE, options.toBundle()));
         return intent;
     }
 

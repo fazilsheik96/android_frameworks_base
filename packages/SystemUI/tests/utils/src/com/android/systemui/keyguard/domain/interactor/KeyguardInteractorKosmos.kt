@@ -20,11 +20,12 @@ import com.android.systemui.bouncer.data.repository.keyguardBouncerRepository
 import com.android.systemui.common.ui.domain.interactor.configurationInteractor
 import com.android.systemui.keyguard.data.repository.keyguardRepository
 import com.android.systemui.kosmos.Kosmos
+import com.android.systemui.kosmos.testScope
 import com.android.systemui.power.domain.interactor.powerInteractor
 import com.android.systemui.scene.domain.interactor.sceneInteractor
-import com.android.systemui.scene.shared.flag.sceneContainerFlags
 import com.android.systemui.shade.data.repository.shadeRepository
 import com.android.systemui.statusbar.commandQueue
+import com.android.systemui.statusbar.notification.stack.domain.interactor.sharedNotificationContainerInteractor
 
 val Kosmos.keyguardInteractor: KeyguardInteractor by
     Kosmos.Fixture {
@@ -32,12 +33,13 @@ val Kosmos.keyguardInteractor: KeyguardInteractor by
             repository = keyguardRepository,
             commandQueue = commandQueue,
             powerInteractor = powerInteractor,
-            sceneContainerFlags = sceneContainerFlags,
             bouncerRepository = keyguardBouncerRepository,
             configurationInteractor = configurationInteractor,
             shadeRepository = shadeRepository,
             keyguardTransitionInteractor = keyguardTransitionInteractor,
             sceneInteractorProvider = { sceneInteractor },
             fromGoneTransitionInteractor = { fromGoneTransitionInteractor },
+            sharedNotificationContainerInteractor = { sharedNotificationContainerInteractor },
+            applicationScope = testScope.backgroundScope,
         )
     }

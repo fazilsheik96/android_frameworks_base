@@ -46,7 +46,6 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.ConfigurationInfo;
 import android.content.pm.FeatureGroupInfo;
 import android.content.pm.FeatureInfo;
-import android.content.pm.Flags;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.Property;
@@ -134,7 +133,6 @@ import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.security.PublicKey;
@@ -164,8 +162,6 @@ public class ParsingPackageUtils {
      * File name in an APK for the Android manifest.
      */
     public static final String ANDROID_MANIFEST_FILENAME = "AndroidManifest.xml";
-
-    public static final String APP_METADATA_FILE_NAME = "app.metadata";
 
     /**
      * Path prefix for apps on expanded storage
@@ -242,6 +238,7 @@ public class ParsingPackageUtils {
      */
     public static final int PARSE_IGNORE_OVERLAY_REQUIRED_SYSTEM_PROPERTY = 1 << 7;
     public static final int PARSE_APK_IN_APEX = 1 << 9;
+    public static final int PARSE_APEX = 1 << 10;
 
     public static final int PARSE_CHATTY = 1 << 31;
 
@@ -343,6 +340,9 @@ public class ParsingPackageUtils {
         if ((flags & PARSE_APK_IN_APEX) != 0) {
             liteParseFlags |= PARSE_APK_IN_APEX;
         }
+        if ((flags & PARSE_APEX) != 0) {
+            liteParseFlags |= PARSE_APEX;
+        }
         final ParseResult<PackageLite> liteResult =
                 ApkLiteParseUtils.parseClusterPackageLite(input, packageDir, liteParseFlags);
         if (liteResult.isError()) {
@@ -411,8 +411,10 @@ public class ParsingPackageUtils {
      */
     private ParseResult<ParsingPackage> parseMonolithicPackage(ParseInput input, File apkFile,
             int flags) {
+        // The signature parsing will be done later in method parseBaseApk.
+        int liteParseFlags = flags & ~PARSE_COLLECT_CERTIFICATES;
         final ParseResult<PackageLite> liteResult =
-                ApkLiteParseUtils.parseMonolithicPackageLite(input, apkFile, flags);
+                ApkLiteParseUtils.parseMonolithicPackageLite(input, apkFile, liteParseFlags);
         if (liteResult.isError()) {
             return input.error(liteResult);
         }
@@ -532,7 +534,7 @@ public class ParsingPackageUtils {
 
         afterParseBaseApplication(pkg);
 
-        final ParseResult<ParsingPackage> result = validateBaseApkTags(input, pkg);
+        final ParseResult<ParsingPackage> result = validateBaseApkTags(input, pkg, flags);
         if (result.isError()) {
             return result;
         }
@@ -638,12 +640,6 @@ public class ParsingPackageUtils {
                 pkg.setSigningDetails(ret.getResult());
             } else {
                 pkg.setSigningDetails(SigningDetails.UNKNOWN);
-            }
-
-            if (Flags.aslInApkAppMetadataSource()) {
-                try (InputStream in = assets.open(APP_METADATA_FILE_NAME)) {
-                    pkg.setAppMetadataFileInApk(true);
-                } catch (Exception e) { }
             }
 
             return input.success(pkg);
@@ -1020,10 +1016,11 @@ public class ParsingPackageUtils {
             }
         }
 
-        return validateBaseApkTags(input, pkg);
+        return validateBaseApkTags(input, pkg, flags);
     }
 
-    private ParseResult<ParsingPackage> validateBaseApkTags(ParseInput input, ParsingPackage pkg) {
+    private ParseResult<ParsingPackage> validateBaseApkTags(ParseInput input, ParsingPackage pkg,
+            int flags) {
         if (!ParsedAttributionUtils.isCombinationValid(pkg.getAttributions())) {
             return input.error(
                     INSTALL_PARSE_FAILED_BAD_MANIFEST,
@@ -1053,6 +1050,16 @@ public class ParsingPackageUtils {
                 && !pkg.isResizeable()
                 && !pkg.isAnyDensity())) {
             adjustPackageToBeUnresizeableAndUnpipable(pkg);
+        }
+
+        // An Apex package shouldn't have permission declarations
+        final boolean isApex = (flags & PARSE_APEX) != 0;
+        if (isApex && !pkg.getPermissions().isEmpty()) {
+            return input.error(
+                    INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
+                    pkg.getPackageName()
+                            + " is an APEX package and shouldn't declare permissions."
+            );
         }
 
         return input.success(pkg);

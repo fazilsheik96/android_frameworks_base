@@ -16,6 +16,7 @@
 
 package com.android.systemui.accessibility.qs
 
+import com.android.systemui.Flags
 import com.android.systemui.qs.QsEventLogger
 import com.android.systemui.qs.pipeline.shared.TileSpec
 import com.android.systemui.qs.tileimpl.QSTileImpl
@@ -23,6 +24,7 @@ import com.android.systemui.qs.tiles.ColorCorrectionTile
 import com.android.systemui.qs.tiles.ColorInversionTile
 import com.android.systemui.qs.tiles.DreamTile
 import com.android.systemui.qs.tiles.FontScalingTile
+import com.android.systemui.qs.tiles.HearingDevicesTile
 import com.android.systemui.qs.tiles.NightDisplayTile
 import com.android.systemui.qs.tiles.OneHandedModeTile
 import com.android.systemui.qs.tiles.ReduceBrightColorsTile
@@ -39,9 +41,14 @@ import com.android.systemui.qs.tiles.impl.inversion.domain.ColorInversionTileMap
 import com.android.systemui.qs.tiles.impl.inversion.domain.interactor.ColorInversionTileDataInteractor
 import com.android.systemui.qs.tiles.impl.inversion.domain.interactor.ColorInversionUserActionInteractor
 import com.android.systemui.qs.tiles.impl.inversion.domain.model.ColorInversionTileModel
+import com.android.systemui.qs.tiles.impl.reducebrightness.domain.interactor.ReduceBrightColorsTileDataInteractor
+import com.android.systemui.qs.tiles.impl.reducebrightness.domain.interactor.ReduceBrightColorsTileUserActionInteractor
+import com.android.systemui.qs.tiles.impl.reducebrightness.domain.model.ReduceBrightColorsTileModel
+import com.android.systemui.qs.tiles.impl.reducebrightness.ui.ReduceBrightColorsTileMapper
 import com.android.systemui.qs.tiles.viewmodel.QSTileConfig
 import com.android.systemui.qs.tiles.viewmodel.QSTileUIConfig
 import com.android.systemui.qs.tiles.viewmodel.QSTileViewModel
+import com.android.systemui.qs.tiles.viewmodel.StubQSTileViewModel
 import com.android.systemui.res.R
 import dagger.Binds
 import dagger.Module
@@ -94,10 +101,17 @@ interface QSAccessibilityModule {
     @StringKey(FontScalingTile.TILE_SPEC)
     fun bindFontScalingTile(fontScalingTile: FontScalingTile): QSTileImpl<*>
 
+    /** Inject HearingDevicesTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(HearingDevicesTile.TILE_SPEC)
+    fun bindHearingDevicesTile(hearingDevicesTile: HearingDevicesTile): QSTileImpl<*>
+
     companion object {
         const val COLOR_CORRECTION_TILE_SPEC = "color_correction"
         const val COLOR_INVERSION_TILE_SPEC = "inversion"
         const val FONT_SCALING_TILE_SPEC = "font_scaling"
+        const val REDUCE_BRIGHTNESS_TILE_SPEC = "reduce_brightness"
 
         @Provides
         @IntoMap
@@ -191,5 +205,41 @@ interface QSAccessibilityModule {
                 stateInteractor,
                 mapper,
             )
+
+        @Provides
+        @IntoMap
+        @StringKey(REDUCE_BRIGHTNESS_TILE_SPEC)
+        fun provideReduceBrightColorsTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(REDUCE_BRIGHTNESS_TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.qs_extra_dim_icon_on,
+                        labelRes = com.android.internal.R.string.reduce_bright_colors_feature_name,
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+            )
+
+        /**
+         * Inject Reduce Bright Colors Tile into tileViewModelMap in QSModule. The tile is hidden
+         * behind a flag.
+         */
+        @Provides
+        @IntoMap
+        @StringKey(REDUCE_BRIGHTNESS_TILE_SPEC)
+        fun provideReduceBrightColorsTileViewModel(
+            factory: QSTileViewModelFactory.Static<ReduceBrightColorsTileModel>,
+            mapper: ReduceBrightColorsTileMapper,
+            stateInteractor: ReduceBrightColorsTileDataInteractor,
+            userActionInteractor: ReduceBrightColorsTileUserActionInteractor
+        ): QSTileViewModel =
+            if (Flags.qsNewTilesFuture())
+                factory.create(
+                    TileSpec.create(REDUCE_BRIGHTNESS_TILE_SPEC),
+                    userActionInteractor,
+                    stateInteractor,
+                    mapper,
+                )
+            else StubQSTileViewModel
     }
 }

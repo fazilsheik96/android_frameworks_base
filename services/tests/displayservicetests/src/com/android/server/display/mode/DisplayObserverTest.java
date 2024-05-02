@@ -38,7 +38,7 @@ import static org.mockito.Mockito.when;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.res.Resources;
-import android.hardware.display.DisplayManager;
+import android.hardware.display.DisplayManagerInternal;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.DeviceConfigInterface;
@@ -108,7 +108,7 @@ public class DisplayObserverTest {
     private Context mContext;
     private DisplayModeDirector.Injector mInjector;
     private Handler mHandler;
-    private DisplayManager.DisplayListener mObserver;
+    private DisplayModeDirector.DisplayObserver mObserver;
     private Resources mResources;
     @Mock
     private DisplayManagerFlags mDisplayManagerFlags;
@@ -160,6 +160,7 @@ public class DisplayObserverTest {
                 .isEqualTo(null);
 
         // Testing that the vote is not added when display is added because feature is disabled
+        mObserver.onExternalDisplayReadyToBeEnabled(EXTERNAL_DISPLAY);
         mObserver.onDisplayAdded(EXTERNAL_DISPLAY);
         assertThat(getVote(DEFAULT_DISPLAY, PRIORITY_USER_SETTING_DISPLAY_PREFERRED_SIZE))
                 .isEqualTo(null);
@@ -193,6 +194,7 @@ public class DisplayObserverTest {
         init();
         assertThat(getVote(EXTERNAL_DISPLAY, PRIORITY_USER_SETTING_DISPLAY_PREFERRED_SIZE))
                 .isEqualTo(null);
+        mObserver.onExternalDisplayReadyToBeEnabled(EXTERNAL_DISPLAY);
         mObserver.onDisplayAdded(EXTERNAL_DISPLAY);
         assertThat(getVote(DEFAULT_DISPLAY, PRIORITY_USER_SETTING_DISPLAY_PREFERRED_SIZE))
                 .isEqualTo(null);
@@ -244,6 +246,7 @@ public class DisplayObserverTest {
         init();
         assertThat(getVote(EXTERNAL_DISPLAY, PRIORITY_USER_SETTING_DISPLAY_PREFERRED_SIZE))
                 .isEqualTo(null);
+        mObserver.onExternalDisplayReadyToBeEnabled(EXTERNAL_DISPLAY);
         mObserver.onDisplayAdded(EXTERNAL_DISPLAY);
         assertThat(getVote(DEFAULT_DISPLAY, PRIORITY_USER_SETTING_DISPLAY_PREFERRED_SIZE))
                 .isEqualTo(null);
@@ -276,6 +279,7 @@ public class DisplayObserverTest {
         init();
         assertThat(getVote(DEFAULT_DISPLAY, PRIORITY_USER_SETTING_DISPLAY_PREFERRED_SIZE))
                 .isEqualTo(null);
+        mObserver.onExternalDisplayReadyToBeEnabled(DEFAULT_DISPLAY);
         mObserver.onDisplayAdded(DEFAULT_DISPLAY);
         assertThat(getVote(DEFAULT_DISPLAY, PRIORITY_USER_SETTING_DISPLAY_PREFERRED_SIZE))
                 .isEqualTo(expectedResolutionVote);
@@ -297,6 +301,7 @@ public class DisplayObserverTest {
                 .thenReturn(MAX_HEIGHT);
         init();
         assertThat(getVote(DEFAULT_DISPLAY, PRIORITY_LIMIT_MODE)).isEqualTo(null);
+        mObserver.onExternalDisplayReadyToBeEnabled(DEFAULT_DISPLAY);
         mObserver.onDisplayAdded(DEFAULT_DISPLAY);
         assertThat(getVote(DEFAULT_DISPLAY, PRIORITY_LIMIT_MODE)).isEqualTo(null);
         assertThat(getVote(EXTERNAL_DISPLAY, PRIORITY_LIMIT_MODE)).isEqualTo(null);
@@ -316,6 +321,7 @@ public class DisplayObserverTest {
                 .thenReturn(MAX_HEIGHT);
         init();
         assertThat(getVote(EXTERNAL_DISPLAY, PRIORITY_LIMIT_MODE)).isEqualTo(null);
+        mObserver.onExternalDisplayReadyToBeEnabled(EXTERNAL_DISPLAY);
         mObserver.onDisplayAdded(EXTERNAL_DISPLAY);
         assertThat(getVote(DEFAULT_DISPLAY, PRIORITY_LIMIT_MODE)).isEqualTo(null);
         assertThat(getVote(EXTERNAL_DISPLAY, PRIORITY_LIMIT_MODE)).isEqualTo(
@@ -335,6 +341,7 @@ public class DisplayObserverTest {
         when(mDisplayManagerFlags.isExternalDisplayLimitModeEnabled()).thenReturn(true);
         init();
         assertThat(getVote(EXTERNAL_DISPLAY, PRIORITY_LIMIT_MODE)).isEqualTo(null);
+        mObserver.onExternalDisplayReadyToBeEnabled(EXTERNAL_DISPLAY);
         mObserver.onDisplayAdded(EXTERNAL_DISPLAY);
         assertThat(getVote(DEFAULT_DISPLAY, PRIORITY_LIMIT_MODE)).isEqualTo(null);
         assertThat(getVote(EXTERNAL_DISPLAY, PRIORITY_LIMIT_MODE)).isEqualTo(null);
@@ -357,6 +364,7 @@ public class DisplayObserverTest {
                 .thenReturn(true);
         init();
         assertThat(getVote(GLOBAL_ID, PRIORITY_SYNCHRONIZED_REFRESH_RATE)).isEqualTo(null);
+        mObserver.onExternalDisplayReadyToBeEnabled(EXTERNAL_DISPLAY);
         mObserver.onDisplayAdded(EXTERNAL_DISPLAY);
         assertThat(getVote(GLOBAL_ID, PRIORITY_SYNCHRONIZED_REFRESH_RATE)).isEqualTo(
                 Vote.forPhysicalRefreshRates(
@@ -380,6 +388,7 @@ public class DisplayObserverTest {
                 .thenReturn(true);
         init();
         assertThat(getVote(GLOBAL_ID, PRIORITY_SYNCHRONIZED_REFRESH_RATE)).isEqualTo(null);
+        mObserver.onExternalDisplayReadyToBeEnabled(EXTERNAL_DISPLAY);
         mObserver.onDisplayAdded(EXTERNAL_DISPLAY);
         assertThat(getVote(GLOBAL_ID, PRIORITY_SYNCHRONIZED_REFRESH_RATE)).isEqualTo(null);
     }
@@ -394,6 +403,7 @@ public class DisplayObserverTest {
         when(mDisplayManagerFlags.isDisplaysRefreshRatesSynchronizationEnabled()).thenReturn(true);
         init();
         assertThat(getVote(GLOBAL_ID, PRIORITY_SYNCHRONIZED_REFRESH_RATE)).isEqualTo(null);
+        mObserver.onExternalDisplayReadyToBeEnabled(EXTERNAL_DISPLAY);
         mObserver.onDisplayAdded(EXTERNAL_DISPLAY);
         assertThat(getVote(GLOBAL_ID, PRIORITY_SYNCHRONIZED_REFRESH_RATE)).isEqualTo(null);
     }
@@ -426,8 +436,12 @@ public class DisplayObserverTest {
             return true;
         }).when(mInjector).getDisplayInfo(eq(EXTERNAL_DISPLAY), /*displayInfo=*/ any());
 
-        doAnswer(c -> mock(SensorManagerInternal.class)).when(mInjector).getSensorManagerInternal();
+        doAnswer(c -> mock(SensorManagerInternal.class))
+                .when(mInjector).getSensorManagerInternal();
         doAnswer(c -> mock(DeviceConfigInterface.class)).when(mInjector).getDeviceConfig();
+        doAnswer(c -> mock(DisplayManagerInternal.class))
+                .when(mInjector).getDisplayManagerInternal();
+
 
         mDefaultDisplay = mock(Display.class);
         when(mDefaultDisplay.getDisplayId()).thenReturn(DEFAULT_DISPLAY);

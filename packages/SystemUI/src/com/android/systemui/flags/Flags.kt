@@ -153,11 +153,6 @@ object Flags {
     // TODO(b/267722622): Tracking Bug
     @JvmField val WALLPAPER_PICKER_UI_FOR_AIWP = releasedFlag("wallpaper_picker_ui_for_aiwp")
 
-    /** Whether to use a new data source for intents to run on keyguard dismissal. */
-    // TODO(b/275069969): Tracking bug.
-    @JvmField
-    val REFACTOR_KEYGUARD_DISMISS_INTENT = unreleasedFlag("refactor_keyguard_dismiss_intent")
-
     /** Whether to allow long-press on the lock screen to directly open wallpaper picker. */
     // TODO(b/277220285): Tracking bug.
     @JvmField
@@ -342,11 +337,6 @@ object Flags {
             namespace = DeviceConfig.NAMESPACE_WINDOW_MANAGER,
         )
 
-    @Keep
-    @JvmField
-    val WM_CAPTION_ON_SHELL =
-        sysPropBooleanFlag("persist.wm.debug.caption_on_shell", default = true)
-
     // TODO(b/256873975): Tracking Bug
     @JvmField
     @Keep
@@ -387,16 +377,8 @@ object Flags {
     // TODO(b/273800936): Tracking Bug
     @JvmField val TRACKPAD_GESTURE_COMMON = releasedFlag("trackpad_gesture_common")
 
-    // 1300 - screenshots
-    // TODO(b/264916608): Tracking Bug
-    @JvmField val SCREENSHOT_METADATA = unreleasedFlag("screenshot_metadata")
-
     // TODO(b/251205791): Tracking Bug
     @JvmField val SCREENSHOT_APP_CLIPS = releasedFlag("screenshot_app_clips")
-
-    /** TODO(b/295143676): Tracking bug. When enable, captures a screenshot for each display. */
-    @JvmField
-    val MULTI_DISPLAY_SCREENSHOT = releasedFlag("multi_display_screenshot")
 
     // 1400 - columbus
     // TODO(b/254512756): Tracking Bug
@@ -417,21 +399,6 @@ object Flags {
     @JvmField
     val CLIPBOARD_SHARED_TRANSITIONS =
             unreleasedFlag("clipboard_shared_transitions", teamfood = true)
-
-    /**
-     * Whether the scene container (Flexiglass) is enabled. Note that SceneContainerFlags#isEnabled
-     * should be checked and toggled together with [SCENE_CONTAINER_ENABLED] so that ProGuard can
-     * remove unused code from our APK at compile time.
-     */
-    // TODO(b/283300105): Tracking Bug
-    @JvmField val SCENE_CONTAINER_ENABLED = false
-
-    /**
-     * Whether the compose bouncer is enabled. This ensures ProGuard can
-     * remove unused code from our APK at compile time.
-     */
-    // TODO(b/280877228): Tracking Bug
-    @JvmField val COMPOSE_BOUNCER_ENABLED = false
 
     // 1900
     @JvmField val NOTE_TASKS = releasedFlag("keycode_flag")

@@ -84,7 +84,7 @@
     <string name="NetworkPreferenceSwitchTitle" msgid="1008329951315753038">"मोबाइल नेटवर्क उपलब्ध नाही"</string>
     <string name="NetworkPreferenceSwitchSummary" msgid="2086506181486324860">"प्राधान्य दिलेले नेटवर्क बदलण्याचा प्रयत्न करा. बदलण्यासाठी टॅप करा."</string>
     <string name="EmergencyCallWarningTitle" msgid="1615688002899152860">"आणीबाणी कॉलिंग अनुपलब्ध"</string>
-    <string name="EmergencyCallWarningSummary" msgid="1194185880092805497">"वाय-फाय वरून आणीबाणी कॉल करू शकत नाही"</string>
+    <string name="EmergencyCallWarningSummary" msgid="9102799172089265268">"आणीबाणी कॉलसाठी मोबाइल नेटवर्क आवश्यक आहे"</string>
     <string name="notification_channel_network_alert" msgid="4788053066033851841">"अलर्ट"</string>
     <string name="notification_channel_call_forward" msgid="8230490317314272406">"कॉल फॉरवर्डिंग"</string>
     <string name="notification_channel_emergency_callback" msgid="54074839059123159">"इमर्जन्सी कॉलबॅक मोड"</string>
@@ -615,7 +615,7 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"कीलॉक आणि कोणतीही संबद्ध पासवर्ड सुरक्षितता अक्षम करण्यासाठी अ‍ॅप ला अनुमती देते. उदाहरणार्थ, येणारा फोन कॉल प्राप्त करताना फोन कीलॉक अक्षम करतो, नंतर जेव्हा कॉल समाप्त होतो तेव्हा तो कीलॉक पुन्हा-सक्षम करतो."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"स्क्रीन लॉक क्लिष्टतेची विनंती करा"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"अ‍ॅपला स्क्रीन लॉक क्लिष्टता पातळी (उच्च, मध्यम, खालची किंवा काहीही नाही) जाणून घेऊ देते, जी लांबीची संभाव्य रेंज आणि स्क्रीन लॉकचा प्रकार सूचित करते. अ‍ॅप वापरकर्त्यांना असेदेखील सुचवू शकते की त्यांनी स्क्रीन लॉक ठरावीक पातळीपर्यंत अपडेट करावे, परंतु वापरकर्ते त्याकडे मोकळेपणाने दुर्लक्ष करू शकतात आणि तेथून नेव्हिगेट करू शकतात. स्क्रीन लॉक प्लेनटेक्स्टमध्ये स्टोअर केले जात नसल्यामुळे अ‍ॅपला नेमका पासवर्ड माहीत नसतो याची नोंद घ्या."</string>
-    <string name="permlab_postNotification" msgid="4875401198597803658">"सूचना दाखवा"</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"नोटिफिकेशन दाखवा"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"ॲपला सूचना दाखवू देते"</string>
     <string name="permlab_turnScreenOn" msgid="219344053664171492">"स्क्रीन सुरू करा"</string>
     <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"अ‍ॅपला स्क्रीन सुरू करण्याची परवानगी देते."</string>
@@ -1183,6 +1183,8 @@
     <string name="deleteText" msgid="4200807474529938112">"हटवा"</string>
     <string name="inputMethod" msgid="1784759500516314751">"इनपुट पद्धत"</string>
     <string name="editTextMenuTitle" msgid="857666911134482176">"मजकूर क्रिया"</string>
+    <string name="error_handwriting_unsupported" msgid="7809438534946014050">"या फील्डमध्ये हस्तलेखनला सपोर्ट नाही"</string>
+    <string name="error_handwriting_unsupported_password" msgid="5095401146106891087">"पासवर्ड फील्डमध्ये हस्तलेखनला सपोर्ट नाही"</string>
     <string name="input_method_nav_back_button_desc" msgid="3655838793765691787">"मागे जा"</string>
     <string name="input_method_ime_switch_button_desc" msgid="2736542240252198501">"इनपुट पद्धत स्विच करा"</string>
     <string name="low_internal_storage_view_title" msgid="9024241779284783414">"संचयन स्थान संपत आहे"</string>
@@ -1759,7 +1761,7 @@
     <string name="owner_name" msgid="8713560351570795743">"मालक"</string>
     <string name="guest_name" msgid="8502103277839834324">"अतिथी"</string>
     <string name="error_message_title" msgid="4082495589294631966">"एरर"</string>
-    <string name="error_message_change_not_allowed" msgid="843159705042381454">"या बदलास आपल्या प्रशासकाद्वारे अनुमती नाही"</string>
+    <string name="error_message_change_not_allowed" msgid="843159705042381454">"या बदलासाठी तुमच्या अ‍ॅडमिनची अनुमती नाही"</string>
     <string name="app_not_found" msgid="3429506115332341800">"ही क्रिया हाताळण्यासाठी कोणताही ॲप्लिकेशन आढळला नाही"</string>
     <string name="revoke" msgid="5526857743819590458">"मागे घ्‍या"</string>
     <string name="mediasize_iso_a0" msgid="7039061159929977973">"ISO A0"</string>
@@ -1927,6 +1929,9 @@
     <string name="zen_mode_implicit_trigger_description" msgid="5714956693073007111">"<xliff:g id="APP_NAME">%1$s</xliff:g> द्वारे व्यवस्थापित"</string>
     <string name="zen_mode_implicit_activated" msgid="2634285680776672994">"सुरू आहे"</string>
     <string name="zen_mode_implicit_deactivated" msgid="8688441768371501750">"बंद आहे"</string>
+    <string name="zen_mode_trigger_summary_divider_text" msgid="7461583466043698862">", "</string>
+    <string name="zen_mode_trigger_summary_range_symbol_combination" msgid="1804900738798069619">"<xliff:g id="START">%1$s</xliff:g> - <xliff:g id="END">%2$s</xliff:g>"</string>
+    <string name="zen_mode_trigger_event_calendar_any" msgid="2086784607921121803">"कोणतेही कॅलेंडर"</string>
     <string name="muted_by" msgid="91464083490094950">"<xliff:g id="THIRD_PARTY">%1$s</xliff:g> काही ध्‍वनी म्‍यूट करत आहे"</string>
     <string name="system_error_wipe_data" msgid="5910572292172208493">"आपल्‍या डिव्‍हाइसमध्‍ये अंतर्गत समस्‍या आहे आणि तुमचा फॅक्‍टरी डेटा रीसेट होईपर्यंत ती अस्‍थिर असू शकते."</string>
     <string name="system_error_manufacturer" msgid="703545241070116315">"आपल्‍या डिव्‍हाइसमध्‍ये अंतर्गत समस्‍या आहे. तपशीलांसाठी आपल्‍या निर्मात्याशी संपर्क साधा."</string>
@@ -2389,6 +2394,7 @@
     <string name="profile_label_test" msgid="9168641926186071947">"चाचणी"</string>
     <string name="profile_label_communal" msgid="8743921499944800427">"सामुदायिक"</string>
     <string name="redacted_notification_action_title" msgid="6942924973335920935"></string>
+    <string name="screen_not_shared_sensitive_content" msgid="7058419185079565001">"स्क्रीन शेअर करताना सुरक्षेसाठी अ‍ॅपमधील आशय लपवला आहे"</string>
     <string name="satellite_notification_title" msgid="4026338973463121526">"उपग्रहाशी आपोआप कनेक्ट केलेले आहे"</string>
     <string name="satellite_notification_summary" msgid="5207364139430767162">"तुम्ही मोबाइल किंवा वाय-फाय नेटवर्कशिवाय मेसेज पाठवू आणि मिळवू शकता"</string>
     <string name="satellite_notification_open_message" msgid="4149234979688273729">"Messages उघडा"</string>

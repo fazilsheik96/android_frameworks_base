@@ -97,6 +97,7 @@ import android.opengl.GLES10;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Debug;
 import android.os.IProgressListener;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteCallback;
@@ -125,6 +126,8 @@ import com.android.server.LocalServices;
 import com.android.server.am.LowMemDetector.MemFactor;
 import com.android.server.am.nano.Capabilities;
 import com.android.server.am.nano.Capability;
+import com.android.server.am.nano.FrameworkCapability;
+import com.android.server.am.nano.VMCapability;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.utils.Slogf;
@@ -443,6 +446,22 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 capabilities.values[i] = cap;
             }
 
+            String[] vmCapabilities = Debug.getVmFeatureList();
+            capabilities.vmCapabilities = new VMCapability[vmCapabilities.length];
+            for (int i = 0; i < vmCapabilities.length; i++) {
+                VMCapability cap = new VMCapability();
+                cap.name = vmCapabilities[i];
+                capabilities.vmCapabilities[i] = cap;
+            }
+
+            String[] fmCapabilities = Debug.getFeatureList();
+            capabilities.frameworkCapabilities = new FrameworkCapability[fmCapabilities.length];
+            for (int i = 0; i < fmCapabilities.length; i++) {
+                FrameworkCapability cap = new FrameworkCapability();
+                cap.name = fmCapabilities[i];
+                capabilities.frameworkCapabilities[i] = cap;
+            }
+
             try {
                 getRawOutputStream().write(Capabilities.toByteArray(capabilities));
             } catch (IOException e) {
@@ -452,9 +471,15 @@ final class ActivityManagerShellCommand extends ShellCommand {
         } else {
             // Unfortunately we don't have protobuf text format capabilities here.
             // Fallback to line separated list instead for text parser.
-            pw.println("Format: 1");
+            pw.println("Format: 2");
             for (String capability : CAPABILITIES) {
                 pw.println(capability);
+            }
+            for (String capability : Debug.getVmFeatureList()) {
+                pw.println("vm:" + capability);
+            }
+            for (String capability : Debug.getFeatureList()) {
+                pw.println("framework:" + capability);
             }
         }
         return 0;
@@ -1239,6 +1264,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         final PrintWriter err = getErrPrintWriter();
         boolean managed = true;
         boolean mallocInfo = false;
+        String dumpBitmaps = null;
         int userId = UserHandle.USER_CURRENT;
         boolean runGc = false;
 
@@ -1257,6 +1283,11 @@ final class ActivityManagerShellCommand extends ShellCommand {
             } else if (opt.equals("-m")) {
                 managed = false;
                 mallocInfo = true;
+            } else if (opt.equals("-b")) {
+                dumpBitmaps = getNextArg();
+                if (dumpBitmaps == null) {
+                    dumpBitmaps = "png"; // default to PNG in dumping bitmaps
+                }
             } else {
                 err.println("Error: Unknown option: " + opt);
                 return -1;
@@ -1288,8 +1319,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             }
         }, null);
 
-        if (!mInterface.dumpHeap(process, userId, managed, mallocInfo, runGc, heapFile, fd,
-                finishCallback)) {
+        if (!mInterface.dumpHeap(process, userId, managed, mallocInfo, runGc, dumpBitmaps,
+                heapFile, fd, finishCallback)) {
             err.println("HEAP DUMP FAILED on process " + process);
             return -1;
         }
@@ -2554,7 +2585,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
                 "shell_runStopUser-" + userId + "-[stopUser]");
         try {
-            int res = mInterface.stopUser(userId, force, callback);
+            int res = mInterface.stopUserExceptCertainProfiles(
+                    userId, /* stopProfileRegardlessOfParent= */ force, callback);
             if (res != ActivityManager.USER_OP_SUCCESS) {
                 String txt = "";
                 switch (res) {
@@ -4284,11 +4316,14 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --user <USER_ID> | current: When supplying a process name,");
             pw.println("          specify user of process to profile; uses current user if not");
             pw.println("          specified.");
-            pw.println("  dumpheap [--user <USER_ID> current] [-n] [-g] <PROCESS> <FILE>");
+            pw.println("  dumpheap [--user <USER_ID> current] [-n] [-g] [-b <format>] ");
+            pw.println("           <PROCESS> <FILE>");
             pw.println("      Dump the heap of a process.  The given <PROCESS> argument may");
             pw.println("        be either a process name or pid.  Options are:");
             pw.println("      -n: dump native heap instead of managed heap");
             pw.println("      -g: force GC before dumping the heap");
+            pw.println("      -b <format>: dump contents of bitmaps in the format specified,");
+            pw.println("         which can be \"png\", \"jpg\" or \"webp\".");
             pw.println("      --user <USER_ID> | current: When supplying a process name,");
             pw.println("          specify user of process to dump; uses current user if not specified.");
             pw.println("  set-debug-app [-w] [--persistent] <PACKAGE>");
@@ -4385,7 +4420,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      Stop execution of USER_ID, not allowing it to run any");
             pw.println("      code until a later explicit start or switch to it.");
             pw.println("      -w: wait for stop-user to complete.");
-            pw.println("      -f: force stop even if there are related users that cannot be stopped.");
+            pw.println("      -f: force stop, even if user has an unstoppable parent.");
             pw.println("  is-user-stopped <USER_ID>");
             pw.println("      Returns whether <USER_ID> has been stopped or not.");
             pw.println("  get-started-user-state <USER_ID>");

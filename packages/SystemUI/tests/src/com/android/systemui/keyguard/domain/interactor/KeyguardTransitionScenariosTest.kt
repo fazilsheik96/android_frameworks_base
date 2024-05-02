@@ -27,6 +27,8 @@ import com.android.systemui.SysuiTestCase
 import com.android.systemui.bouncer.data.repository.fakeKeyguardBouncerRepository
 import com.android.systemui.communal.domain.interactor.communalInteractor
 import com.android.systemui.communal.shared.model.CommunalScenes
+import com.android.systemui.dock.DockManager
+import com.android.systemui.dock.fakeDockManager
 import com.android.systemui.flags.FakeFeatureFlags
 import com.android.systemui.keyguard.data.repository.FakeKeyguardTransitionRepository
 import com.android.systemui.keyguard.data.repository.fakeCommandQueue
@@ -47,7 +49,6 @@ import com.android.systemui.power.domain.interactor.powerInteractor
 import com.android.systemui.shade.data.repository.fakeShadeRepository
 import com.android.systemui.statusbar.commandQueue
 import com.android.systemui.testKosmos
-import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.whenever
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelChildren
@@ -64,10 +65,8 @@ import org.junit.runners.JUnit4
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.Mock
 import org.mockito.Mockito.clearInvocations
-import org.mockito.Mockito.never
 import org.mockito.Mockito.reset
 import org.mockito.Mockito.spy
-import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
 
 /**
@@ -111,6 +110,7 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
 
     private val powerInteractor = kosmos.powerInteractor
     private val communalInteractor = kosmos.communalInteractor
+    private val dockManager = kosmos.fakeDockManager
 
     @Before
     fun setUp() {
@@ -521,7 +521,7 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
             advanceTimeBy(100L)
 
             // THEN the transition is ignored
-            verify(transitionRepository, never()).startTransition(any())
+            assertThat(transitionRepository).noTransitionsStarted()
 
             coroutineContext.cancelChildren()
         }
@@ -1233,6 +1233,38 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
         }
 
     @Test
+    fun occludedToGlanceableHubWhenDocked() =
+        testScope.runTest {
+            // GIVEN a device on lockscreen
+            keyguardRepository.setKeyguardShowing(true)
+            runCurrent()
+
+            // GIVEN a prior transition has run to OCCLUDED
+            runTransitionAndSetWakefulness(KeyguardState.GLANCEABLE_HUB, KeyguardState.OCCLUDED)
+            keyguardRepository.setKeyguardOccluded(true)
+            runCurrent()
+
+            // GIVEN device is docked
+            dockManager.setIsDocked(true)
+            dockManager.setDockEvent(DockManager.STATE_DOCKED)
+
+            // WHEN occlusion ends
+            keyguardRepository.setKeyguardOccluded(false)
+            runCurrent()
+
+            // THEN a transition to GLANCEABLE_HUB should occur
+            assertThat(transitionRepository)
+                .startedTransition(
+                    ownerName = FromOccludedTransitionInteractor::class.simpleName,
+                    from = KeyguardState.OCCLUDED,
+                    to = KeyguardState.GLANCEABLE_HUB,
+                    animatorAssertion = { it.isNotNull() },
+                )
+
+            coroutineContext.cancelChildren()
+        }
+
+    @Test
     fun occludedToAlternateBouncer() =
         testScope.runTest {
             // GIVEN a prior transition has run to OCCLUDED
@@ -1350,6 +1382,30 @@ class KeyguardTransitionScenariosTest : SysuiTestCase() {
                     ownerName = "FromDreamingTransitionInteractor",
                     from = KeyguardState.DREAMING,
                     to = KeyguardState.OCCLUDED,
+                    animatorAssertion = { it.isNotNull() },
+                )
+
+            coroutineContext.cancelChildren()
+        }
+
+    @Test
+    fun dreamingToPrimaryBouncer() =
+        testScope.runTest {
+            // GIVEN a prior transition has run to DREAMING
+            keyguardRepository.setDreaming(true)
+            runTransitionAndSetWakefulness(KeyguardState.LOCKSCREEN, KeyguardState.DREAMING)
+            runCurrent()
+
+            // WHEN the primary bouncer is set to show
+            bouncerRepository.setPrimaryShow(true)
+            runCurrent()
+
+            // THEN a transition to PRIMARY_BOUNCER should occur
+            assertThat(transitionRepository)
+                .startedTransition(
+                    ownerName = "FromDreamingTransitionInteractor",
+                    from = KeyguardState.DREAMING,
+                    to = KeyguardState.PRIMARY_BOUNCER,
                     animatorAssertion = { it.isNotNull() },
                 )
 

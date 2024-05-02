@@ -671,12 +671,12 @@ public final class AutomaticZenRule implements Parcelable {
         private String mName;
         private ComponentName mOwner;
         private Uri mConditionId;
-        private int mInterruptionFilter;
+        private int mInterruptionFilter = NotificationManager.INTERRUPTION_FILTER_PRIORITY;
         private boolean mEnabled = true;
         private ComponentName mConfigurationActivity = null;
         private ZenPolicy mPolicy = null;
         private ZenDeviceEffects mDeviceEffects = null;
-        private int mType;
+        private int mType = TYPE_UNKNOWN;
         private String mDescription;
         private int mIconResId;
         private boolean mAllowManualInvocation;

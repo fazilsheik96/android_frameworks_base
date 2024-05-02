@@ -30,11 +30,11 @@ import com.android.systemui.keyguard.shared.model.StatusBarState
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.power.domain.interactor.PowerInteractorFactory
 import com.android.systemui.scene.domain.interactor.sceneInteractor
-import com.android.systemui.scene.shared.flag.fakeSceneContainerFlags
 import com.android.systemui.shade.data.repository.FakeShadeRepository
 import com.android.systemui.statusbar.CommandQueue
 import com.android.systemui.statusbar.data.repository.FakeKeyguardStatusBarRepository
 import com.android.systemui.statusbar.domain.interactor.KeyguardStatusBarInteractor
+import com.android.systemui.statusbar.notification.stack.domain.interactor.sharedNotificationContainerInteractor
 import com.android.systemui.statusbar.policy.BatteryController
 import com.android.systemui.testKosmos
 import com.android.systemui.util.mockito.argumentCaptor
@@ -59,13 +59,14 @@ class KeyguardStatusBarViewModelTest : SysuiTestCase() {
             keyguardRepository,
             mock<CommandQueue>(),
             PowerInteractorFactory.create().powerInteractor,
-            kosmos.fakeSceneContainerFlags,
             FakeKeyguardBouncerRepository(),
             ConfigurationInteractor(FakeConfigurationRepository()),
             FakeShadeRepository(),
             kosmos.keyguardTransitionInteractor,
             { kosmos.sceneInteractor },
             { kosmos.fromGoneTransitionInteractor },
+            { kosmos.sharedNotificationContainerInteractor },
+            testScope,
         )
     private val keyguardStatusBarInteractor =
         KeyguardStatusBarInteractor(

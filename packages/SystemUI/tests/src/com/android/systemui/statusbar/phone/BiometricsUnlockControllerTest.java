@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static com.android.systemui.statusbar.phone.BiometricUnlockController.MODE_NONE;
 import static com.android.systemui.statusbar.phone.BiometricUnlockController.MODE_WAKE_AND_UNLOCK;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -26,6 +27,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
@@ -51,6 +53,10 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.keyguard.domain.interactor.BiometricUnlockInteractor;
+import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor;
+import com.android.systemui.keyguard.shared.model.KeyguardState;
+import com.android.systemui.keyguard.shared.model.TransitionState;
+import com.android.systemui.keyguard.shared.model.TransitionStep;
 import com.android.systemui.log.SessionTracker;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationMediaManager;
@@ -58,6 +64,7 @@ import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.user.domain.interactor.SelectedUserInteractor;
+import com.android.systemui.util.kotlin.JavaAdapter;
 import com.android.systemui.util.time.FakeSystemClock;
 
 import org.junit.Before;
@@ -124,6 +131,8 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
     private SelectedUserInteractor mSelectedUserInteractor;
     @Mock
     private BiometricUnlockInteractor mBiometricUnlockInteractor;
+    @Mock
+    private KeyguardTransitionInteractor mKeyguardTransitionInteractor;
     private final FakeSystemClock mSystemClock = new FakeSystemClock();
     private BiometricUnlockController mBiometricUnlockController;
 
@@ -158,7 +167,9 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
                 mSessionTracker, mLatencyTracker, mScreenOffAnimationController, mVibratorHelper,
                 mSystemClock,
                 () -> mSelectedUserInteractor,
-                mBiometricUnlockInteractor
+                mBiometricUnlockInteractor,
+                mock(JavaAdapter.class),
+                mKeyguardTransitionInteractor
         );
         biometricUnlockController.setKeyguardViewController(mStatusBarKeyguardViewManager);
         biometricUnlockController.addListener(mBiometricUnlockEventsListener);
@@ -365,6 +376,24 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void onBiometricAuthenticated_whenFaceOnAlternateBouncer_dismissBouncer() {
+        when(mUpdateMonitor.isUnlockingWithBiometricAllowed(anyBoolean())).thenReturn(true);
+        when(mStatusBarKeyguardViewManager.primaryBouncerIsOrWillBeShowing()).thenReturn(false);
+        when(mKeyguardTransitionInteractor.getCurrentState())
+                .thenReturn(KeyguardState.ALTERNATE_BOUNCER);
+        // the value of isStrongBiometric doesn't matter here since we only care about the returned
+        // value of isUnlockingWithBiometricAllowed()
+        mBiometricUnlockController.onBiometricAuthenticated(UserHandle.USER_CURRENT,
+                BiometricSourceType.FACE, true /* isStrongBiometric */);
+
+        verify(mStatusBarKeyguardViewManager).notifyKeyguardAuthenticated(eq(false));
+        assertThat(mBiometricUnlockController.getMode())
+                .isEqualTo(BiometricUnlockController.MODE_DISMISS_BOUNCER);
+        assertThat(mBiometricUnlockController.getBiometricType())
+                .isEqualTo(BiometricSourceType.FACE);
+    }
+
+    @Test
     public void onBiometricAuthenticated_whenBypassOnBouncer_dismissBouncer() {
         reset(mKeyguardBypassController);
         when(mUpdateMonitor.isUnlockingWithBiometricAllowed(anyBoolean())).thenReturn(true);
@@ -459,6 +488,29 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
 
         // THEN never wakeup the device
         verify(mPowerManager, never()).wakeUp(anyLong(), anyInt(), anyString());
+    }
+
+    @Test
+    public void biometricUnlockStateResetOnTransitionFromGone() {
+        mBiometricUnlockController.consumeTransitionStepOnStartedKeyguardState(
+                new TransitionStep(
+                        KeyguardState.AOD,
+                        KeyguardState.GONE,
+                        .1f /* value */,
+                        TransitionState.STARTED
+                )
+        );
+        verify(mBiometricUnlockInteractor, never()).setBiometricUnlockState(anyInt());
+
+        mBiometricUnlockController.consumeTransitionStepOnStartedKeyguardState(
+                new TransitionStep(
+                        KeyguardState.GONE,
+                        KeyguardState.AOD,
+                        .1f /* value */,
+                        TransitionState.STARTED
+                )
+        );
+        verify(mBiometricUnlockInteractor).setBiometricUnlockState(eq(MODE_NONE));
     }
 
     @Test

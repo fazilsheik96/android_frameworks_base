@@ -326,7 +326,7 @@ class ShadeInteractorImplTest : SysuiTestCase() {
         }
 
     @Test
-    fun shadeExpansionWhenNotInSplitShadeAndQsExpanded() =
+    fun shadeExpansionWhenNotInSplitShadeAndQsPartiallyExpanded() =
         testScope.runTest {
             val actual by collectLastValue(underTest.shadeExpansion)
 
@@ -334,6 +334,22 @@ class ShadeInteractorImplTest : SysuiTestCase() {
             keyguardRepository.setStatusBarState(StatusBarState.SHADE)
             overrideResource(R.bool.config_use_split_notification_shade, false)
             shadeRepository.setQsExpansion(.5f)
+            shadeRepository.setLegacyShadeExpansion(1f)
+            runCurrent()
+
+            // THEN shade expansion is zero
+            assertThat(actual).isEqualTo(.5f)
+        }
+
+    @Test
+    fun shadeExpansionWhenNotInSplitShadeAndQsFullyExpanded() =
+        testScope.runTest {
+            val actual by collectLastValue(underTest.shadeExpansion)
+
+            // WHEN split shade is not enabled and QS is expanded
+            keyguardRepository.setStatusBarState(StatusBarState.SHADE)
+            overrideResource(R.bool.config_use_split_notification_shade, false)
+            shadeRepository.setQsExpansion(1f)
             shadeRepository.setLegacyShadeExpansion(1f)
             runCurrent()
 
@@ -603,20 +619,6 @@ class ShadeInteractorImplTest : SysuiTestCase() {
         }
 
     @Test
-    fun isShadeTouchable_isFalse_whenFrpIsActive() =
-        testScope.runTest {
-            deviceProvisioningRepository.setFactoryResetProtectionActive(true)
-            keyguardTransitionRepository.sendTransitionStep(
-                TransitionStep(
-                    transitionState = TransitionState.STARTED,
-                )
-            )
-            val isShadeTouchable by collectLastValue(underTest.isShadeTouchable)
-            runCurrent()
-            assertThat(isShadeTouchable).isFalse()
-        }
-
-    @Test
     fun isShadeTouchable_isFalse_whenDeviceAsleepAndNotPulsing() =
         testScope.runTest {
             powerRepository.updateWakefulness(
@@ -639,7 +641,6 @@ class ShadeInteractorImplTest : SysuiTestCase() {
                 )
             )
             val isShadeTouchable by collectLastValue(underTest.isShadeTouchable)
-            runCurrent()
             assertThat(isShadeTouchable).isFalse()
         }
 
@@ -666,13 +667,17 @@ class ShadeInteractorImplTest : SysuiTestCase() {
                 )
             )
             val isShadeTouchable by collectLastValue(underTest.isShadeTouchable)
-            runCurrent()
             assertThat(isShadeTouchable).isTrue()
         }
 
     @Test
     fun isShadeTouchable_isFalse_whenStartingToSleepAndNotControlScreenOff() =
         testScope.runTest {
+            whenever(dozeParameters.shouldControlScreenOff()).thenReturn(false)
+            val isShadeTouchable by collectLastValue(underTest.isShadeTouchable)
+            // Assert the default condition is true
+            assertThat(isShadeTouchable).isTrue()
+
             powerRepository.updateWakefulness(
                 rawState = WakefulnessState.STARTING_TO_SLEEP,
                 lastWakeReason = WakeSleepReason.POWER_BUTTON,
@@ -686,15 +691,17 @@ class ShadeInteractorImplTest : SysuiTestCase() {
                     transitionState = TransitionState.STARTED,
                 )
             )
-            whenever(dozeParameters.shouldControlScreenOff()).thenReturn(false)
-            val isShadeTouchable by collectLastValue(underTest.isShadeTouchable)
-            runCurrent()
             assertThat(isShadeTouchable).isFalse()
         }
 
     @Test
     fun isShadeTouchable_isTrue_whenStartingToSleepAndControlScreenOff() =
         testScope.runTest {
+            whenever(dozeParameters.shouldControlScreenOff()).thenReturn(true)
+            val isShadeTouchable by collectLastValue(underTest.isShadeTouchable)
+            // Assert the default condition is true
+            assertThat(isShadeTouchable).isTrue()
+
             powerRepository.updateWakefulness(
                 rawState = WakefulnessState.STARTING_TO_SLEEP,
                 lastWakeReason = WakeSleepReason.POWER_BUTTON,
@@ -708,9 +715,6 @@ class ShadeInteractorImplTest : SysuiTestCase() {
                     transitionState = TransitionState.STARTED,
                 )
             )
-            whenever(dozeParameters.shouldControlScreenOff()).thenReturn(true)
-            val isShadeTouchable by collectLastValue(underTest.isShadeTouchable)
-            runCurrent()
             assertThat(isShadeTouchable).isTrue()
         }
 
@@ -728,7 +732,6 @@ class ShadeInteractorImplTest : SysuiTestCase() {
                 )
             )
             val isShadeTouchable by collectLastValue(underTest.isShadeTouchable)
-            runCurrent()
             assertThat(isShadeTouchable).isTrue()
         }
 }

@@ -33,12 +33,14 @@ import com.android.systemui.deviceentry.domain.interactor.deviceEntryInteractor
 import com.android.systemui.deviceentry.domain.interactor.deviceUnlockedInteractor
 import com.android.systemui.flags.fakeFeatureFlagsClassic
 import com.android.systemui.globalactions.domain.interactor.globalActionsInteractor
+import com.android.systemui.haptics.qs.qsLongPressEffect
 import com.android.systemui.jank.interactionJankMonitor
 import com.android.systemui.keyguard.data.repository.fakeKeyguardRepository
 import com.android.systemui.keyguard.data.repository.fakeKeyguardTransitionRepository
 import com.android.systemui.keyguard.domain.interactor.fromGoneTransitionInteractor
 import com.android.systemui.keyguard.domain.interactor.fromLockscreenTransitionInteractor
 import com.android.systemui.keyguard.domain.interactor.fromPrimaryBouncerTransitionInteractor
+import com.android.systemui.keyguard.domain.interactor.keyguardClockInteractor
 import com.android.systemui.keyguard.domain.interactor.keyguardTransitionInteractor
 import com.android.systemui.model.sceneContainerPlugin
 import com.android.systemui.plugins.statusbar.statusBarStateController
@@ -46,8 +48,10 @@ import com.android.systemui.power.data.repository.fakePowerRepository
 import com.android.systemui.power.domain.interactor.powerInteractor
 import com.android.systemui.scene.domain.interactor.sceneInteractor
 import com.android.systemui.scene.sceneContainerConfig
-import com.android.systemui.scene.shared.flag.fakeSceneContainerFlags
 import com.android.systemui.scene.shared.model.sceneDataSource
+import com.android.systemui.settings.brightness.domain.interactor.brightnessMirrorShowingInteractor
+import com.android.systemui.shade.shadeController
+import com.android.systemui.statusbar.notification.stack.domain.interactor.sharedNotificationContainerInteractor
 import com.android.systemui.statusbar.phone.screenOffAnimationController
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.fakeMobileConnectionsRepository
 import com.android.systemui.statusbar.policy.data.repository.fakeDeviceProvisioningRepository
@@ -66,7 +70,6 @@ class KosmosJavaAdapter(
     val testDispatcher by lazy { kosmos.testDispatcher }
     val testScope by lazy { kosmos.testScope }
     val fakeFeatureFlags by lazy { kosmos.fakeFeatureFlagsClassic }
-    val fakeSceneContainerFlags by lazy { kosmos.fakeSceneContainerFlags }
     val fakeExecutor by lazy { kosmos.fakeExecutor }
     val fakeExecutorHandler by lazy { kosmos.fakeExecutorHandler }
     val configurationRepository by lazy { kosmos.fakeConfigurationRepository }
@@ -100,6 +103,13 @@ class KosmosJavaAdapter(
     val fromGoneTransitionInteractor by lazy { kosmos.fromGoneTransitionInteractor }
     val globalActionsInteractor by lazy { kosmos.globalActionsInteractor }
     val sceneDataSource by lazy { kosmos.sceneDataSource }
+    val keyguardClockInteractor by lazy { kosmos.keyguardClockInteractor }
+    val sharedNotificationContainerInteractor by lazy {
+        kosmos.sharedNotificationContainerInteractor
+    }
+    val brightnessMirrorShowingInteractor by lazy { kosmos.brightnessMirrorShowingInteractor }
+    val qsLongPressEffect by lazy { kosmos.qsLongPressEffect }
+    val shadeController by lazy { kosmos.shadeController }
 
     init {
         kosmos.applicationContext = testCase.context

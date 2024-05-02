@@ -17,7 +17,7 @@
 package com.android.systemui.volume.panel.component.mediaoutput.ui.viewmodel
 
 import android.content.Context
-import android.media.session.PlaybackState
+import com.android.internal.logging.UiEventLogger
 import com.android.systemui.animation.Expandable
 import com.android.systemui.common.shared.model.Color
 import com.android.systemui.common.shared.model.Icon
@@ -25,9 +25,9 @@ import com.android.systemui.res.R
 import com.android.systemui.volume.panel.component.mediaoutput.domain.interactor.MediaDeviceSessionInteractor
 import com.android.systemui.volume.panel.component.mediaoutput.domain.interactor.MediaOutputActionsInteractor
 import com.android.systemui.volume.panel.component.mediaoutput.domain.interactor.MediaOutputInteractor
-import com.android.systemui.volume.panel.component.mediaoutput.domain.model.MediaDeviceSession
+import com.android.systemui.volume.panel.component.mediaoutput.shared.model.SessionWithPlayback
 import com.android.systemui.volume.panel.dagger.scope.VolumePanelScope
-import com.android.systemui.volume.panel.ui.viewmodel.VolumePanelViewModel
+import com.android.systemui.volume.panel.ui.VolumePanelUiEvent
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -47,10 +47,10 @@ class MediaOutputViewModel
 constructor(
     private val context: Context,
     @VolumePanelScope private val coroutineScope: CoroutineScope,
-    private val volumePanelViewModel: VolumePanelViewModel,
     private val actionsInteractor: MediaOutputActionsInteractor,
     private val mediaDeviceSessionInteractor: MediaDeviceSessionInteractor,
     interactor: MediaOutputInteractor,
+    private val uiEventLogger: UiEventLogger,
 ) {
 
     private val sessionWithPlayback: StateFlow<SessionWithPlayback?> =
@@ -129,14 +129,7 @@ constructor(
             )
 
     fun onBarClick(expandable: Expandable) {
-        sessionWithPlayback.value?.let {
-            actionsInteractor.onBarClick(it.session, it.playback.isActive, expandable)
-        }
-        volumePanelViewModel.dismissPanel()
+        uiEventLogger.log(VolumePanelUiEvent.VOLUME_PANEL_MEDIA_OUTPUT_CLICKED)
+        actionsInteractor.onBarClick(sessionWithPlayback.value, expandable)
     }
-
-    private data class SessionWithPlayback(
-        val session: MediaDeviceSession,
-        val playback: PlaybackState,
-    )
 }
