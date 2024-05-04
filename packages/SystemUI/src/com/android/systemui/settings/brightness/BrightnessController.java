@@ -36,6 +36,8 @@ import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.Vibrator;
+import android.os.VibrationEffect;
 import android.provider.Settings;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
@@ -109,6 +111,8 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
 
     private ValueAnimator mSliderAnimator;
     private boolean mUserChangedBrightness;
+
+    private Vibrator mVibrator;
 
     @Override
     public void setMirror(BrightnessMirrorController controller) {
@@ -324,6 +328,11 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
 
         mMainHandler = new Handler(mainLooper, mHandlerCallback);
         mBrightnessObserver = new BrightnessObserver(mMainHandler);
+
+        mVibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+        if (mVibrator == null || !mVibrator.hasVibrator()) {
+            mVibrator = null;
+        }
     }
 
     public void registerCallbacks() {
@@ -383,6 +392,7 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
         Settings.System.putIntForUser(mContext.getContentResolver(),
                 Settings.System.SCREEN_BRIGHTNESS_MODE, mode,
                 mUserTracker.getUserId());
+        if (mVibrator != null) mVibrator.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_CLICK));
     }
 
     public void checkRestrictionAndSetEnabled() {
