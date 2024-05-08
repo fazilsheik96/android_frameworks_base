@@ -66,7 +66,8 @@ internal constructor(
                 params.behavior,
                 params.requestedVisibleTypes,
                 params.packageName,
-                params.letterboxesArray)
+                params.letterboxesArray,
+                params.needsMenu)
         }
     }
 
@@ -78,7 +79,8 @@ internal constructor(
             @Behavior behavior: Int,
             @InsetsType requestedVisibleTypes: Int,
             packageName: String,
-            letterboxDetails: Array<LetterboxDetails>
+            letterboxDetails: Array<LetterboxDetails>,
+            needsMenu: Boolean
     ) {
         lastSystemBarAttributesParams =
             SystemBarAttributesParams(
@@ -89,7 +91,8 @@ internal constructor(
                 behavior,
                 requestedVisibleTypes,
                 packageName,
-                letterboxDetails.toList())
+                letterboxDetails.toList(),
+                needsMenu)
 
         val (appearance, appearanceRegions) =
             modifyAppearanceIfNeeded(
@@ -143,6 +146,7 @@ private data class SystemBarAttributesParams(
         @InsetsType val requestedVisibleTypes: Int,
         val packageName: String,
         val letterboxes: List<LetterboxDetails>,
+        val needsMenu: Boolean,
 ) {
     val letterboxesArray = letterboxes.toTypedArray()
     val appearanceRegionsArray = appearanceRegions.toTypedArray()
@@ -159,7 +163,8 @@ private data class SystemBarAttributesParams(
             packageName='$packageName',
             letterboxes=$letterboxes,
             letterboxesArray=${letterboxesArray.contentToString()},
-            appearanceRegionsArray=${appearanceRegionsArray.contentToString()}
+            appearanceRegionsArray=${appearanceRegionsArray.contentToString()},
+            needsMenu=$needsMenu
             )""".trimMargin()
     }
 }
