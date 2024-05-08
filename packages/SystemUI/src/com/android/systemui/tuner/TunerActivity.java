@@ -26,8 +26,6 @@ import android.view.WindowManager;
 
 import java.util.ArrayDeque;
 
-import java.util.ArrayDeque;
-
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragment;
 import androidx.preference.PreferenceScreen;
@@ -79,6 +77,8 @@ public class TunerActivity extends CollapsingToolbarBaseActivity implements
                 fragment = new DemoModeFragment(mDemoModeController, mGlobalSettings);
             } else if ("com.android.settings.action.STATUS_BAR_TUNER".equals(action)) {
                 fragment = new StatusBarTuner();
+            } else if ("com.android.settings.action.NAV_BAR_TUNER".equals(action)) {
+                fragment = new NavBarTuner();
             } else {
                 fragment = new TunerFragment(mTunerService);
             }
