@@ -143,7 +143,6 @@ constructor(
 
     private var sbPaddingLeft = 0
     private var sbPaddingRight = 0
-    private var roundedCorners = 0
     private var cutout: DisplayCutout? = null
     private var lastInsets: WindowInsets? = null
     private var nextAlarmIntent: PendingIntent? = null
@@ -543,7 +542,6 @@ constructor(
     }
 
     private fun updateResources() {
-        roundedCorners = resources.getDimensionPixelSize(R.dimen.rounded_corner_content_padding)
         sbPaddingLeft = resources.getDimensionPixelSize(R.dimen.status_bar_padding_start)
         sbPaddingRight = resources.getDimensionPixelSize(R.dimen.status_bar_padding_end)
         val padding = resources.getDimensionPixelSize(R.dimen.qs_panel_padding)
