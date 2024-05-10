@@ -585,7 +585,9 @@ public class NavigationBarView extends FrameLayout implements NavigationModeCont
     }
 
     public KeyButtonDrawable getBackDrawable() {
-        KeyButtonDrawable drawable = getDrawable(getBackDrawableRes());
+        KeyButtonDrawable drawable = mShowSwipeUpUi
+                ? getDrawable(R.drawable.ic_sysbar_back_quick_step)
+                : getDrawable(R.drawable.ic_sysbar_back);
         orientBackButton(drawable);
         return drawable;
     }
