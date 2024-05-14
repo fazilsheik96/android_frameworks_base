@@ -1250,7 +1250,11 @@ public final class NfcAdapter {
     /**
      * Controls whether the NFC adapter will allow transactions to proceed or be in observe mode
      * and simply observe and notify the APDU service of polling loop frames. See
-     * {@link #isObserveModeSupported()} for a description of observe mode.
+     * {@link #isObserveModeSupported()} for a description of observe mode. Only the package of the
+     * currently preferred service (the service set as preferred by the current foreground
+     * application via {@link CardEmulation#setPreferredService(Activity, ComponentName)} or the
+     * current Default Wallet Role Holder {@link android.app.role.RoleManager#ROLE_WALLET}),
+     * otherwise a call to this method will fail and return false.
      *
      * @param enabled false disables observe mode to allow the transaction to proceed while true
      *                enables observe mode and does not allow transactions to proceed.
@@ -2803,12 +2807,11 @@ public final class NfcAdapter {
     @TestApi
     @FlaggedApi(Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void notifyPollingLoop(@NonNull PollingFrame pollingFrame) {
-        Bundle frame = pollingFrame.toBundle();
         try {
             if (sService == null) {
                 attemptDeadServiceRecovery(null);
             }
-            sService.notifyPollingLoop(frame);
+            sService.notifyPollingLoop(pollingFrame);
         } catch (RemoteException e) {
             attemptDeadServiceRecovery(e);
             // Try one more time
@@ -2817,7 +2820,7 @@ public final class NfcAdapter {
                 return;
             }
             try {
-                sService.notifyPollingLoop(frame);
+                sService.notifyPollingLoop(pollingFrame);
             } catch (RemoteException ee) {
                 Log.e(TAG, "Failed to recover NFC Service.");
             }

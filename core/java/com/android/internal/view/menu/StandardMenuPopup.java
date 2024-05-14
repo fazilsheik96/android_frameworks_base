@@ -20,6 +20,7 @@ import android.app.AppGlobals;
 import android.content.Context;
 import android.content.res.Resources;
 import android.os.Parcelable;
+import android.text.ClientFlags;
 import android.text.TextFlags;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -127,7 +128,8 @@ final class StandardMenuPopup extends MenuPopup implements OnDismissListener, On
         mOverflowOnly = overflowOnly;
         final LayoutInflater inflater = LayoutInflater.from(context);
         mAdapter = new MenuAdapter(menu, inflater, mOverflowOnly,
-                useNewContextMenu ? ITEM_LAYOUT_MATERIAL : ITEM_LAYOUT);
+                ClientFlags.fixMisalignedContextMenu() && useNewContextMenu
+                        ? ITEM_LAYOUT_MATERIAL : ITEM_LAYOUT);
         mPopupStyleAttr = popupStyleAttr;
         mPopupStyleRes = popupStyleRes;
 

@@ -23,6 +23,9 @@ import static com.android.systemui.log.LogBufferHelperKt.logcatLogBuffer;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static kotlinx.coroutines.flow.FlowKt.emptyFlow;
+import static kotlinx.coroutines.flow.StateFlowKt.MutableStateFlow;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyFloat;
@@ -36,9 +39,6 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-
-import static kotlinx.coroutines.flow.FlowKt.emptyFlow;
-import static kotlinx.coroutines.flow.StateFlowKt.MutableStateFlow;
 
 import android.annotation.IdRes;
 import android.content.ContentResolver;
@@ -155,6 +155,7 @@ import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinatorLogger;
 import com.android.systemui.statusbar.notification.data.repository.NotificationsKeyguardViewStateRepository;
 import com.android.systemui.statusbar.notification.domain.interactor.ActiveNotificationsInteractor;
+import com.android.systemui.statusbar.notification.domain.interactor.HeadsUpNotificationInteractor;
 import com.android.systemui.statusbar.notification.domain.interactor.NotificationsKeyguardInteractor;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
@@ -162,6 +163,7 @@ import com.android.systemui.statusbar.notification.stack.NotificationListContain
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.notification.stack.NotificationStackSizeCalculator;
+import com.android.systemui.statusbar.notification.stack.data.repository.FakeHeadsUpNotificationRepository;
 import com.android.systemui.statusbar.notification.stack.domain.interactor.SharedNotificationContainerInteractor;
 import com.android.systemui.statusbar.phone.CentralSurfaces;
 import com.android.systemui.statusbar.phone.ConfigurationControllerImpl;
@@ -201,6 +203,9 @@ import com.android.wm.shell.animation.FlingAnimationUtils;
 
 import dagger.Lazy;
 
+import kotlinx.coroutines.CoroutineDispatcher;
+import kotlinx.coroutines.test.TestScope;
+
 import org.junit.After;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
@@ -211,9 +216,6 @@ import org.mockito.stubbing.Answer;
 
 import java.util.List;
 import java.util.Optional;
-
-import kotlinx.coroutines.CoroutineDispatcher;
-import kotlinx.coroutines.test.TestScope;
 
 public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
 
@@ -360,6 +362,10 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
     protected TestScope mTestScope = mKosmos.getTestScope();
     protected ShadeInteractor mShadeInteractor;
     protected PowerInteractor mPowerInteractor;
+    protected FakeHeadsUpNotificationRepository mFakeHeadsUpNotificationRepository =
+            new FakeHeadsUpNotificationRepository();
+    protected HeadsUpNotificationInteractor mHeadsUpNotificationInteractor =
+            new HeadsUpNotificationInteractor(mFakeHeadsUpNotificationRepository);
     protected NotificationPanelViewController.TouchHandler mTouchHandler;
     protected ConfigurationController mConfigurationController;
     protected SysuiStatusBarStateController mStatusBarStateController;
@@ -386,7 +392,6 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
-        mFeatureFlags.set(Flags.TRACKPAD_GESTURE_FEATURES, false);
         mFeatureFlags.set(Flags.LOCKSCREEN_ENABLE_LANDSCAPE, false);
         mFeatureFlags.set(Flags.QS_USER_DETAIL_SHORTCUT, false);
 
@@ -441,7 +446,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
         SystemClock systemClock = new FakeSystemClock();
         mStatusBarStateController = new StatusBarStateControllerImpl(
                 mUiEventLogger,
-                mKosmos.getInteractionJankMonitor(),
+                () -> mKosmos.getInteractionJankMonitor(),
                 mJavaAdapter,
                 () -> mShadeInteractor,
                 () -> mKosmos.getDeviceUnlockedInteractor(),
@@ -595,7 +600,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                         mock(HeadsUpManager.class),
                         new StatusBarStateControllerImpl(
                                 new UiEventLoggerFake(),
-                                mKosmos.getInteractionJankMonitor(),
+                                () -> mKosmos.getInteractionJankMonitor(),
                                 mJavaAdapter,
                                 () -> mShadeInteractor,
                                 () -> mKosmos.getDeviceUnlockedInteractor(),
@@ -732,6 +737,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                 mActivityStarter,
                 mSharedNotificationContainerInteractor,
                 mActiveNotificationsInteractor,
+                mHeadsUpNotificationInteractor,
                 mEmergencyButtonControllerFactory,
                 mShadeAnimationInteractor,
                 mKeyguardViewConfigurator,
@@ -799,7 +805,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                 mAccessibilityManager,
                 mLockscreenGestureLogger,
                 mMetricsLogger,
-                mKosmos.getInteractionJankMonitor(),
+                () -> mKosmos.getInteractionJankMonitor(),
                 mShadeLog,
                 mDumpManager,
                 mDeviceEntryFaceAuthInteractor,

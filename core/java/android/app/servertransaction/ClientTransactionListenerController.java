@@ -17,6 +17,7 @@
 package android.app.servertransaction;
 
 import static android.app.WindowConfiguration.areConfigurationsEqualForDisplay;
+import static android.view.Display.INVALID_DISPLAY;
 
 import static com.android.window.flags.Flags.activityWindowInfoFlag;
 import static com.android.window.flags.Flags.bundleClientTransactionFlag;
@@ -60,9 +61,11 @@ public class ClientTransactionListenerController {
      * Keeps track of the Context whose Configuration will get updated, mapping to the config before
      * the change.
      */
+    @GuardedBy("mLock")
     private final ArrayMap<Context, Configuration> mContextToPreChangedConfigMap = new ArrayMap<>();
 
     /** Whether there is an {@link ClientTransaction} being executed. */
+    @GuardedBy("mLock")
     private boolean mIsClientTransactionExecuting;
 
     /** Gets the singleton controller. */
@@ -142,13 +145,45 @@ public class ClientTransactionListenerController {
 
     /** Called when starts executing a remote {@link ClientTransaction}. */
     public void onClientTransactionStarted() {
-        mIsClientTransactionExecuting = true;
+        synchronized (mLock) {
+            mIsClientTransactionExecuting = true;
+        }
     }
 
     /** Called when finishes executing a remote {@link ClientTransaction}. */
     public void onClientTransactionFinished() {
-        notifyDisplayManagerIfNeeded();
-        mIsClientTransactionExecuting = false;
+        final ArraySet<Integer> configUpdatedDisplayIds;
+        synchronized (mLock) {
+            mIsClientTransactionExecuting = false;
+
+            // When {@link Configuration} is changed, we want to trigger display change callback as
+            // well, because Display reads some fields from {@link Configuration}.
+            if (mContextToPreChangedConfigMap.isEmpty()) {
+                return;
+            }
+
+            // Calculate display ids that have config changed.
+            configUpdatedDisplayIds = new ArraySet<>();
+            final int contextCount = mContextToPreChangedConfigMap.size();
+            try {
+                for (int i = 0; i < contextCount; i++) {
+                    final Context context = mContextToPreChangedConfigMap.keyAt(i);
+                    final Configuration preChangedConfig = mContextToPreChangedConfigMap.valueAt(i);
+                    if (shouldReportDisplayChange(context, preChangedConfig)) {
+                        configUpdatedDisplayIds.add(context.getDisplayId());
+                    }
+                }
+            } finally {
+                mContextToPreChangedConfigMap.clear();
+            }
+        }
+
+        // Dispatch the display changed callbacks.
+        final int displayCount = configUpdatedDisplayIds.size();
+        for (int i = 0; i < displayCount; i++) {
+            final int displayId = configUpdatedDisplayIds.valueAt(i);
+            onDisplayChanged(displayId);
+        }
     }
 
     /** Called before updating the Configuration of the given {@code context}. */
@@ -157,12 +192,14 @@ public class ClientTransactionListenerController {
             // Not enable for system server.
             return;
         }
-        if (mContextToPreChangedConfigMap.containsKey(context)) {
-            // There is an earlier change that hasn't been reported yet.
-            return;
+        synchronized (mLock) {
+            if (mContextToPreChangedConfigMap.containsKey(context)) {
+                // There is an earlier change that hasn't been reported yet.
+                return;
+            }
+            mContextToPreChangedConfigMap.put(context,
+                    new Configuration(context.getResources().getConfiguration()));
         }
-        mContextToPreChangedConfigMap.put(context,
-                new Configuration(context.getResources().getConfiguration()));
     }
 
     /** Called after updating the Configuration of the given {@code context}. */
@@ -171,46 +208,21 @@ public class ClientTransactionListenerController {
             // Not enable for system server.
             return;
         }
-        if (mIsClientTransactionExecuting) {
-            // Wait until #onClientTransactionFinished to prevent it from triggering the same
-            // #onDisplayChanged multiple times within the same ClientTransaction.
-            return;
-        }
-        final Configuration preChangedConfig = mContextToPreChangedConfigMap.remove(context);
-        if (preChangedConfig != null && shouldReportDisplayChange(context, preChangedConfig)) {
-            onDisplayChanged(context.getDisplayId());
-        }
-    }
-
-    /**
-     * When {@link Configuration} is changed, we want to trigger display change callback as well,
-     * because Display reads some fields from {@link Configuration}.
-     */
-    private void notifyDisplayManagerIfNeeded() {
-        if (mContextToPreChangedConfigMap.isEmpty()) {
-            return;
-        }
-        // Whether the configuration change should trigger DisplayListener#onDisplayChanged.
-        try {
-            // Calculate display ids that have config changed.
-            final ArraySet<Integer> configUpdatedDisplayIds = new ArraySet<>();
-            final int contextCount = mContextToPreChangedConfigMap.size();
-            for (int i = 0; i < contextCount; i++) {
-                final Context context = mContextToPreChangedConfigMap.keyAt(i);
-                final Configuration preChangedConfig = mContextToPreChangedConfigMap.valueAt(i);
-                if (shouldReportDisplayChange(context, preChangedConfig)) {
-                    configUpdatedDisplayIds.add(context.getDisplayId());
-                }
+        int changedDisplayId = INVALID_DISPLAY;
+        synchronized (mLock) {
+            if (mIsClientTransactionExecuting) {
+                // Wait until #onClientTransactionFinished to prevent it from triggering the same
+                // #onDisplayChanged multiple times within the same ClientTransaction.
+                return;
             }
-
-            // Dispatch the display changed callbacks.
-            final int displayCount = configUpdatedDisplayIds.size();
-            for (int i = 0; i < displayCount; i++) {
-                final int displayId = configUpdatedDisplayIds.valueAt(i);
-                onDisplayChanged(displayId);
+            final Configuration preChangedConfig = mContextToPreChangedConfigMap.remove(context);
+            if (preChangedConfig != null && shouldReportDisplayChange(context, preChangedConfig)) {
+                changedDisplayId = context.getDisplayId();
             }
-        } finally {
-            mContextToPreChangedConfigMap.clear();
+        }
+
+        if (changedDisplayId != INVALID_DISPLAY) {
+            onDisplayChanged(changedDisplayId);
         }
     }
 

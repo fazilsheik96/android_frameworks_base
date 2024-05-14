@@ -26,9 +26,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.IntRect
 import com.android.compose.animation.scene.SceneScope
+import com.android.compose.modifiers.padding
 import com.android.systemui.keyguard.ui.composable.LockscreenLongPress
 import com.android.systemui.keyguard.ui.composable.section.AmbientIndicationSection
 import com.android.systemui.keyguard.ui.composable.section.BottomAreaSection
@@ -38,11 +40,9 @@ import com.android.systemui.keyguard.ui.composable.section.SettingsMenuSection
 import com.android.systemui.keyguard.ui.composable.section.StatusBarSection
 import com.android.systemui.keyguard.ui.composable.section.TopAreaSection
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenContentViewModel
-import dagger.Binds
-import dagger.Module
-import dagger.multibindings.IntoSet
 import java.util.Optional
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 /**
  * Renders the lockscreen scene when showing with the default layout (e.g. vertical phone form
@@ -68,6 +68,7 @@ constructor(
         val isUdfpsVisible = viewModel.isUdfpsVisible
         val shouldUseSplitNotificationShade by
             viewModel.shouldUseSplitNotificationShade.collectAsState()
+        val unfoldTranslations by viewModel.unfoldTranslations.collectAsState()
 
         LockscreenLongPress(
             viewModel = viewModel.longPress,
@@ -79,10 +80,25 @@ constructor(
                     Column(
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        with(statusBarSection) { StatusBar(modifier = Modifier.fillMaxWidth()) }
+                        with(statusBarSection) {
+                            StatusBar(
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                                        .padding(
+                                            horizontal = { unfoldTranslations.start.roundToInt() },
+                                        )
+                            )
+                        }
 
                         Box {
-                            with(topAreaSection) { DefaultClockLayout() }
+                            with(topAreaSection) {
+                                DefaultClockLayout(
+                                    modifier =
+                                        Modifier.graphicsLayer {
+                                            translationX = unfoldTranslations.start
+                                        }
+                                )
+                            }
                             if (shouldUseSplitNotificationShade) {
                                 with(notificationSection) {
                                     Notifications(
@@ -127,8 +143,18 @@ constructor(
 
                     // Aligned to bottom and NOT constrained by the lock icon.
                     with(bottomAreaSection) {
-                        Shortcut(isStart = true, applyPadding = true)
-                        Shortcut(isStart = false, applyPadding = true)
+                        Shortcut(
+                            isStart = true,
+                            applyPadding = true,
+                            modifier =
+                                Modifier.graphicsLayer { translationX = unfoldTranslations.start },
+                        )
+                        Shortcut(
+                            isStart = false,
+                            applyPadding = true,
+                            modifier =
+                                Modifier.graphicsLayer { translationX = unfoldTranslations.end },
+                        )
                     }
                     with(settingsMenuSection) { SettingsMenu(onSettingsMenuPlaced) }
                 },
@@ -200,9 +226,4 @@ constructor(
             }
         }
     }
-}
-
-@Module
-interface DefaultBlueprintModule {
-    @Binds @IntoSet fun blueprint(blueprint: DefaultBlueprint): ComposableLockscreenSceneBlueprint
 }

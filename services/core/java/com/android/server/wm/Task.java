@@ -139,6 +139,7 @@ import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.app.AppCompatTaskInfo;
 import android.app.AppGlobals;
+import android.app.CameraCompatTaskInfo;
 import android.app.IActivityController;
 import android.app.PictureInPictureParams;
 import android.app.TaskInfo;
@@ -1288,6 +1289,11 @@ class Task extends TaskFragment {
                 // Pausing the resumed activity because it is occluded by other task fragment, or
                 // should not be remained in resumed state.
                 if (startPausing(false /* uiSleeping*/, resuming, reason)) {
+                    if (mActivityPluginDelegate != null
+                            && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+                        mActivityPluginDelegate.activitySuspendNotification(top.info.packageName,
+                                getWindowingMode() == WINDOWING_MODE_FULLSCREEN, true);
+                    }
                     someActivityPaused[0]++;
                 }
             }
@@ -1295,8 +1301,14 @@ class Task extends TaskFragment {
 
         forAllLeafTaskFragments((taskFrag) -> {
             final ActivityRecord resumedActivity = taskFrag.getResumedActivity();
+            final ActivityRecord top = topRunningActivity();
             if (resumedActivity != null && !taskFrag.canBeResumed(resuming)) {
                 if (taskFrag.startPausing(false /* uiSleeping*/, resuming, reason)) {
+                    if (mActivityPluginDelegate != null
+                            && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+                        mActivityPluginDelegate.activitySuspendNotification(top.info.packageName,
+                                getWindowingMode() == WINDOWING_MODE_FULLSCREEN, true);
+                    }
                     someActivityPaused[0]++;
                 }
             }
@@ -3544,9 +3556,9 @@ class Task extends TaskFragment {
         appCompatTaskInfo.topActivityEligibleForLetterboxEducation = isTopActivityResumed
                 && top.isEligibleForLetterboxEducation();
         // Whether the direct top activity requested showing camera compat control.
-        appCompatTaskInfo.cameraCompatControlState = isTopActivityResumed
+        appCompatTaskInfo.cameraCompatTaskInfo.cameraCompatControlState = isTopActivityResumed
                 ? top.getCameraCompatControlState()
-                : AppCompatTaskInfo.CAMERA_COMPAT_CONTROL_HIDDEN;
+                : CameraCompatTaskInfo.CAMERA_COMPAT_CONTROL_HIDDEN;
 
         final Task parentTask = getParent() != null ? getParent().asTask() : null;
         info.parentTaskId = parentTask != null && parentTask.mCreatedByOrganizer
@@ -4755,14 +4767,6 @@ class Task extends TaskFragment {
             // transferring the transform on the leash to the task, reset this state once we're
             // moving out of pip
             setCanAffectSystemUiFlags(true);
-            // Turn on userLeaveHint so other app can enter PiP mode.
-            mTaskSupervisor.mUserLeaving = true;
-            // Allow entering PiP from current top most activity when we are leaving PiP.
-            final Task topFocused = mRootWindowContainer.getTopDisplayFocusedRootTask();
-            if (topFocused != null) {
-                final ActivityRecord ar = topFocused.getTopResumedActivity();
-                enableEnterPipOnTaskSwitch(ar, null /* toFrontTask */, ar, null /* opts */);
-            }
             mRootWindowContainer.notifyActivityPipModeChanged(this, null);
         }
         if (likelyResolvedMode == WINDOWING_MODE_PINNED) {
@@ -4820,6 +4824,14 @@ class Task extends TaskFragment {
                                 topActivity.getSyncTransaction());
                     }
                     lastParentBeforePip.moveToFront("movePinnedActivityToOriginalTask");
+                    // If the reparent is not included in transition, make sure the visibility of
+                    // task is still updated by core. Otherwise if the task is collected (e.g.
+                    // rotation change) after leaving this scope, the visibility operation will be
+                    // put in sync transaction, then it is not synced with reparent.
+                    if (com.android.window.flags.Flags.removePrepareSurfaceInPlacement()
+                            && lastParentBeforePip.mSyncState == SYNC_STATE_NONE) {
+                        lastParentBeforePip.prepareSurfaces();
+                    }
                 }
                 if (isPip2ExperimentEnabled) {
                     super.setWindowingMode(windowingMode);
@@ -4858,11 +4870,13 @@ class Task extends TaskFragment {
     /**
      * Abort an incomplete pip-entry. If left in this state, it will cover everything but remain
      * paused. If this is needed, there is a bug -- this should only be used for recovery.
+     *
+     * @return true if there is an inconsistency in the task and activity state.
      */
-    void abortPipEnter(ActivityRecord top) {
+    boolean abortPipEnter(ActivityRecord top) {
         // an incomplete state has the task PINNED but the activity not.
         if (!inPinnedWindowingMode() || top.inPinnedWindowingMode() || !canMoveTaskToBack(this)) {
-            return;
+            return false;
         }
         final Transition transition = new Transition(TRANSIT_TO_BACK, 0 /* flags */,
                 mTransitionController, mWmService.mSyncEngine);
@@ -4884,6 +4898,7 @@ class Task extends TaskFragment {
             top.setWindowingMode(WINDOWING_MODE_UNDEFINED);
             top.mWaitForEnteringPinnedMode = false;
         }
+        return true;
     }
 
     void resumeNextFocusAfterReparent() {
@@ -5213,6 +5228,10 @@ class Task extends TaskFragment {
         final boolean[] resumed = new boolean[1];
         final TaskFragment topFragment = topActivity.getTaskFragment();
         resumed[0] = topFragment.resumeTopActivity(prev, options, deferPause);
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+            mActivityPluginDelegate.activityInvokeNotification(
+                    topActivity.info.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN);
+        }
         forAllLeafTaskFragments(f -> {
             if (topFragment == f) {
                 return;

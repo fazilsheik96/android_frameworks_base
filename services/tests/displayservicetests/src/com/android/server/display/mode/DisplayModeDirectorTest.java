@@ -94,6 +94,7 @@ import com.android.modules.utils.testing.ExtendedMockitoRule;
 import com.android.server.display.DisplayDeviceConfig;
 import com.android.server.display.TestUtils;
 import com.android.server.display.config.IdleScreenRefreshRateTimeoutLuxThresholdPoint;
+import com.android.server.display.config.RefreshRateData;
 import com.android.server.display.feature.DisplayManagerFlags;
 import com.android.server.display.mode.DisplayModeDirector.BrightnessObserver;
 import com.android.server.display.mode.DisplayModeDirector.DesiredDisplayModeSpecs;
@@ -128,6 +129,12 @@ import java.util.stream.Collectors;
 @SmallTest
 @RunWith(JUnitParamsRunner.class)
 public class DisplayModeDirectorTest {
+    private static final RefreshRateData EMPTY_REFRESH_RATE_DATA = new RefreshRateData(
+            /* defaultRefreshRate= */ 0,
+            /* defaultPeakRefreshRate= */ 0,
+            /* defaultRefreshRateInHbmHdr= */ 0,
+            /* defaultRefreshRateInHbmSunlight= */ 0);
+
     public static Collection<Object[]> getAppRequestedSizeTestCases() {
         var appRequestedSizeTestCases = Arrays.asList(new Object[][] {
                 {/*expectedBaseModeId*/ DEFAULT_MODE_75.getModeId(),
@@ -312,6 +319,8 @@ public class DisplayModeDirectorTest {
     public DisplayManagerInternal mDisplayManagerInternalMock;
     @Mock
     private DisplayManagerFlags mDisplayManagerFlags;
+    @Mock
+    private DisplayModeDirector.DisplayDeviceConfigProvider mDisplayDeviceConfigProvider;
 
     @Rule
     public final ExtendedMockitoRule mExtendedMockitoRule =
@@ -412,7 +421,8 @@ public class DisplayModeDirectorTest {
     private DisplayModeDirector createDirectorFromModeArray(Display.Mode[] modes,
             Display.Mode defaultMode, int[] displayIds) {
         DisplayModeDirector director =
-                new DisplayModeDirector(mContext, mHandler, mInjector, mDisplayManagerFlags);
+                new DisplayModeDirector(mContext, mHandler, mInjector,
+                        mDisplayManagerFlags, mDisplayDeviceConfigProvider);
         director.setLoggingEnabled(true);
         setupModesForDisplays(director, displayIds , modes, defaultMode);
         return director;
@@ -1146,7 +1156,8 @@ public class DisplayModeDirectorTest {
     @Test
     public void testStaleAppRequestSize() {
         DisplayModeDirector director =
-                new DisplayModeDirector(mContext, mHandler, mInjector, mDisplayManagerFlags);
+                new DisplayModeDirector(mContext, mHandler, mInjector,
+                        mDisplayManagerFlags, mDisplayDeviceConfigProvider);
         Display.Mode[] modes = new Display.Mode[] {
                 new Display.Mode(1, 1280, 720, 60),
         };
@@ -1397,7 +1408,8 @@ public class DisplayModeDirectorTest {
         when(mDisplayManagerFlags.isBackUpSmoothDisplayAndForcePeakRefreshRateEnabled())
                 .thenReturn(true);
         DisplayModeDirector director =
-                new DisplayModeDirector(mContext, mHandler, mInjector, mDisplayManagerFlags);
+                new DisplayModeDirector(mContext, mHandler, mInjector,
+                        mDisplayManagerFlags, mDisplayDeviceConfigProvider);
         director.getBrightnessObserver().setDefaultDisplayState(Display.STATE_ON);
 
         Display.Mode[] modes1 = new Display.Mode[] {
@@ -1540,6 +1552,7 @@ public class DisplayModeDirectorTest {
 
         // Set the DisplayDeviceConfig
         DisplayDeviceConfig ddcMock = mock(DisplayDeviceConfig.class);
+        when(ddcMock.getRefreshRateData()).thenReturn(EMPTY_REFRESH_RATE_DATA);
         when(ddcMock.getDefaultHighBlockingZoneRefreshRate()).thenReturn(90);
         when(ddcMock.getHighDisplayBrightnessThresholds()).thenReturn(new float[] { 200 });
         when(ddcMock.getHighAmbientBrightnessThresholds()).thenReturn(new float[] { 8000 });
@@ -1620,6 +1633,7 @@ public class DisplayModeDirectorTest {
 
         // Set the thresholds for High Zone
         DisplayDeviceConfig ddcMock = mock(DisplayDeviceConfig.class);
+        when(ddcMock.getRefreshRateData()).thenReturn(EMPTY_REFRESH_RATE_DATA);
         when(ddcMock.getDefaultHighBlockingZoneRefreshRate()).thenReturn(90);
         when(ddcMock.getHighDisplayBrightnessThresholds()).thenReturn(new float[] { 200 });
         when(ddcMock.getHighAmbientBrightnessThresholds()).thenReturn(new float[] { 8000 });
@@ -1719,6 +1733,7 @@ public class DisplayModeDirectorTest {
 
         // Set the thresholds for Low Zone
         DisplayDeviceConfig ddcMock = mock(DisplayDeviceConfig.class);
+        when(ddcMock.getRefreshRateData()).thenReturn(EMPTY_REFRESH_RATE_DATA);
         when(ddcMock.getDefaultLowBlockingZoneRefreshRate()).thenReturn(90);
         when(ddcMock.getHighDisplayBrightnessThresholds()).thenReturn(new float[] { 200 });
         when(ddcMock.getHighAmbientBrightnessThresholds()).thenReturn(new float[] { 8000 });
@@ -1808,7 +1823,8 @@ public class DisplayModeDirectorTest {
         when(mDisplayManagerFlags.isBackUpSmoothDisplayAndForcePeakRefreshRateEnabled())
                 .thenReturn(true);
         DisplayModeDirector director =
-                new DisplayModeDirector(mContext, mHandler, mInjector, mDisplayManagerFlags);
+                new DisplayModeDirector(mContext, mHandler, mInjector,
+                        mDisplayManagerFlags, mDisplayDeviceConfigProvider);
         director.getBrightnessObserver().setDefaultDisplayState(Display.STATE_ON);
 
         Display.Mode[] modes1 = new Display.Mode[] {
@@ -1888,7 +1904,8 @@ public class DisplayModeDirectorTest {
         when(mDisplayManagerFlags.isBackUpSmoothDisplayAndForcePeakRefreshRateEnabled())
                 .thenReturn(true);
         DisplayModeDirector director =
-                new DisplayModeDirector(mContext, mHandler, mInjector, mDisplayManagerFlags);
+                new DisplayModeDirector(mContext, mHandler, mInjector,
+                        mDisplayManagerFlags, mDisplayDeviceConfigProvider);
         director.getBrightnessObserver().setDefaultDisplayState(Display.STATE_ON);
         mInjector.mDisplayInfo.supportedModes = new Display.Mode[] {
                 new Display.Mode(/* modeId= */ 1, /* width= */ 1280, /* height= */ 720,
@@ -1945,7 +1962,7 @@ public class DisplayModeDirectorTest {
         SparseArray<SparseArray<Vote>> votesByDisplay = new SparseArray<>();
         votesByDisplay.put(DISPLAY_ID_2, votes);
 
-        director.getDisplayObserver().onExternalDisplayReadyToBeEnabled(DISPLAY_ID_2);
+        director.getDisplayObserver().onDisplayAdded(DISPLAY_ID_2);
         director.injectVotesByDisplay(votesByDisplay);
 
         var desiredSpecs = director.getDesiredDisplayModeSpecs(DISPLAY_ID_2);
@@ -1958,7 +1975,8 @@ public class DisplayModeDirectorTest {
         when(mDisplayManagerFlags.isBackUpSmoothDisplayAndForcePeakRefreshRateEnabled())
                 .thenReturn(true);
         DisplayModeDirector director =
-                new DisplayModeDirector(mContext, mHandler, mInjector, mDisplayManagerFlags);
+                new DisplayModeDirector(mContext, mHandler, mInjector,
+                        mDisplayManagerFlags, mDisplayDeviceConfigProvider);
         director.getBrightnessObserver().setDefaultDisplayState(Display.STATE_ON);
 
         Display.Mode[] modes1 = new Display.Mode[] {
@@ -2038,7 +2056,8 @@ public class DisplayModeDirectorTest {
         when(mDisplayManagerFlags.isBackUpSmoothDisplayAndForcePeakRefreshRateEnabled())
                 .thenReturn(true);
         DisplayModeDirector director =
-                new DisplayModeDirector(mContext, mHandler, mInjector, mDisplayManagerFlags);
+                new DisplayModeDirector(mContext, mHandler, mInjector,
+                        mDisplayManagerFlags, mDisplayDeviceConfigProvider);
         director.getBrightnessObserver().setDefaultDisplayState(Display.STATE_ON);
         mInjector.mDisplayInfo.supportedModes = new Display.Mode[] {
                 new Display.Mode(/* modeId= */ 1, /* width= */ 1280, /* height= */ 720,
@@ -2076,7 +2095,8 @@ public class DisplayModeDirectorTest {
         when(mDisplayManagerFlags.isBackUpSmoothDisplayAndForcePeakRefreshRateEnabled())
                 .thenReturn(true);
         DisplayModeDirector director =
-                new DisplayModeDirector(mContext, mHandler, mInjector, mDisplayManagerFlags);
+                new DisplayModeDirector(mContext, mHandler, mInjector,
+                        mDisplayManagerFlags, mDisplayDeviceConfigProvider);
         director.getBrightnessObserver().setDefaultDisplayState(Display.STATE_ON);
 
         Display.Mode[] modes1 = new Display.Mode[] {
@@ -3357,10 +3377,14 @@ public class DisplayModeDirectorTest {
 
         // Notify that the default display is updated, such that DisplayDeviceConfig has new values
         DisplayDeviceConfig displayDeviceConfig = mock(DisplayDeviceConfig.class);
+        RefreshRateData refreshRateData = new RefreshRateData(
+                /* defaultRefreshRate= */ 60,
+                /* defaultPeakRefreshRate= */ 65,
+                /* defaultRefreshRateInHbmHdr= */ 65,
+                /* defaultRefreshRateInHbmSunlight= */ 75);
+        when(displayDeviceConfig.getRefreshRateData()).thenReturn(refreshRateData);
         when(displayDeviceConfig.getDefaultLowBlockingZoneRefreshRate()).thenReturn(50);
         when(displayDeviceConfig.getDefaultHighBlockingZoneRefreshRate()).thenReturn(55);
-        when(displayDeviceConfig.getDefaultRefreshRate()).thenReturn(60);
-        when(displayDeviceConfig.getDefaultPeakRefreshRate()).thenReturn(65);
         when(displayDeviceConfig.getLowDisplayBrightnessThresholds())
                 .thenReturn(new float[]{0.025f});
         when(displayDeviceConfig.getLowAmbientBrightnessThresholds())
@@ -3369,8 +3393,6 @@ public class DisplayModeDirectorTest {
                 .thenReturn(new float[]{0.21f});
         when(displayDeviceConfig.getHighAmbientBrightnessThresholds())
                 .thenReturn(new float[]{2100});
-        when(displayDeviceConfig.getDefaultRefreshRateInHbmHdr()).thenReturn(65);
-        when(displayDeviceConfig.getDefaultRefreshRateInHbmSunlight()).thenReturn(75);
         director.defaultDisplayDeviceUpdated(displayDeviceConfig);
 
         // Verify the new values are from the freshly loaded DisplayDeviceConfig.
@@ -3480,6 +3502,7 @@ public class DisplayModeDirectorTest {
                         any(Handler.class));
 
         DisplayDeviceConfig ddcMock = mock(DisplayDeviceConfig.class);
+        when(ddcMock.getRefreshRateData()).thenReturn(EMPTY_REFRESH_RATE_DATA);
         when(ddcMock.getDefaultLowBlockingZoneRefreshRate()).thenReturn(50);
         when(ddcMock.getDefaultHighBlockingZoneRefreshRate()).thenReturn(55);
         when(ddcMock.getLowDisplayBrightnessThresholds()).thenReturn(new float[]{0.025f});

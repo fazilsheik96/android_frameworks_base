@@ -16,15 +16,18 @@
 
 package com.android.server;
 
+import static android.permission.flags.Flags.FLAG_SENSITIVE_CONTENT_METRICS_BUGFIX;
 import static android.permission.flags.Flags.FLAG_SENSITIVE_NOTIFICATION_APP_PROTECTION;
 
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -34,6 +37,7 @@ import android.content.pm.PackageManagerInternal;
 import android.media.projection.MediaProjectionInfo;
 import android.media.projection.MediaProjectionManager;
 import android.os.Process;
+import android.platform.test.annotations.RequiresFlagsDisabled;
 import android.platform.test.annotations.RequiresFlagsEnabled;
 import android.platform.test.flag.junit.CheckFlagsRule;
 import android.platform.test.flag.junit.DeviceFlagsValueProvider;
@@ -282,6 +286,14 @@ public class SensitiveContentProtectionManagerServiceNotificationTest {
                 .getActiveNotifications();
     }
 
+    private void setupNullNotifications() {
+        // Setup Notification Values
+        StatusBarNotification[] mNotifications = new StatusBarNotification[] { null, null};
+        doReturn(mNotifications)
+                .when(mSensitiveContentProtectionManagerService.mNotificationListener)
+                .getActiveNotifications();
+    }
+
     private MediaProjectionInfo createMediaProjectionInfo() {
         return new MediaProjectionInfo(SCREEN_RECORDER_PACKAGE, Process.myUserHandle(), null);
     }
@@ -301,6 +313,26 @@ public class SensitiveContentProtectionManagerServiceNotificationTest {
     }
 
     @Test
+    @RequiresFlagsDisabled(FLAG_SENSITIVE_CONTENT_METRICS_BUGFIX)
+    public void mediaProjectionOnStart_flagDisabled_neverSetBlockScreenCaptureForAppsSessionId() {
+        setupSensitiveNotification();
+
+        mMediaProjectionCallbackCaptor.getValue().onStart(createMediaProjectionInfo());
+
+        verify(mWindowManager, never()).setBlockScreenCaptureForAppsSessionId(anyLong());
+    }
+
+    @Test
+    @RequiresFlagsEnabled(FLAG_SENSITIVE_CONTENT_METRICS_BUGFIX)
+    public void mediaProjectionOnStart_setBlockScreenCaptureForAppsSessionId() {
+        setupSensitiveNotification();
+
+        mMediaProjectionCallbackCaptor.getValue().onStart(createMediaProjectionInfo());
+
+        verify(mWindowManager).setBlockScreenCaptureForAppsSessionId(anyLong());
+    }
+
+    @Test
     public void mediaProjectionOnStart_onProjectionStart_setWmBlockedPackages() {
         ArraySet<PackageInfo> expectedBlockedPackages = setupSensitiveNotification();
 
@@ -315,7 +347,7 @@ public class SensitiveContentProtectionManagerServiceNotificationTest {
 
         mMediaProjectionCallbackCaptor.getValue().onStart(createMediaProjectionInfo());
 
-        verifyZeroInteractions(mWindowManager);
+        verify(mWindowManager, never()).addBlockScreenCaptureForApps(any());
     }
 
     @Test
@@ -324,7 +356,7 @@ public class SensitiveContentProtectionManagerServiceNotificationTest {
 
         mMediaProjectionCallbackCaptor.getValue().onStart(createMediaProjectionInfo());
 
-        verifyZeroInteractions(mWindowManager);
+        verify(mWindowManager, never()).addBlockScreenCaptureForApps(any());
     }
 
     @Test
@@ -392,7 +424,7 @@ public class SensitiveContentProtectionManagerServiceNotificationTest {
 
         mMediaProjectionCallbackCaptor.getValue().onStart(createMediaProjectionInfo());
 
-        verifyZeroInteractions(mWindowManager);
+        verify(mWindowManager, never()).addBlockScreenCaptureForApps(any());
     }
 
     @Test
@@ -403,7 +435,7 @@ public class SensitiveContentProtectionManagerServiceNotificationTest {
 
         mMediaProjectionCallbackCaptor.getValue().onStart(createMediaProjectionInfo());
 
-        verifyZeroInteractions(mWindowManager);
+        verify(mWindowManager, never()).addBlockScreenCaptureForApps(any());
     }
 
     @Test
@@ -414,7 +446,7 @@ public class SensitiveContentProtectionManagerServiceNotificationTest {
 
         mMediaProjectionCallbackCaptor.getValue().onStart(createMediaProjectionInfo());
 
-        verifyZeroInteractions(mWindowManager);
+        verify(mWindowManager, never()).addBlockScreenCaptureForApps(any());
     }
 
     @Test
@@ -427,7 +459,7 @@ public class SensitiveContentProtectionManagerServiceNotificationTest {
 
         mMediaProjectionCallbackCaptor.getValue().onStart(createMediaProjectionInfo());
 
-        verifyZeroInteractions(mWindowManager);
+        verify(mWindowManager, never()).addBlockScreenCaptureForApps(any());
     }
 
     @Test
@@ -493,6 +525,17 @@ public class SensitiveContentProtectionManagerServiceNotificationTest {
     @Test
     public void nlsOnListenerConnected_noNotifications_noBlockedPackages() {
         setupNoNotifications();
+        mMediaProjectionCallbackCaptor.getValue().onStart(createMediaProjectionInfo());
+        Mockito.reset(mWindowManager);
+
+        mSensitiveContentProtectionManagerService.mNotificationListener.onListenerConnected();
+
+        verifyZeroInteractions(mWindowManager);
+    }
+
+    @Test
+    public void nlsOnListenerConnected_nullNotifications_noBlockedPackages() {
+        setupNullNotifications();
         mMediaProjectionCallbackCaptor.getValue().onStart(createMediaProjectionInfo());
         Mockito.reset(mWindowManager);
 

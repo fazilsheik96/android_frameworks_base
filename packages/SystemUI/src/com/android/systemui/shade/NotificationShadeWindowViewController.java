@@ -17,7 +17,6 @@
 package com.android.systemui.shade;
 
 import static com.android.systemui.flags.Flags.LOCKSCREEN_WALLPAPER_DREAM_ENABLED;
-import static com.android.systemui.flags.Flags.TRACKPAD_GESTURE_COMMON;
 import static com.android.systemui.keyguard.shared.model.KeyguardState.DREAMING;
 import static com.android.systemui.keyguard.shared.model.KeyguardState.LOCKSCREEN;
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
@@ -26,7 +25,6 @@ import static com.android.systemui.util.kotlin.JavaAdapterKt.collectFlow;
 import android.app.StatusBarManager;
 import android.util.Log;
 import android.view.GestureDetector;
-import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -75,13 +73,13 @@ import com.android.systemui.statusbar.window.StatusBarWindowStateController;
 import com.android.systemui.unfold.UnfoldTransitionProgressProvider;
 import com.android.systemui.util.time.SystemClock;
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi;
+
 import java.io.PrintWriter;
 import java.util.Optional;
 import java.util.function.Consumer;
 
 import javax.inject.Inject;
-
-import kotlinx.coroutines.ExperimentalCoroutinesApi;
 
 /**
  * Controller for {@link NotificationShadeWindowView}.
@@ -104,7 +102,6 @@ public class NotificationShadeWindowViewController implements Dumpable {
     private final PulsingGestureListener mPulsingGestureListener;
     private final LockscreenHostedDreamGestureListener mLockscreenHostedDreamGestureListener;
     private final NotificationInsetsController mNotificationInsetsController;
-    private final boolean mIsTrackpadCommonEnabled;
     private final FeatureFlagsClassic mFeatureFlagsClassic;
     private final SysUIKeyEventHandler mSysUIKeyEventHandler;
     private final PrimaryBouncerInteractor mPrimaryBouncerInteractor;
@@ -139,6 +136,11 @@ public class NotificationShadeWindowViewController implements Dumpable {
     private final PanelExpansionInteractor mPanelExpansionInteractor;
     private final ShadeExpansionStateManager mShadeExpansionStateManager;
 
+    /**
+     * If {@code true}, an external touch sent in {@link #handleExternalTouch(MotionEvent)} has been
+     * intercepted and all future touch events for the gesture should be processed by this view.
+     */
+    private boolean mExternalTouchIntercepted = false;
     private boolean mIsTrackingBarGesture = false;
     private boolean mIsOcclusionTransitionRunning = false;
     private DisableSubpixelTextTransitionListener mDisableSubpixelTextTransitionListener;
@@ -211,7 +213,6 @@ public class NotificationShadeWindowViewController implements Dumpable {
         mLockscreenHostedDreamGestureListener = lockscreenHostedDreamGestureListener;
         mNotificationInsetsController = notificationInsetsController;
         mGlanceableHubContainerController = glanceableHubContainerController;
-        mIsTrackpadCommonEnabled = featureFlagsClassic.isEnabled(TRACKPAD_GESTURE_COMMON);
         mFeatureFlagsClassic = featureFlagsClassic;
         mSysUIKeyEventHandler = sysUIKeyEventHandler;
         mPrimaryBouncerInteractor = primaryBouncerInteractor;
@@ -256,11 +257,28 @@ public class NotificationShadeWindowViewController implements Dumpable {
     }
 
     /**
-     * Handle a touch event while dreaming by forwarding the event to the content view.
+     * Handle a touch event while dreaming or on the hub by forwarding the event to the content
+     * view.
+     * <p>
+     * Since important logic for handling touches lives in the dispatch/intercept phases, we
+     * simulate going through all of these stages before sending onTouchEvent if intercepted.
+     *
      * @param event The event to forward.
      */
-    public void handleDreamTouch(MotionEvent event) {
-        mView.dispatchTouchEvent(event);
+    public void handleExternalTouch(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            mExternalTouchIntercepted = false;
+        }
+
+        if (!mView.dispatchTouchEvent(event)) {
+            return;
+        }
+        if (!mExternalTouchIntercepted) {
+            mExternalTouchIntercepted = mView.onInterceptTouchEvent(event);
+        }
+        if (mExternalTouchIntercepted) {
+            mView.onTouchEvent(event);
+        }
     }
 
     /** Inflates the {@link R.layout#status_bar_expanded} layout and sets it up. */
@@ -643,16 +661,10 @@ public class NotificationShadeWindowViewController implements Dumpable {
         if (mTouchActive) {
             final long now = mClock.uptimeMillis();
             final MotionEvent event;
-            if (mIsTrackpadCommonEnabled) {
-                event = MotionEvent.obtain(mDownEvent);
-                event.setDownTime(now);
-                event.setAction(MotionEvent.ACTION_CANCEL);
-                event.setLocation(0.0f, 0.0f);
-            } else {
-                event = MotionEvent.obtain(now, now,
-                        MotionEvent.ACTION_CANCEL, 0.0f, 0.0f, 0);
-                event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-            }
+            event = MotionEvent.obtain(mDownEvent);
+            event.setDownTime(now);
+            event.setAction(MotionEvent.ACTION_CANCEL);
+            event.setLocation(0.0f, 0.0f);
             Log.w(TAG, "Canceling current touch event (should be very rare)");
             mView.dispatchTouchEvent(event);
             event.recycle();

@@ -68,8 +68,6 @@ import com.android.systemui.classifier.Classifier;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dump.DumpManager;
-import com.android.systemui.flags.FeatureFlagsClassic;
-import com.android.systemui.flags.Flags;
 import com.android.systemui.keyguard.MigrateClocksToBlueprint;
 import com.android.systemui.keyguard.data.repository.KeyguardTransitionRepository;
 import com.android.systemui.keyguard.shared.model.KeyguardState;
@@ -100,6 +98,7 @@ import com.android.systemui.statusbar.notification.ColorUpdateLogger;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.LaunchAnimationParameters;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
+import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
@@ -168,6 +167,7 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     private final NotificationGutsManager mNotificationGutsManager;
     private final NotificationsController mNotificationsController;
     private final NotificationVisibilityProvider mVisibilityProvider;
+    private final NotificationWakeUpCoordinator mWakeUpCoordinator;
     private final HeadsUpManager mHeadsUpManager;
     private final NotificationRoundnessManager mNotificationRoundnessManager;
     private final TunerService mTunerService;
@@ -210,11 +210,9 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     @Nullable
     private Boolean mHistoryEnabled;
     private int mBarState;
-    private boolean mIsBouncerShowingFromCentralSurfaces;
     private HeadsUpAppearanceController mHeadsUpAppearanceController;
     private boolean mIsInTransitionToAod = false;
 
-    private final FeatureFlagsClassic mFeatureFlags;
     private final NotificationTargetsHelper mNotificationTargetsHelper;
     private final SecureSettings mSecureSettings;
     private final NotificationDismissibilityProvider mDismissibilityProvider;
@@ -310,10 +308,6 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     };
 
     private final DynamicPrivacyController.Listener mDynamicPrivacyControllerListener = () -> {
-        if (mView.isExpanded()) {
-            // The bottom might change because we're using the final actual height of the view
-            mView.setAnimateBottomOnLayout(true);
-        }
         if (!FooterViewRefactor.isEnabled()) {
             // Let's update the footer once the notifications have been updated (in the next frame)
             mView.post(this::updateFooter);
@@ -709,6 +703,7 @@ public class NotificationStackScrollLayoutController implements Dumpable {
             NotificationGutsManager notificationGutsManager,
             NotificationsController notificationsController,
             NotificationVisibilityProvider visibilityProvider,
+            NotificationWakeUpCoordinator wakeUpCoordinator,
             HeadsUpManager headsUpManager,
             NotificationRoundnessManager notificationRoundnessManager,
             TunerService tunerService,
@@ -745,7 +740,6 @@ public class NotificationStackScrollLayoutController implements Dumpable {
             StackStateLogger stackLogger,
             NotificationStackScrollLogger logger,
             NotificationStackSizeCalculator notificationStackSizeCalculator,
-            FeatureFlagsClassic featureFlags,
             NotificationTargetsHelper notificationTargetsHelper,
             SecureSettings secureSettings,
             NotificationDismissibilityProvider dismissibilityProvider,
@@ -761,6 +755,7 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         mNotificationGutsManager = notificationGutsManager;
         mNotificationsController = notificationsController;
         mVisibilityProvider = visibilityProvider;
+        mWakeUpCoordinator = wakeUpCoordinator;
         mHeadsUpManager = headsUpManager;
         mNotificationRoundnessManager = notificationRoundnessManager;
         mTunerService = tunerService;
@@ -793,13 +788,15 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         mSeenNotificationsInteractor = seenNotificationsInteractor;
         mShadeController = shadeController;
         mWindowRootView = windowRootView;
-        mFeatureFlags = featureFlags;
         mNotificationTargetsHelper = notificationTargetsHelper;
         mSecureSettings = secureSettings;
         mDismissibilityProvider = dismissibilityProvider;
         mActivityStarter = activityStarter;
         mSensitiveNotificationProtectionController = sensitiveNotificationProtectionController;
         mView.passSplitShadeStateController(splitShadeStateController);
+        if (SceneContainerFlag.isEnabled()) {
+            mWakeUpCoordinator.setStackScroller(this);
+        }
         mDumpManager.registerDumpable(this);
         updateResources();
         setUpView();
@@ -1391,14 +1388,6 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     }
 
     /**
-     * Sets whether the bouncer is currently showing. Should only be called from
-     * {@link CentralSurfaces}.
-     */
-    public void setBouncerShowingFromCentralSurfaces(boolean bouncerShowing) {
-        mIsBouncerShowingFromCentralSurfaces = bouncerShowing;
-    }
-
-    /**
      * Set the visibility of the view, and propagate it to specific children.
      *
      * @param visible either the view is visible or not.
@@ -1435,29 +1424,11 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                 // For more details, see: b/228790482
                 && !mIsInTransitionToAod
                 // Don't show any notification content if the bouncer is showing. See b/267060171.
-                && !isBouncerShowing();
+                && !mPrimaryBouncerInteractor.isBouncerShowing();
 
         mView.updateEmptyShadeView(shouldShow, mZenModeController.areNotificationsHiddenInShade());
 
         Trace.endSection();
-    }
-
-    /**
-     * Returns whether the bouncer is currently showing.
-     *
-     * There's a possible timing difference between when CentralSurfaces marks the bouncer as not
-     * showing and when PrimaryBouncerInteractor marks the bouncer as not showing. (CentralSurfaces
-     * appears to mark the bouncer as showing for 10-200ms longer than PrimaryBouncerInteractor.)
-     *
-     * This timing difference could be load bearing, which is why we have a feature flag protecting
-     * where we fetch the value from. This flag is intended to be short-lived.
-     */
-    private boolean isBouncerShowing() {
-        if (mFeatureFlags.isEnabled(Flags.USE_REPOS_FOR_BOUNCER_SHOWING)) {
-            return mPrimaryBouncerInteractor.isBouncerShowing();
-        } else {
-            return mIsBouncerShowingFromCentralSurfaces;
-        }
     }
 
     /**
@@ -1482,6 +1453,7 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     }
 
     public void setHeadsUpAnimatingAway(boolean headsUpAnimatingAway) {
+        NotificationsHeadsUpRefactor.assertInLegacyMode();
         mView.setHeadsUpAnimatingAway(headsUpAnimatingAway);
     }
 
@@ -1514,7 +1486,8 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     }
 
     public void setDozing(boolean dozing, boolean animate) {
-        mView.setDozing(dozing, animate);
+        SceneContainerFlag.assertInLegacyMode();
+        mView.setDozing(dozing);
     }
 
     public void setPulsing(boolean pulsing, boolean animatePulse) {

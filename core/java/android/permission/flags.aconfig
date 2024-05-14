@@ -1,4 +1,5 @@
 package: "android.permission.flags"
+container: "system"
 
 flag {
   name: "device_aware_permission_apis_enabled"
@@ -122,6 +123,30 @@ flag {
   bug: "301960090"
   # Referenced in WM where WM starts before DeviceConfig
   is_fixed_read_only: true
+}
+
+flag {
+  name: "sensitive_content_metrics_bugfix"
+  namespace: "permissions"
+  description: "Enables metrics bugfixes for sensitive content/notification features"
+  bug: "312784351"
+  # Referenced in WM where WM starts before DeviceConfig
+  is_fixed_read_only: true
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
+  name: "sensitive_content_recents_screenshot_bugfix"
+  namespace: "permissions"
+  description: "Enables recents screenshot bugfixes for sensitive content/notification features"
+  bug: "312784351"
+  # Referenced in WM where WM starts before DeviceConfig
+  is_fixed_read_only: true
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
 }
 
 flag {

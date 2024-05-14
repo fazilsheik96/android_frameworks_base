@@ -430,5 +430,8 @@ public class SecureSettingsValidators {
         VALIDATORS.put(Secure.AUDIO_DEVICE_INVENTORY, ANY_STRING_VALIDATOR);
         VALIDATORS.put(Secure.SCREEN_RESOLUTION_MODE, new InclusiveIntegerRangeValidator(
                 Secure.RESOLUTION_MODE_UNKNOWN, Secure.RESOLUTION_MODE_FULL));
+        VALIDATORS.put(Secure.ACCESSIBILITY_DISPLAY_DALTONIZER_SATURATION_LEVEL,
+                new InclusiveIntegerRangeValidator(0, 10));
+        VALIDATORS.put(Secure.CHARGE_OPTIMIZATION_MODE, new InclusiveIntegerRangeValidator(0, 10));
     }
 }

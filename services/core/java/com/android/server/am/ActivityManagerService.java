@@ -37,6 +37,9 @@ import static android.app.ActivityManager.PROCESS_STATE_BOUND_TOP;
 import static android.app.ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.ActivityManager.PROCESS_STATE_TOP;
+import static android.app.ActivityManager.RESTRICTION_LEVEL_FORCE_STOPPED;
+import static android.app.ActivityManager.RESTRICTION_REASON_DEFAULT;
+import static android.app.ActivityManager.RESTRICTION_REASON_USAGE;
 import static android.app.ActivityManager.StopUserOnSwitch;
 import static android.app.ActivityManager.UidFrozenStateChangedCallback.UID_FROZEN_STATE_FROZEN;
 import static android.app.ActivityManager.UidFrozenStateChangedCallback.UID_FROZEN_STATE_UNFROZEN;
@@ -463,6 +466,7 @@ import com.android.server.net.NetworkManagementInternal;
 import com.android.server.os.NativeTombstoneManager;
 import com.android.server.pm.Computer;
 import com.android.server.pm.Installer;
+import com.android.server.pm.PackageManagerServiceUtils;
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.pkg.AndroidPackage;
@@ -502,6 +506,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -696,8 +702,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     final ArrayList<ActiveInstrumentation> mActiveInstrumentation = new ArrayList<>();
 
     public final IntentFirewall mIntentFirewall;
-
-    public OomAdjProfiler mOomAdjProfiler = new OomAdjProfiler();
 
     /**
      * The global lock for AMS, it's de-facto the ActivityManagerService object as of now.
@@ -2618,7 +2622,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 BackgroundThread.getHandler(), this);
         mOnBattery = DEBUG_POWER ? true
                 : mBatteryStatsService.getActiveStatistics().getIsOnBattery();
-        mOomAdjProfiler.batteryPowerChanged(mOnBattery);
 
         mProcessStats = new ProcessStatsService(this, new File(systemDir, "procstats"));
 
@@ -2868,13 +2871,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         updateCpuStatsNow();
         synchronized (mProcLock) {
             mOnBattery = DEBUG_POWER ? true : onBattery;
-            mOomAdjProfiler.batteryPowerChanged(onBattery);
         }
     }
 
     @Override
     public void batteryStatsReset() {
-        mOomAdjProfiler.reset();
+        // Empty for now.
     }
 
     @Override
@@ -5194,10 +5196,19 @@ public class ActivityManagerService extends IActivityManager.Stub
                 } // else, stopped packages in private space may still hit the logic below
             }
         }
+
+        final boolean wasForceStopped = app.wasForceStopped()
+                || app.getWindowProcessController().wasForceStopped();
+        if (android.app.Flags.appRestrictionsApi() && wasForceStopped) {
+            noteAppRestrictionEnabled(app.info.packageName, app.uid,
+                    RESTRICTION_LEVEL_FORCE_STOPPED, false,
+                    RESTRICTION_REASON_USAGE, "unknown", 0L);
+        }
+
         if (!sendBroadcast) {
             if (!android.content.pm.Flags.stayStopped()) return;
             // Nothing to do if it wasn't previously stopped
-            if (!app.wasForceStopped() && !app.getWindowProcessController().wasForceStopped()) {
+            if (!wasForceStopped) {
                 return;
             }
         }
@@ -5508,14 +5519,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
-    /**
-     * Checks if feature flag is enabled and if system is Headless (HSUM), case in which 
-     * home delay should be skipped.
-     *
-     * @hide
-     */
-    public boolean isHomeLaunchDelayable() {
-        return !UserManager.isHeadlessSystemUserMode() && enableHomeDelay();
+    /** Checks whether the home launch delay feature is enabled. */
+    private boolean isHomeLaunchDelayable() {
+        // This feature is disabled on Auto since it seems to add an unacceptably long boot delay
+        // without even solving the underlying issue (it merely hits the timeout).
+        return enableHomeDelay() &&
+                !mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE);
     }
 
     final void ensureBootCompleted() {
@@ -7512,7 +7521,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mServices.updateScreenStateLocked(isAwake);
                 reportCurWakefulnessUsageEvent();
                 mActivityTaskManager.onScreenAwakeChanged(isAwake);
-                mOomAdjProfiler.onWakefulnessChanged(wakefulness);
                 mOomAdjuster.onWakefulnessChanged(wakefulness);
 
                 updateOomAdjLocked(OOM_ADJ_REASON_UI_VISIBILITY);
@@ -9044,8 +9052,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                     com.android.internal.R.integer.config_multiuserMaxRunningUsers);
             final boolean delayUserDataLocking = res.getBoolean(
                     com.android.internal.R.bool.config_multiuserDelayUserDataLocking);
+            final int backgroundUserScheduledStopTimeSecs = res.getInteger(
+                    com.android.internal.R.integer.config_backgroundUserScheduledStopTimeSecs);
             mUserController.setInitialConfig(userSwitchUiEnabled, maxRunningUsers,
-                    delayUserDataLocking);
+                    delayUserDataLocking, backgroundUserScheduledStopTimeSecs);
         }
         mAppErrors.loadAppsNotReportingCrashesFromConfig(res.getString(
                 com.android.internal.R.string.config_appsNotReportingCrashes));
@@ -9940,6 +9950,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 sb.append("Process-Runtime: ").append(runtimeMillis).append("\n");
             }
         }
+        if (eventType.equals("crash")) {
+            String formattedTime = DROPBOX_TIME_FORMATTER.format(
+                    Instant.now().atZone(ZoneId.systemDefault()));
+            sb.append("Timestamp: ").append(formattedTime).append("\n");
+        }
         if (activityShortComponentName != null) {
             sb.append("Activity: ").append(activityShortComponentName).append("\n");
         }
@@ -10632,12 +10647,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mProcessList.mAppExitInfoTracker.dumpHistoryProcessExitInfo(pw, dumpPackage);
             }
             if (dumpPackage == null) {
-                pw.println();
-                if (dumpAll) {
-                    pw.println(
-                            "-------------------------------------------------------------------------------");
-                }
-                mOomAdjProfiler.dump(pw);
                 pw.println();
                 if (dumpAll) {
                     pw.println(
@@ -13936,6 +13945,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             // Goodbye!
             removePidLocked(pid, app);
             mHandler.removeMessages(PROC_START_TIMEOUT_MSG, app);
+            mHandler.removeMessages(BIND_APPLICATION_TIMEOUT_SOFT_MSG, app);
+            mHandler.removeMessages(BIND_APPLICATION_TIMEOUT_HARD_MSG, app);
             mBatteryStatsService.noteProcessFinish(app.processName, app.info.uid);
             if (app.isolated) {
                 mBatteryStatsService.removeIsolatedUid(app.uid, app.info.uid);
@@ -14448,6 +14459,20 @@ public class ActivityManagerService extends IActivityManager.Stub
         int newBackupUid;
 
         synchronized(this) {
+            if (android.app.Flags.appRestrictionsApi()) {
+                try {
+                    final boolean wasStopped = mPackageManagerInt.isPackageStopped(app.packageName,
+                            UserHandle.getUserId(app.uid));
+                    if (wasStopped) {
+                        noteAppRestrictionEnabled(app.packageName, app.uid,
+                                RESTRICTION_LEVEL_FORCE_STOPPED, false,
+                                RESTRICTION_REASON_DEFAULT, "restore", 0L);
+                    }
+                } catch (NameNotFoundException e) {
+                    Slog.w(TAG, "No such package", e);
+                }
+            }
+
             // !!! TODO: currently no check here that we're already bound
             // Backup agent is now in use, its package can't be stopped.
             try {
@@ -14696,6 +14721,53 @@ public class ActivityManagerService extends IActivityManager.Stub
     public Intent registerReceiverWithFeature(IApplicationThread caller, String callerPackage,
             String callerFeatureId, String receiverId, IIntentReceiver receiver,
             IntentFilter filter, String permission, int userId, int flags) {
+        traceRegistrationBegin(receiverId, receiver, filter, userId);
+        try {
+            return registerReceiverWithFeatureTraced(caller, callerPackage, callerFeatureId,
+                    receiverId, receiver, filter, permission, userId, flags);
+        } finally {
+            traceRegistrationEnd();
+        }
+    }
+
+    private static void traceRegistrationBegin(String receiverId, IIntentReceiver receiver,
+            IntentFilter filter, int userId) {
+        if (!Flags.traceReceiverRegistration()) {
+            return;
+        }
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            final StringBuilder sb = new StringBuilder("registerReceiver: ");
+            sb.append(Binder.getCallingUid()); sb.append('/');
+            sb.append(receiverId == null ? "null" : receiverId); sb.append('/');
+            final int actionsCount = filter.countActions();
+            if (actionsCount > 0) {
+                for (int i = 0; i < actionsCount; ++i) {
+                    sb.append(filter.getAction(i));
+                    if (i != actionsCount - 1) sb.append(',');
+                }
+            } else {
+                sb.append("null");
+            }
+            sb.append('/');
+            sb.append('u'); sb.append(userId); sb.append('/');
+            sb.append(receiver == null ? "null" : receiver.asBinder());
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, sb.toString());
+        }
+    }
+
+    private static void traceRegistrationEnd() {
+        if (!Flags.traceReceiverRegistration()) {
+            return;
+        }
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+        }
+    }
+
+    private Intent registerReceiverWithFeatureTraced(IApplicationThread caller,
+            String callerPackage, String callerFeatureId, String receiverId,
+            IIntentReceiver receiver, IntentFilter filter, String permission,
+            int userId, int flags) {
         enforceNotIsolatedCaller("registerReceiver");
         ArrayList<StickyBroadcast> stickyBroadcasts = null;
         ProcessRecord callerApp = null;
@@ -15011,6 +15083,35 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     public void unregisterReceiver(IIntentReceiver receiver) {
+        traceUnregistrationBegin(receiver);
+        try {
+            unregisterReceiverTraced(receiver);
+        } finally {
+            traceUnregistrationEnd();
+        }
+    }
+
+    private static void traceUnregistrationBegin(IIntentReceiver receiver) {
+        if (!Flags.traceReceiverRegistration()) {
+            return;
+        }
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                    TextUtils.formatSimple("unregisterReceiver: %d/%s", Binder.getCallingUid(),
+                            receiver == null ? "null" : receiver.asBinder()));
+        }
+    }
+
+    private static void traceUnregistrationEnd() {
+        if (!Flags.traceReceiverRegistration()) {
+            return;
+        }
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+        }
+    }
+
+    private void unregisterReceiverTraced(IIntentReceiver receiver) {
         if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "Unregister receiver: " + receiver);
 
         final long origId = Binder.clearCallingIdentity();
@@ -15595,6 +15696,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                                             intent.getStringExtra(Intent.EXTRA_PACKAGE_NAME));
                                 } else {
                                     mAppOpsService.uidRemoved(uid);
+                                    mServices.onUidRemovedLocked(uid);
                                 }
                             }
                             break;
@@ -15967,6 +16069,11 @@ public class ActivityManagerService extends IActivityManager.Stub
             } else {
                 registeredReceivers = mReceiverResolver.queryIntent(snapshot, intent,
                         resolvedType, false /*defaultOnly*/, userId);
+            }
+            if (registeredReceivers != null) {
+                PackageManagerServiceUtils.applyNullActionBlocking(
+                        mPlatformCompat, snapshot, registeredReceivers,
+                        true, intent, callingUid);
             }
         }
         BroadcastQueue.traceEnd(cookie);
@@ -20238,6 +20345,34 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     /**
+     * Log the reason for changing an app restriction. Purely used for logging purposes and does not
+     * cause any change to app state.
+     *
+     * @see ActivityManager#noteAppRestrictionEnabled(String, int, int, boolean, int, String, long)
+     */
+    @Override
+    public void noteAppRestrictionEnabled(String packageName, int uid,
+            @RestrictionLevel int restrictionType, boolean enabled,
+            @ActivityManager.RestrictionReason int reason, String subReason, long threshold) {
+        if (!android.app.Flags.appRestrictionsApi()) return;
+
+        enforceCallingPermission(android.Manifest.permission.DEVICE_POWER,
+                "noteAppRestrictionEnabled()");
+
+        final int userId = UserHandle.getCallingUserId();
+        final long callingId = Binder.clearCallingIdentity();
+        try {
+            if (uid == -1) {
+                uid = mPackageManagerInt.getPackageUid(packageName, 0, userId);
+            }
+            mAppRestrictionController.noteAppRestrictionEnabled(packageName, uid, restrictionType,
+                    enabled, reason, subReason, threshold);
+        } finally {
+            Binder.restoreCallingIdentity(callingId);
+        }
+    }
+
+    /**
      * Get an app's background restriction level.
      * This interface is intended for the shell command to use.
      */
@@ -20766,7 +20901,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         /** @see Binder#getCallingPid */
         public int getCallingPid() {
-            return Binder.getCallingUid();
+            return Binder.getCallingPid();
         }
 
         /** @see Binder#clearCallingIdentity */

@@ -16,6 +16,8 @@
 
 package com.android.systemui.communal.dagger
 
+import android.content.Context
+import com.android.systemui.communal.data.backup.CommunalBackupUtils
 import com.android.systemui.communal.data.db.CommunalDatabaseModule
 import com.android.systemui.communal.data.repository.CommunalMediaRepositoryModule
 import com.android.systemui.communal.data.repository.CommunalPrefsRepositoryModule
@@ -24,6 +26,8 @@ import com.android.systemui.communal.data.repository.CommunalSettingsRepositoryM
 import com.android.systemui.communal.data.repository.CommunalTutorialRepositoryModule
 import com.android.systemui.communal.data.repository.CommunalWidgetRepositoryModule
 import com.android.systemui.communal.shared.model.CommunalScenes
+import com.android.systemui.communal.util.CommunalColors
+import com.android.systemui.communal.util.CommunalColorsImpl
 import com.android.systemui.communal.widgets.CommunalWidgetModule
 import com.android.systemui.communal.widgets.EditWidgetsActivityStarter
 import com.android.systemui.communal.widgets.EditWidgetsActivityStarterImpl
@@ -60,6 +64,8 @@ interface CommunalModule {
     @Communal
     fun bindCommunalSceneDataSource(@Communal delegator: SceneDataSourceDelegator): SceneDataSource
 
+    @Binds fun bindCommunalColors(impl: CommunalColorsImpl): CommunalColors
+
     companion object {
         @Provides
         @Communal
@@ -73,6 +79,14 @@ interface CommunalModule {
                     initialSceneKey = CommunalScenes.Blank
                 )
             return SceneDataSourceDelegator(applicationScope, config)
+        }
+
+        @Provides
+        @SysUISingleton
+        fun providesCommunalBackupUtils(
+            @Application context: Context,
+        ): CommunalBackupUtils {
+            return CommunalBackupUtils(context)
         }
     }
 }

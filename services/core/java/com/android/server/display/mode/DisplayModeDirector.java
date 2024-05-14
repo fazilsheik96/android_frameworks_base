@@ -77,6 +77,7 @@ import com.android.internal.os.BackgroundThread;
 import com.android.server.LocalServices;
 import com.android.server.display.DisplayDeviceConfig;
 import com.android.server.display.config.IdleScreenRefreshRateTimeoutLuxThresholdPoint;
+import com.android.server.display.config.RefreshRateData;
 import com.android.server.display.feature.DeviceConfigParameterProvider;
 import com.android.server.display.feature.DisplayManagerFlags;
 import com.android.server.display.utils.AmbientFilter;
@@ -120,8 +121,6 @@ public class DisplayModeDirector {
     private static final int MSG_REFRESH_RATE_IN_HBM_SUNLIGHT_CHANGED = 7;
     private static final int MSG_REFRESH_RATE_IN_HBM_HDR_CHANGED = 8;
 
-    private static final float FLOAT_TOLERANCE = RefreshRateRange.FLOAT_TOLERANCE;
-
     private final Object mLock = new Object();
     private final Context mContext;
 
@@ -149,9 +148,8 @@ public class DisplayModeDirector {
     private SparseArray<Display.Mode[]> mSupportedModesByDisplay;
     // A map from the display ID to the default mode of that display.
     private SparseArray<Display.Mode> mDefaultModeByDisplay;
-
-    // a map from display id to vrr support
-    private SparseBooleanArray mVrrSupportedByDisplay;
+    // a map from display id to display device config
+    private SparseArray<DisplayDeviceConfig> mDisplayDeviceConfigByDisplay = new SparseArray<>();
 
     private BrightnessObserver mBrightnessObserver;
 
@@ -193,15 +191,19 @@ public class DisplayModeDirector {
 
     private final DisplayManagerFlags mDisplayManagerFlags;
 
+    private final DisplayDeviceConfigProvider mDisplayDeviceConfigProvider;
 
     public DisplayModeDirector(@NonNull Context context, @NonNull Handler handler,
-            @NonNull DisplayManagerFlags displayManagerFlags) {
-        this(context, handler, new RealInjector(context), displayManagerFlags);
+            @NonNull DisplayManagerFlags displayManagerFlags,
+            @NonNull DisplayDeviceConfigProvider displayDeviceConfigProvider) {
+        this(context, handler, new RealInjector(context),
+                displayManagerFlags, displayDeviceConfigProvider);
     }
 
     public DisplayModeDirector(@NonNull Context context, @NonNull Handler handler,
             @NonNull Injector injector,
-            @NonNull DisplayManagerFlags displayManagerFlags) {
+            @NonNull DisplayManagerFlags displayManagerFlags,
+            @NonNull DisplayDeviceConfigProvider displayDeviceConfigProvider) {
         mIsDisplayResolutionRangeVotingEnabled = displayManagerFlags
                 .isDisplayResolutionRangeVotingEnabled();
         mIsUserPreferredModeVoteEnabled = displayManagerFlags.isUserPreferredModeVoteEnabled();
@@ -212,6 +214,7 @@ public class DisplayModeDirector {
         mIsBackUpSmoothDisplayAndForcePeakRefreshRateEnabled = displayManagerFlags
                 .isBackUpSmoothDisplayAndForcePeakRefreshRateEnabled();
         mDisplayManagerFlags = displayManagerFlags;
+        mDisplayDeviceConfigProvider = displayDeviceConfigProvider;
         mContext = context;
         mHandler = new DisplayModeDirectorHandler(handler.getLooper());
         mInjector = injector;
@@ -219,7 +222,6 @@ public class DisplayModeDirector {
                 displayManagerFlags.isRefreshRateVotingTelemetryEnabled());
         mSupportedModesByDisplay = new SparseArray<>();
         mDefaultModeByDisplay = new SparseArray<>();
-        mVrrSupportedByDisplay = new SparseBooleanArray();
         mAppRequestObserver = new AppRequestObserver();
         mConfigParameterProvider = new DeviceConfigParameterProvider(injector.getDeviceConfig());
         mDeviceConfigDisplaySettings = new DeviceConfigDisplaySettings();
@@ -315,7 +317,7 @@ public class DisplayModeDirector {
             List<Display.Mode> availableModes = new ArrayList<>();
             availableModes.add(defaultMode);
             VoteSummary primarySummary = new VoteSummary(mIsDisplayResolutionRangeVotingEnabled,
-                    mVrrSupportedByDisplay.get(displayId),
+                    isVrrSupportedLocked(displayId),
                     mLoggingEnabled, mSupportsFrameRateOverride);
             int lowestConsideredPriority = Vote.MIN_PRIORITY;
             int highestConsideredPriority = Vote.MAX_PRIORITY;
@@ -356,7 +358,7 @@ public class DisplayModeDirector {
             }
 
             VoteSummary appRequestSummary = new VoteSummary(mIsDisplayResolutionRangeVotingEnabled,
-                    mVrrSupportedByDisplay.get(displayId),
+                    isVrrSupportedLocked(displayId),
                     mLoggingEnabled, mSupportsFrameRateOverride);
 
             appRequestSummary.applyVotes(votes,
@@ -444,9 +446,14 @@ public class DisplayModeDirector {
         return mAppRequestObserver;
     }
 
+    private boolean isVrrSupportedLocked(int displayId) {
+        DisplayDeviceConfig config = mDisplayDeviceConfigByDisplay.get(displayId);
+        return config != null && config.isVrrSupportEnabled();
+    }
+
     private boolean isVrrSupportedByAnyDisplayLocked() {
-        for (int i = 0; i < mVrrSupportedByDisplay.size(); i++) {
-            if (mVrrSupportedByDisplay.valueAt(i)) {
+        for (int i = 0; i < mDisplayDeviceConfigByDisplay.size(); i++) {
+            if (mDisplayDeviceConfigByDisplay.valueAt(i).isVrrSupportEnabled()) {
                 return true;
             }
         }
@@ -552,7 +559,7 @@ public class DisplayModeDirector {
         if (mSystemRequestObserver != null) {
             boolean vrrSupported;
             synchronized (mLock) {
-                vrrSupported = mVrrSupportedByDisplay.get(displayId);
+                vrrSupported = isVrrSupportedLocked(displayId);
             }
             if (vrrSupported) {
                 mSystemRequestObserver.requestDisplayModes(token, displayId, modeIds);
@@ -644,8 +651,8 @@ public class DisplayModeDirector {
     }
 
     @VisibleForTesting
-    void injectVrrByDisplay(SparseBooleanArray vrrByDisplay) {
-        mVrrSupportedByDisplay = vrrByDisplay;
+    void injectDisplayDeviceConfigByDisplay(SparseArray<DisplayDeviceConfig> ddcByDisplay) {
+        mDisplayDeviceConfigByDisplay = ddcByDisplay;
     }
 
     @VisibleForTesting
@@ -694,10 +701,13 @@ public class DisplayModeDirector {
     }
 
     /**
-     * Called when external display is ready to be enabled.
+     * Provides access to DisplayDeviceConfig for specific display
      */
-    public void onExternalDisplayReadyToBeEnabled(int displayId) {
-        mDisplayObserver.onExternalDisplayReadyToBeEnabled(displayId);
+    public interface DisplayDeviceConfigProvider {
+        /**
+         * Returns DisplayDeviceConfig for specific display
+         */
+        @Nullable DisplayDeviceConfig getDisplayDeviceConfig(int displayId);
     }
 
     /**
@@ -952,13 +962,15 @@ public class DisplayModeDirector {
          * This is used to update the refresh rate configs from the DeviceConfig, which
          * if missing from DisplayDeviceConfig, and finally fallback to config.xml.
          */
-        public void setRefreshRates(DisplayDeviceConfig displayDeviceConfig,
+        void setRefreshRates(DisplayDeviceConfig displayDeviceConfig,
                 boolean attemptReadFromFeatureParams) {
+            RefreshRateData refreshRateData = displayDeviceConfig == null ? null
+                    : displayDeviceConfig.getRefreshRateData();
             setDefaultPeakRefreshRate(displayDeviceConfig, attemptReadFromFeatureParams);
             mDefaultRefreshRate =
-                    (displayDeviceConfig == null) ? (float) mContext.getResources().getInteger(
-                        R.integer.config_defaultRefreshRate)
-                        : (float) displayDeviceConfig.getDefaultRefreshRate();
+                    (refreshRateData == null) ? (float) mContext.getResources().getInteger(
+                            R.integer.config_defaultRefreshRate)
+                            : (float) refreshRateData.defaultRefreshRate;
         }
 
         public void observe() {
@@ -1040,7 +1052,8 @@ public class DisplayModeDirector {
                 defaultPeakRefreshRate =
                         (displayDeviceConfig == null) ? (float) mContext.getResources().getInteger(
                                 R.integer.config_defaultPeakRefreshRate)
-                                : (float) displayDeviceConfig.getDefaultPeakRefreshRate();
+                                : (float) displayDeviceConfig.getRefreshRateData()
+                                        .defaultPeakRefreshRate;
             }
             mDefaultPeakRefreshRate = defaultPeakRefreshRate;
         }
@@ -1094,20 +1107,6 @@ public class DisplayModeDirector {
             if (Float.isInfinite(minRefreshRate)) {
                 // Infinity means that we want the highest possible refresh rate
                 minRefreshRate = highestRefreshRate;
-
-                if (!mIsBackUpSmoothDisplayAndForcePeakRefreshRateEnabled
-                        && displayId == Display.DEFAULT_DISPLAY) {
-                    // The flag has been turned off, we need to restore the original value. We'll
-                    // use the peak refresh rate of the default display.
-                    Settings.System.putFloatForUser(cr, Settings.System.MIN_REFRESH_RATE,
-                            highestRefreshRate, cr.getUserId());
-                }
-            } else if (mIsBackUpSmoothDisplayAndForcePeakRefreshRateEnabled
-                    && displayId == Display.DEFAULT_DISPLAY
-                    && Math.round(minRefreshRate) == Math.round(highestRefreshRate)) {
-                // The flag has been turned on, we need to upgrade the setting
-                Settings.System.putFloatForUser(cr, Settings.System.MIN_REFRESH_RATE,
-                        Float.POSITIVE_INFINITY, cr.getUserId());
             }
 
             float peakRefreshRate = Settings.System.getFloatForUser(cr,
@@ -1115,20 +1114,6 @@ public class DisplayModeDirector {
             if (Float.isInfinite(peakRefreshRate)) {
                 // Infinity means that we want the highest possible refresh rate
                 peakRefreshRate = highestRefreshRate;
-
-                if (!mIsBackUpSmoothDisplayAndForcePeakRefreshRateEnabled
-                        && displayId == Display.DEFAULT_DISPLAY) {
-                    // The flag has been turned off, we need to restore the original value. We'll
-                    // use the peak refresh rate of the default display.
-                    Settings.System.putFloatForUser(cr, Settings.System.PEAK_REFRESH_RATE,
-                            highestRefreshRate, cr.getUserId());
-                }
-            } else if (mIsBackUpSmoothDisplayAndForcePeakRefreshRateEnabled
-                    && displayId == Display.DEFAULT_DISPLAY
-                    && Math.round(peakRefreshRate) == Math.round(highestRefreshRate)) {
-                // The flag has been turned on, we need to upgrade the setting
-                Settings.System.putFloatForUser(cr, Settings.System.PEAK_REFRESH_RATE,
-                        Float.POSITIVE_INFINITY, cr.getUserId());
             }
 
             updateRefreshRateSettingLocked(minRefreshRate, peakRefreshRate, mDefaultRefreshRate,
@@ -1324,7 +1309,6 @@ public class DisplayModeDirector {
         private final Handler mHandler;
         private final VotesStorage mVotesStorage;
 
-        private DisplayManagerInternal mDisplayManagerInternal;
         private int mExternalDisplayPeakWidth;
         private int mExternalDisplayPeakHeight;
         private int mExternalDisplayPeakRefreshRate;
@@ -1361,7 +1345,6 @@ public class DisplayModeDirector {
         }
 
         public void observe() {
-            mDisplayManagerInternal = mInjector.getDisplayManagerInternal();
             mInjector.registerDisplayListener(this, mHandler);
 
             // Populate existing displays
@@ -1374,32 +1357,27 @@ public class DisplayModeDirector {
                 modes.put(displayId, info.supportedModes);
                 defaultModes.put(displayId, info.getDefaultMode());
             }
-            boolean vrrSupportedByDefaultDisplay = mDisplayManagerInternal
-                    .isVrrSupportEnabled(Display.DEFAULT_DISPLAY);
+            DisplayDeviceConfig defaultDisplayConfig = mDisplayDeviceConfigProvider
+                    .getDisplayDeviceConfig(Display.DEFAULT_DISPLAY);
             synchronized (mLock) {
                 final int size = modes.size();
                 for (int i = 0; i < size; i++) {
                     mSupportedModesByDisplay.put(modes.keyAt(i), modes.valueAt(i));
                     mDefaultModeByDisplay.put(defaultModes.keyAt(i), defaultModes.valueAt(i));
                 }
-                mVrrSupportedByDisplay.put(Display.DEFAULT_DISPLAY, vrrSupportedByDefaultDisplay);
+                mDisplayDeviceConfigByDisplay.put(Display.DEFAULT_DISPLAY, defaultDisplayConfig);
             }
-        }
-
-
-        void onExternalDisplayReadyToBeEnabled(int displayId) {
-            DisplayInfo displayInfo = getDisplayInfo(displayId);
-            updateDisplaysPeakRefreshRateAndResolution(displayInfo);
-            addDisplaysSynchronizedPeakRefreshRate(displayInfo);
         }
 
         @Override
         public void onDisplayAdded(int displayId) {
-            updateVrrStatus(displayId);
+            updateDisplayDeviceConfig(displayId);
             DisplayInfo displayInfo = getDisplayInfo(displayId);
             updateDisplayModes(displayId, displayInfo);
             updateLayoutLimitedFrameRate(displayId, displayInfo);
             updateUserSettingDisplayPreferredSize(displayInfo);
+            updateDisplaysPeakRefreshRateAndResolution(displayInfo);
+            addDisplaysSynchronizedPeakRefreshRate(displayInfo);
         }
 
         @Override
@@ -1407,7 +1385,7 @@ public class DisplayModeDirector {
             synchronized (mLock) {
                 mSupportedModesByDisplay.remove(displayId);
                 mDefaultModeByDisplay.remove(displayId);
-                mVrrSupportedByDisplay.delete(displayId);
+                mDisplayDeviceConfigByDisplay.remove(displayId);
                 mSettingsObserver.removeRefreshRateSetting(displayId);
             }
             updateLayoutLimitedFrameRate(displayId, null);
@@ -1418,7 +1396,7 @@ public class DisplayModeDirector {
 
         @Override
         public void onDisplayChanged(int displayId) {
-            updateVrrStatus(displayId);
+            updateDisplayDeviceConfig(displayId);
             DisplayInfo displayInfo = getDisplayInfo(displayId);
             updateDisplayModes(displayId, displayInfo);
             updateLayoutLimitedFrameRate(displayId, displayInfo);
@@ -1548,10 +1526,11 @@ public class DisplayModeDirector {
             mVotesStorage.updateGlobalVote(Vote.PRIORITY_SYNCHRONIZED_REFRESH_RATE, null);
         }
 
-        private void updateVrrStatus(int displayId) {
-            boolean isVrrSupported = mDisplayManagerInternal.isVrrSupportEnabled(displayId);
+        private void updateDisplayDeviceConfig(int displayId) {
+            DisplayDeviceConfig config = mDisplayDeviceConfigProvider
+                    .getDisplayDeviceConfig(displayId);
             synchronized (mLock) {
-                mVrrSupportedByDisplay.put(displayId, isVrrSupported);
+                mDisplayDeviceConfigByDisplay.put(displayId, config);
             }
         }
 
@@ -2276,7 +2255,7 @@ public class DisplayModeDirector {
                 }
 
                 if (mVsyncLowLightBlockingVoteEnabled
-                        && mVrrSupportedByDisplay.get(Display.DEFAULT_DISPLAY)) {
+                        && isVrrSupportedLocked(Display.DEFAULT_DISPLAY)) {
                     refreshRateSwitchingVote = Vote.forSupportedRefreshRatesAndDisableSwitching(
                             List.of(
                                     new SupportedRefreshRatesVote.RefreshRates(
@@ -2834,7 +2813,7 @@ public class DisplayModeDirector {
         private int getRefreshRateInHbmHdr(DisplayDeviceConfig displayDeviceConfig) {
             return getRefreshRate(
                     () -> mConfigParameterProvider.getRefreshRateInHbmHdr(),
-                    () -> displayDeviceConfig.getDefaultRefreshRateInHbmHdr(),
+                    () -> displayDeviceConfig.getRefreshRateData().defaultRefreshRateInHbmHdr,
                     R.integer.config_defaultRefreshRateInHbmHdr,
                     displayDeviceConfig
             );
@@ -2843,7 +2822,7 @@ public class DisplayModeDirector {
         private int getRefreshRateInHbmSunlight(DisplayDeviceConfig displayDeviceConfig) {
             return getRefreshRate(
                     () -> mConfigParameterProvider.getRefreshRateInHbmSunlight(),
-                    () -> displayDeviceConfig.getDefaultRefreshRateInHbmSunlight(),
+                    () -> displayDeviceConfig.getRefreshRateData().defaultRefreshRateInHbmSunlight,
                     R.integer.config_defaultRefreshRateInHbmSunlight,
                     displayDeviceConfig
             );

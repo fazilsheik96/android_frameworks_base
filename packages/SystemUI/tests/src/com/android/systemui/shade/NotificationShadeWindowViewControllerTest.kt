@@ -38,8 +38,6 @@ import com.android.systemui.dump.DumpManager
 import com.android.systemui.flags.FakeFeatureFlagsClassic
 import com.android.systemui.flags.Flags.LOCKSCREEN_WALLPAPER_DREAM_ENABLED
 import com.android.systemui.flags.Flags.SPLIT_SHADE_SUBPIXEL_OPTIMIZATION
-import com.android.systemui.flags.Flags.TRACKPAD_GESTURE_COMMON
-import com.android.systemui.flags.Flags.TRACKPAD_GESTURE_FEATURES
 import com.android.systemui.keyevent.domain.interactor.SysUIKeyEventHandler
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
@@ -166,8 +164,6 @@ class NotificationShadeWindowViewControllerTest : SysuiTestCase() {
             .thenReturn(emptyFlow<TransitionStep>())
 
         featureFlagsClassic = FakeFeatureFlagsClassic()
-        featureFlagsClassic.set(TRACKPAD_GESTURE_COMMON, true)
-        featureFlagsClassic.set(TRACKPAD_GESTURE_FEATURES, false)
         featureFlagsClassic.set(SPLIT_SHADE_SUBPIXEL_OPTIMIZATION, true)
         featureFlagsClassic.set(LOCKSCREEN_WALLPAPER_DREAM_ENABLED, false)
         mSetFlagsRule.disableFlags(Flags.FLAG_DEVICE_ENTRY_UDFPS_REFACTOR)
@@ -501,6 +497,46 @@ class NotificationShadeWindowViewControllerTest : SysuiTestCase() {
 
         // THEN touch should be intercepted by NotificationShade
         assertThat(interactionEventHandler.shouldInterceptTouchEvent(DOWN_EVENT)).isTrue()
+    }
+
+    @Test
+    fun handleExternalTouch_intercepted_sendsOnTouch() {
+        // Accept dispatch and also intercept.
+        whenever(view.dispatchTouchEvent(any())).thenReturn(true)
+        whenever(view.onInterceptTouchEvent(any())).thenReturn(true)
+
+        underTest.handleExternalTouch(DOWN_EVENT)
+        underTest.handleExternalTouch(MOVE_EVENT)
+
+        // Once intercepted, both events are sent to the view.
+        verify(view).onTouchEvent(DOWN_EVENT)
+        verify(view).onTouchEvent(MOVE_EVENT)
+    }
+
+    @Test
+    fun handleExternalTouch_notDispatched_interceptNotCalled() {
+        // Don't accept dispatch
+        whenever(view.dispatchTouchEvent(any())).thenReturn(false)
+
+        underTest.handleExternalTouch(DOWN_EVENT)
+
+        // Interception is not offered.
+        verify(view, never()).onInterceptTouchEvent(any())
+    }
+
+    @Test
+    fun handleExternalTouch_notIntercepted_onTouchNotSent() {
+        // Accept dispatch, but don't dispatch
+        whenever(view.dispatchTouchEvent(any())).thenReturn(true)
+        whenever(view.onInterceptTouchEvent(any())).thenReturn(false)
+
+        underTest.handleExternalTouch(DOWN_EVENT)
+        underTest.handleExternalTouch(MOVE_EVENT)
+
+        // Interception offered for both events, but onTouchEvent is never called.
+        verify(view).onInterceptTouchEvent(DOWN_EVENT)
+        verify(view).onInterceptTouchEvent(MOVE_EVENT)
+        verify(view, never()).onTouchEvent(any())
     }
 
     @Test

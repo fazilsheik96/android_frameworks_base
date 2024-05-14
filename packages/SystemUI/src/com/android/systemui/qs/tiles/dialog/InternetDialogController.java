@@ -16,7 +16,7 @@
 
 /**
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -825,7 +825,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         return summary;
     }
 
-    private void startActivity(Intent intent, View view) {
+    void startActivity(Intent intent, View view) {
         ActivityTransitionAnimator.Controller controller =
                 mDialogTransitionAnimator.createActivityTransitionController(view);
 
@@ -1258,6 +1258,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
                     TelephonyManager nDdsSubTm = mSubIdTelephonyManagerMap.get(mNddsSubId);
                     nDdsSubTm.unregisterTelephonyCallback(oldTelephonyCallback);
                     nDdsSubTm.registerTelephonyCallback(mExecutor, telephonyCallback);
+                    mSubIdTelephonyCallbackMap.put(mNddsSubId, telephonyCallback);
                 }
             }
         } else {
@@ -1624,15 +1625,12 @@ public class InternetDialogController implements AccessPointController.AccessPoi
                 DUAL_DATA_PREFERENCE, 0) == 1;
     }
 
-    boolean mayLaunchShareWifiSettings(WifiEntry wifiEntry) {
+    boolean mayLaunchShareWifiSettings(WifiEntry wifiEntry, View view) {
         Intent intent = getConfiguratorQrCodeGeneratorIntentOrNull(wifiEntry);
         if (intent == null) {
             return false;
         }
-        if (mCallback != null) {
-            mCallback.dismissDialog();
-        }
-        mActivityStarter.startActivity(intent, false /* dismissShade */);
+        startActivity(intent, view);
         return true;
     }
 

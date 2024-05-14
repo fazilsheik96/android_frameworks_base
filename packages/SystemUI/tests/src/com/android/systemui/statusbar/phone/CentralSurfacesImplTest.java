@@ -27,6 +27,8 @@ import static com.android.systemui.statusbar.StatusBarState.SHADE;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static kotlinx.coroutines.flow.FlowKt.flowOf;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -43,8 +45,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import static java.util.Collections.emptySet;
-
-import static kotlinx.coroutines.flow.FlowKt.flowOf;
 
 import android.app.ActivityManager;
 import android.app.IWallpaperManager;
@@ -102,6 +102,7 @@ import com.android.systemui.communal.domain.interactor.CommunalInteractor;
 import com.android.systemui.communal.shared.model.CommunalScenes;
 import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.flags.DisableSceneContainer;
 import com.android.systemui.flags.EnableSceneContainer;
 import com.android.systemui.flags.FakeFeatureFlags;
 import com.android.systemui.flags.Flags;
@@ -122,6 +123,7 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.domain.interactor.PowerInteractor;
 import com.android.systemui.res.R;
 import com.android.systemui.scene.domain.interactor.WindowRootViewVisibilityInteractor;
+import com.android.systemui.scene.shared.flag.SceneContainerFlag;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.settings.brightness.BrightnessSliderController;
 import com.android.systemui.settings.brightness.domain.interactor.BrightnessMirrorShowingInteractor;
@@ -193,6 +195,8 @@ import com.android.wm.shell.startingsurface.StartingSurface;
 
 import dagger.Lazy;
 
+import kotlinx.coroutines.test.TestScope;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -205,8 +209,6 @@ import java.io.PrintWriter;
 import java.util.Optional;
 
 import javax.inject.Provider;
-
-import kotlinx.coroutines.test.TestScope;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -350,7 +352,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         // Turn AOD on and toggle feature flag for jank fixes
         mFeatureFlags.set(Flags.ZJ_285570694_LOCKSCREEN_TRANSITION_FROM_AOD, true);
         when(mDozeParameters.getAlwaysOn()).thenReturn(true);
-        if (!com.android.systemui.Flags.sceneContainer()) {
+        if (!SceneContainerFlag.isEnabled()) {
             mSetFlagsRule.disableFlags(com.android.systemui.Flags.FLAG_DEVICE_ENTRY_UDFPS_REFACTOR);
         }
 
@@ -427,7 +429,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
             ((Runnable) invocation.getArgument(0)).run();
             return null;
         }).when(mNotificationShadeWindowController).batchApplyWindowLayoutParams(any());
-        if (com.android.systemui.Flags.sceneContainer()) {
+        if (SceneContainerFlag.isEnabled()) {
             mShadeController = spy(mKosmos.getShadeController());
         } else {
             mShadeController = spy(new ShadeControllerImpl(
@@ -1114,6 +1116,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     }
 
     @Test
+    @DisableSceneContainer
     public void brightnesShowingChanged_flagDisabled_ScrimControllerNotified() {
         mCentralSurfaces.registerCallbacks();
 

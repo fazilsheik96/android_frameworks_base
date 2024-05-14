@@ -19,6 +19,8 @@ import static android.window.ConfigurationHelper.freeTextLayoutCachesIfNeeded;
 import static android.window.ConfigurationHelper.isDifferentDisplay;
 import static android.window.ConfigurationHelper.shouldUpdateResources;
 
+import static com.android.window.flags.Flags.windowTokenConfigThreadSafe;
+
 import android.annotation.AnyThread;
 import android.annotation.MainThread;
 import android.annotation.NonNull;
@@ -144,17 +146,25 @@ public class WindowTokenClient extends Binder {
         if (context == null) {
             return;
         }
-        final ClientTransactionListenerController controller =
-                ClientTransactionListenerController.getInstance();
-        controller.onContextConfigurationPreChanged(context);
-        try {
+        if (shouldReportConfigChange && windowTokenConfigThreadSafe()) {
+            // Only report to ClientTransactionListenerController when shouldReportConfigChange.
+            final ClientTransactionListenerController controller =
+                    getClientTransactionListenerController();
+            controller.onContextConfigurationPreChanged(context);
+            try {
+                onConfigurationChangedInner(context, newConfig, newDisplayId,
+                        shouldReportConfigChange);
+            } finally {
+                controller.onContextConfigurationPostChanged(context);
+            }
+        } else {
             onConfigurationChangedInner(context, newConfig, newDisplayId, shouldReportConfigChange);
-        } finally {
-            controller.onContextConfigurationPostChanged(context);
         }
     }
 
-    private void onConfigurationChangedInner(@NonNull Context context,
+    /** Handles onConfiguration changed. */
+    @VisibleForTesting
+    public void onConfigurationChangedInner(@NonNull Context context,
             @NonNull Configuration newConfig, int newDisplayId, boolean shouldReportConfigChange) {
         CompatibilityInfo.applyOverrideScaleIfNeeded(newConfig);
         final boolean displayChanged;
@@ -232,5 +242,12 @@ public class WindowTokenClient extends Binder {
             context.destroy();
             mContextRef.clear();
         }
+    }
+
+    /** Gets {@link ClientTransactionListenerController}. */
+    @VisibleForTesting
+    @NonNull
+    public ClientTransactionListenerController getClientTransactionListenerController() {
+        return ClientTransactionListenerController.getInstance();
     }
 }
