@@ -12342,6 +12342,13 @@ public final class Settings {
         public static final String UDFPS_ANIM_STYLE = "udfps_anim_style";
 
         /**
+         * Whether to show the menu key always in the nav bar
+         * regardless of the context when it's configured in the layout.
+         * @hide
+         */
+        public static final String NAV_BAR_FORCE_MENU_KEY = "nav_bar_force_menu_key";
+
+        /**
          * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */

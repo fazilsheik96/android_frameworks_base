@@ -5217,4 +5217,7 @@
 
   <!-- Whether we order unlocking and waking -->
   <java-symbol type="bool" name="config_orderUnlockAndWake" />
+
+  <!-- Whether to show options menu in apps targeting honeycomb -->
+  <java-symbol type="bool" name="target_honeycomb_needs_options_menu" />
 </resources>
