@@ -51,6 +51,7 @@ import com.android.systemui.log.LogBuffer;
 import com.android.systemui.log.core.LogLevel;
 import com.android.systemui.log.dagger.KeyguardClockLog;
 import com.android.systemui.plugins.ClockController;
+import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.clocks.ClockRegistry;
 import com.android.systemui.shared.regionsampling.RegionSampler;
@@ -119,6 +120,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private KeyguardInteractor mKeyguardInteractor;
     private final DelayableExecutor mUiExecutor;
     private boolean mCanShowDoubleLineClock = true;
+    private ActivityStarter mActivityStarter;
+
     @VisibleForTesting
     final Consumer<Boolean> mIsActiveDreamLockscreenHostedCallback =
             (Boolean isLockscreenHosted) -> {
@@ -167,7 +170,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
             ClockEventController clockEventController,
             @KeyguardClockLog LogBuffer logBuffer,
             KeyguardInteractor keyguardInteractor,
-            FeatureFlags featureFlags) {
+            FeatureFlags featureFlags,
+            ActivityStarter activityStarter) {
         super(keyguardClockSwitch);
         mStatusBarStateController = statusBarStateController;
         mClockRegistry = clockRegistry;
@@ -184,6 +188,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         mView.setLogBuffer(mLogBuffer);
         mFeatureFlags = featureFlags;
         mKeyguardInteractor = keyguardInteractor;
+        mActivityStarter = activityStarter;
 
         mClockChangedListener = new ClockRegistry.ClockChangeListener() {
             @Override
@@ -232,6 +237,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         mSmallClockFrame = mView.findViewById(R.id.lockscreen_clock_view);
         mLargeClockFrame = mView.findViewById(R.id.lockscreen_clock_view_large);
         mCurrentWeatherView = mView.findViewById(R.id.weather_container);
+        mCurrentWeatherView.setActivityStarter(mActivityStarter);
 
         if (!mOnlyClock) {
             mDumpManager.unregisterDumpable(getClass().toString()); // unregister previous clocks

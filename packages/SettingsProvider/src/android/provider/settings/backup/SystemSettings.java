@@ -111,6 +111,7 @@ public class SystemSettings {
         Settings.System.BACK_GESTURE_HEIGHT,
         Settings.System.LOCKSCREEN_WEATHER_PROVIDER,
         Settings.System.LOCKSCREEN_WEATHER_LOCATION,
-        Settings.System.LOCKSCREEN_WEATHER_TEXT
+        Settings.System.LOCKSCREEN_WEATHER_TEXT,
+        Settings.System.LOCKSCREEN_WEATHER_CLICK_UPDATES
     };
 }

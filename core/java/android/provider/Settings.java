@@ -6192,8 +6192,14 @@ public final class Settings {
         public static final String LOCKSCREEN_WEATHER_TEXT = "lockscreen_weather_text";
 
         /**
-         * Whether to show data usage in qs footer
          *
+         * Whether clicking on the weather view updates the weather instead of launching the activity
+         * @hide
+         */
+        public static final String LOCKSCREEN_WEATHER_CLICK_UPDATES = "lockscreen_weather_click_updates";
+
+        /**
+         * Whether to show data usage in qs footer
          * @hide
          */
         public static final String QS_FOOTER_DATA_USAGE = "qs_footer_data_usage";
