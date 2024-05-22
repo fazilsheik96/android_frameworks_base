@@ -47,11 +47,10 @@ class NoRemeasureMotionLayout @JvmOverloads constructor(
             setMeasuredDimension(measuredWidth, measuredHeight)
             return
         }
-        traceSection("NoRemeasureMotionLayout - measure") {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-            lastWidthSpec = widthMeasureSpec
-            lastHeightSpec = heightMeasureSpec
-            lastFrame = Choreographer.getMainThreadInstance()?.frameTime
-        }
+
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        lastWidthSpec = widthMeasureSpec
+        lastHeightSpec = heightMeasureSpec
+        lastFrame = Choreographer.getMainThreadInstance()?.frameTime
     }
 }
