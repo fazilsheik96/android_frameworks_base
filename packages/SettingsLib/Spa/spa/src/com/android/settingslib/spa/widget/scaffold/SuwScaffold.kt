@@ -21,7 +21,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.android.settingslib.spa.framework.theme.SettingsDimension
+import com.android.settingslib.spa.framework.theme.settingsBackground
 import com.android.settingslib.spa.framework.theme.toMediumWeight
 
 data class BottomAppBarButton(
@@ -54,7 +57,10 @@ fun SuwScaffold(
     content: @Composable () -> Unit,
 ) {
     ActivityTitle(title)
-    Scaffold { innerPadding ->
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.settingsBackground,
+        contentWindowInsets = WindowInsets.safeDrawing,
+    ) { innerPadding ->
         BoxWithConstraints(
             Modifier
                 .padding(innerPadding)
@@ -101,7 +107,13 @@ private fun Header(
     imageVector: ImageVector,
     title: String
 ) {
-    Column(Modifier.padding(SettingsDimension.itemPadding)) {
+    Column(
+        Modifier.padding(
+            start = SettingsDimension.itemPaddingStart,
+            top = SettingsDimension.itemPaddingVertical,
+            end = SettingsDimension.itemPaddingEnd,
+        )
+    ) {
         Icon(
             imageVector = imageVector,
             contentDescription = null,
@@ -124,7 +136,14 @@ private fun BottomBar(
     actionButton: BottomAppBarButton?,
     dismissButton: BottomAppBarButton?,
 ) {
-    Row(modifier = Modifier.padding(SettingsDimension.itemPaddingAround)) {
+    Row(
+        Modifier.padding(
+            start = SettingsDimension.itemPaddingEnd,
+            top = SettingsDimension.paddingExtraLarge,
+            end = SettingsDimension.itemPaddingEnd,
+            bottom = SettingsDimension.itemPaddingVertical,
+        )
+    ) {
         dismissButton?.apply {
             TextButton(onClick = onClick, enabled = enabled) {
                 ActionText(text)

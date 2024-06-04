@@ -45,8 +45,11 @@ import com.android.systemui.model.updateFlags
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.FalsingManager.FalsingBeliefListener
 import com.android.systemui.power.domain.interactor.PowerInteractor
+import com.android.systemui.scene.data.model.asIterable
+import com.android.systemui.scene.domain.interactor.SceneBackInteractor
 import com.android.systemui.scene.domain.interactor.SceneContainerOcclusionInteractor
 import com.android.systemui.scene.domain.interactor.SceneInteractor
+import com.android.systemui.scene.session.shared.SessionStorage
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.scene.shared.logger.SceneLogger
 import com.android.systemui.scene.shared.model.Scenes
@@ -56,11 +59,14 @@ import com.android.systemui.statusbar.notification.domain.interactor.HeadsUpNoti
 import com.android.systemui.statusbar.phone.CentralSurfaces
 import com.android.systemui.statusbar.policy.domain.interactor.DeviceProvisioningInteractor
 import com.android.systemui.util.asIndenting
+import com.android.systemui.util.kotlin.getOrNull
+import com.android.systemui.util.kotlin.pairwise
 import com.android.systemui.util.kotlin.sample
 import com.android.systemui.util.printSection
 import com.android.systemui.util.println
 import dagger.Lazy
 import java.io.PrintWriter
+import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -105,13 +111,17 @@ constructor(
     private val authenticationInteractor: Lazy<AuthenticationInteractor>,
     private val windowController: NotificationShadeWindowController,
     private val deviceProvisioningInteractor: DeviceProvisioningInteractor,
-    private val centralSurfaces: CentralSurfaces,
+    private val centralSurfacesOptLazy: Lazy<Optional<CentralSurfaces>>,
     private val headsUpInteractor: HeadsUpNotificationInteractor,
     private val occlusionInteractor: SceneContainerOcclusionInteractor,
     private val faceUnlockInteractor: DeviceEntryFaceAuthInteractor,
     private val shadeInteractor: ShadeInteractor,
     private val uiEventLogger: UiEventLogger,
+    private val sceneBackInteractor: SceneBackInteractor,
+    private val shadeSessionStorage: SessionStorage,
 ) : CoreStartable {
+    private val centralSurfaces: CentralSurfaces?
+        get() = centralSurfacesOptLazy.get().getOrNull()
 
     override fun start() {
         if (SceneContainerFlag.isEnabled) {
@@ -124,6 +134,8 @@ constructor(
             hydrateInteractionState()
             handleBouncerOverscroll()
             hydrateWindowController()
+            hydrateBackStack()
+            resetShadeSessions()
         } else {
             sceneLogger.logFrameworkEnabled(
                 isEnabled = false,
@@ -142,6 +154,20 @@ constructor(
             }
         }
 
+    private fun resetShadeSessions() {
+        applicationScope.launch {
+            sceneBackInteractor.backStack
+                // We are in a session if either Shade or QuickSettings is on the back stack
+                .map { backStack ->
+                    backStack.asIterable().any { it == Scenes.Shade || it == Scenes.QuickSettings }
+                }
+                .distinctUntilChanged()
+                // Once a session has ended, clear the session storage.
+                .filter { inSession -> !inSession }
+                .collect { shadeSessionStorage.clear() }
+        }
+    }
+
     /** Updates the visibility of the scene container. */
     private fun hydrateVisibility() {
         applicationScope.launch {
@@ -154,7 +180,7 @@ constructor(
                                 sceneInteractor.transitionState.mapNotNull { state ->
                                     when (state) {
                                         is ObservableTransitionState.Idle -> {
-                                            if (state.scene != Scenes.Gone) {
+                                            if (state.currentScene != Scenes.Gone) {
                                                 true to "scene is not Gone"
                                             } else {
                                                 false to "scene is Gone"
@@ -208,7 +234,7 @@ constructor(
             bouncerInteractor.onImeHiddenByUser.collectLatest {
                 if (sceneInteractor.currentScene.value == Scenes.Bouncer) {
                     sceneInteractor.changeScene(
-                        toScene = Scenes.Lockscreen,
+                        toScene = Scenes.Lockscreen, // TODO(b/336581871): add sceneState?
                         loggingReason = "IME hidden",
                     )
                 }
@@ -226,6 +252,7 @@ constructor(
                     when {
                         isAnySimLocked -> {
                             switchToScene(
+                                // TODO(b/336581871): add sceneState?
                                 targetSceneKey = Scenes.Bouncer,
                                 loggingReason = "Need to authenticate locked SIM card."
                             )
@@ -233,6 +260,7 @@ constructor(
                         unlockStatus.isUnlocked &&
                             deviceEntryInteractor.canSwipeToEnter.value == false -> {
                             switchToScene(
+                                // TODO(b/336581871): add sceneState?
                                 targetSceneKey = Scenes.Gone,
                                 loggingReason =
                                     "All SIM cards unlocked and device already unlocked and " +
@@ -241,6 +269,7 @@ constructor(
                         }
                         else -> {
                             switchToScene(
+                                // TODO(b/336581871): add sceneState?
                                 targetSceneKey = Scenes.Lockscreen,
                                 loggingReason =
                                     "All SIM cards unlocked and device still locked" +
@@ -257,15 +286,14 @@ constructor(
             // Track the previous scene (sans Bouncer), so that we know where to go when the device
             // is unlocked whilst on the bouncer.
             val previousScene =
-                sceneInteractor
-                    .previousScene()
+                sceneBackInteractor.backScene
                     .filterNot { it == Scenes.Bouncer }
                     .stateIn(this, SharingStarted.Eagerly, initialValue = null)
             deviceUnlockedInteractor.deviceUnlockStatus
                 .mapNotNull { deviceUnlockStatus ->
                     val renderedScenes =
                         when (val transitionState = sceneInteractor.transitionState.value) {
-                            is ObservableTransitionState.Idle -> setOf(transitionState.scene)
+                            is ObservableTransitionState.Idle -> setOf(transitionState.currentScene)
                             is ObservableTransitionState.Transition ->
                                 setOf(
                                     transitionState.fromScene,
@@ -340,6 +368,7 @@ constructor(
             powerInteractor.isAsleep.collect { isAsleep ->
                 if (isAsleep) {
                     switchToScene(
+                        // TODO(b/336581871): add sceneState?
                         targetSceneKey = Scenes.Lockscreen,
                         loggingReason = "device is starting to sleep",
                     )
@@ -392,7 +421,7 @@ constructor(
             combine(
                     sceneInteractor.transitionState
                         .mapNotNull { it as? ObservableTransitionState.Idle }
-                        .map { it.scene }
+                        .map { it.currentScene }
                         .distinctUntilChanged(),
                     occlusionInteractor.invisibleDueToOcclusion,
                 ) { sceneKey, invisibleDueToOcclusion ->
@@ -417,7 +446,7 @@ constructor(
         applicationScope.launch {
             sceneInteractor.transitionState
                 .mapNotNull { transitionState ->
-                    (transitionState as? ObservableTransitionState.Idle)?.scene
+                    (transitionState as? ObservableTransitionState.Idle)?.currentScene
                 }
                 .distinctUntilChanged()
                 .collect { sceneKey ->
@@ -517,7 +546,7 @@ constructor(
                     if (isDeviceLocked) {
                         sceneInteractor.transitionState
                             .mapNotNull { it as? ObservableTransitionState.Idle }
-                            .map { it.scene }
+                            .map { it.currentScene }
                             .distinctUntilChanged()
                             .map { sceneKey ->
                                 when (sceneKey) {
@@ -530,6 +559,7 @@ constructor(
                                     Scenes.Lockscreen -> true
                                     Scenes.Bouncer -> false
                                     Scenes.Shade -> false
+                                    Scenes.NotificationsShade -> false
                                     else -> null
                                 }
                             }
@@ -539,7 +569,7 @@ constructor(
                 }
                 .collect { isInteractingOrNull ->
                     isInteractingOrNull?.let { isInteracting ->
-                        centralSurfaces.setInteracting(
+                        centralSurfaces?.setInteracting(
                             StatusBarManager.WINDOW_STATUS_BAR,
                             isInteracting,
                         )
@@ -580,5 +610,13 @@ constructor(
             toScene = targetSceneKey,
             loggingReason = loggingReason,
         )
+    }
+
+    private fun hydrateBackStack() {
+        applicationScope.launch {
+            sceneInteractor.currentScene.pairwise().collect { (from, to) ->
+                sceneBackInteractor.onSceneChange(from = from, to = to)
+            }
+        }
     }
 }

@@ -27,22 +27,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
  */
 @SysUISingleton
 class NotificationPlaceholderRepository @Inject constructor() {
+
+    /** The alpha of the shade in order to show brightness. */
+    val alphaForBrightnessMirror = MutableStateFlow(1f)
+
     /**
      * The bounds of the notification shade scrim / container in the current scene.
      *
      * When `null`, clipping should not be applied to notifications.
      */
     val shadeScrimBounds = MutableStateFlow<ShadeScrimBounds?>(null)
-
-    /**
-     * The y-coordinate in px of top of the contents of the notification stack. This value can be
-     * negative, if the stack is scrolled such that its top extends beyond the top edge of the
-     * screen.
-     */
-    val stackTop = MutableStateFlow(0f)
-
-    /** the bottom-most acceptable y-position for the bottom of the stack / shelf */
-    val stackBottom = MutableStateFlow(0f)
 
     /** the y position of the top of the HUN area */
     val headsUpTop = MutableStateFlow(0f)

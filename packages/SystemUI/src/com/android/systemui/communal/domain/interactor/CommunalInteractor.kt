@@ -44,9 +44,10 @@ import com.android.systemui.communal.widgets.EditWidgetsActivityStarter
 import com.android.systemui.communal.widgets.WidgetConfigurator
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
-import com.android.systemui.dock.DockManager
-import com.android.systemui.dock.retrieveIsDocked
+import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
+import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
+import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.log.LogBuffer
 import com.android.systemui.log.core.Logger
 import com.android.systemui.log.dagger.CommunalLog
@@ -59,11 +60,12 @@ import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.smartspace.data.repository.SmartspaceRepository
-import com.android.systemui.util.kotlin.BooleanFlowOperators.and
+import com.android.systemui.util.kotlin.BooleanFlowOperators.allOf
+import com.android.systemui.util.kotlin.BooleanFlowOperators.anyOf
 import com.android.systemui.util.kotlin.BooleanFlowOperators.not
-import com.android.systemui.util.kotlin.BooleanFlowOperators.or
 import com.android.systemui.util.kotlin.emitOnStart
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
@@ -77,9 +79,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.shareIn
@@ -92,6 +96,7 @@ class CommunalInteractor
 @Inject
 constructor(
     @Application val applicationScope: CoroutineScope,
+    @Background val bgDispatcher: CoroutineDispatcher,
     broadcastDispatcher: BroadcastDispatcher,
     private val communalRepository: CommunalRepository,
     private val widgetRepository: CommunalWidgetRepository,
@@ -99,13 +104,13 @@ constructor(
     mediaRepository: CommunalMediaRepository,
     smartspaceRepository: SmartspaceRepository,
     keyguardInteractor: KeyguardInteractor,
-    private val communalSettingsInteractor: CommunalSettingsInteractor,
+    keyguardTransitionInteractor: KeyguardTransitionInteractor,
+    communalSettingsInteractor: CommunalSettingsInteractor,
     private val appWidgetHost: CommunalAppWidgetHost,
     private val editWidgetsActivityStarter: EditWidgetsActivityStarter,
     private val userTracker: UserTracker,
     private val activityStarter: ActivityStarter,
     private val userManager: UserManager,
-    private val dockManager: DockManager,
     sceneInteractor: SceneInteractor,
     @CommunalLog logBuffer: LogBuffer,
     @CommunalTableLog tableLogBuffer: TableLogBuffer,
@@ -122,10 +127,10 @@ constructor(
 
     /** Whether communal features are enabled and available. */
     val isCommunalAvailable: Flow<Boolean> =
-        and(
+        allOf(
                 communalSettingsInteractor.isCommunalEnabled,
                 not(keyguardInteractor.isEncryptedOrLockdown),
-                or(keyguardInteractor.isKeyguardShowing, keyguardInteractor.isDreaming)
+                anyOf(keyguardInteractor.isKeyguardShowing, keyguardInteractor.isDreaming)
             )
             .distinctUntilChanged()
             .onEach { available ->
@@ -145,8 +150,25 @@ constructor(
                 replay = 1,
             )
 
-    /** Whether to show communal by default */
-    val showByDefault: Flow<Boolean> = and(isCommunalAvailable, dockManager.retrieveIsDocked())
+    /** Whether to show communal when exiting the occluded state. */
+    val showCommunalFromOccluded: Flow<Boolean> =
+        keyguardTransitionInteractor.startedKeyguardTransitionStep
+            .filter { step -> step.to == KeyguardState.OCCLUDED }
+            .combine(isCommunalAvailable, ::Pair)
+            .map { (step, available) -> available && step.from == KeyguardState.GLANCEABLE_HUB }
+            .flowOn(bgDispatcher)
+            .stateIn(
+                scope = applicationScope,
+                started = SharingStarted.WhileSubscribed(),
+                initialValue = false,
+            )
+
+    /** Whether to start dreaming when returning from occluded */
+    val dreamFromOccluded: Flow<Boolean> =
+        keyguardTransitionInteractor
+            .transitionStepsToState(KeyguardState.OCCLUDED)
+            .map { it.from == KeyguardState.DREAMING }
+            .stateIn(scope = applicationScope, SharingStarted.Eagerly, false)
 
     /**
      * Target scene as requested by the underlying [SceneTransitionLayout] or through [changeScene].
@@ -201,7 +223,7 @@ constructor(
             .flatMapLatest { state ->
                 when (state) {
                     is ObservableTransitionState.Idle ->
-                        flowOf(CommunalTransitionProgress.Idle(state.scene))
+                        flowOf(CommunalTransitionProgress.Idle(state.currentScene))
                     is ObservableTransitionState.Transition ->
                         if (state.toScene == targetScene) {
                             state.progress.map {
@@ -264,7 +286,9 @@ constructor(
      */
     val isIdleOnCommunal: StateFlow<Boolean> =
         communalRepository.transitionState
-            .map { it is ObservableTransitionState.Idle && it.scene == CommunalScenes.Communal }
+            .map {
+                it is ObservableTransitionState.Idle && it.currentScene == CommunalScenes.Communal
+            }
             .stateIn(
                 scope = applicationScope,
                 started = SharingStarted.Eagerly,
@@ -278,7 +302,7 @@ constructor(
      */
     val isCommunalVisible: Flow<Boolean> =
         communalRepository.transitionState.map {
-            !(it is ObservableTransitionState.Idle && it.scene == CommunalScenes.Blank)
+            !(it is ObservableTransitionState.Idle && it.currentScene == CommunalScenes.Blank)
         }
 
     /**
@@ -386,19 +410,30 @@ constructor(
             updateOnWorkProfileBroadcastReceived,
         ) { widgets, allowedCategories, _ ->
             widgets.map { widget ->
-                if (widget.providerInfo.widgetCategory and allowedCategories != 0) {
-                    // At least one category this widget specified is allowed, so show it
-                    WidgetContent.Widget(
-                        appWidgetId = widget.appWidgetId,
-                        providerInfo = widget.providerInfo,
-                        appWidgetHost = appWidgetHost,
-                        inQuietMode = isQuietModeEnabled(widget.providerInfo.profile)
-                    )
-                } else {
-                    WidgetContent.DisabledWidget(
-                        appWidgetId = widget.appWidgetId,
-                        providerInfo = widget.providerInfo,
-                    )
+                when (widget) {
+                    is CommunalWidgetContentModel.Available -> {
+                        if (widget.providerInfo.widgetCategory and allowedCategories != 0) {
+                            // At least one category this widget specified is allowed, so show it
+                            WidgetContent.Widget(
+                                appWidgetId = widget.appWidgetId,
+                                providerInfo = widget.providerInfo,
+                                appWidgetHost = appWidgetHost,
+                                inQuietMode = isQuietModeEnabled(widget.providerInfo.profile)
+                            )
+                        } else {
+                            WidgetContent.DisabledWidget(
+                                appWidgetId = widget.appWidgetId,
+                                providerInfo = widget.providerInfo,
+                            )
+                        }
+                    }
+                    is CommunalWidgetContentModel.Pending -> {
+                        WidgetContent.PendingWidget(
+                            appWidgetId = widget.appWidgetId,
+                            packageName = widget.packageName,
+                            icon = widget.icon,
+                        )
+                    }
                 }
             }
         }
@@ -413,7 +448,15 @@ constructor(
         } else {
             // Get associated work profile for the currently selected user.
             val workProfile = userTracker.userProfiles.find { it.isManagedProfile }
-            list.filter { it.providerInfo.profile.identifier != workProfile?.id }
+            list.filter { model ->
+                val uid =
+                    when (model) {
+                        is CommunalWidgetContentModel.Available ->
+                            model.providerInfo.profile.identifier
+                        is CommunalWidgetContentModel.Pending -> model.user.identifier
+                    }
+                uid != workProfile?.id
+            }
         }
 
     /** A flow of available smartspace targets. Currently only showing timers. */
@@ -496,7 +539,11 @@ constructor(
     ): List<CommunalWidgetContentModel> {
         val currentUserIds = userTracker.userProfiles.map { it.id }.toSet()
         return list.filter { widget ->
-            currentUserIds.contains(widget.providerInfo.profile?.identifier)
+            when (widget) {
+                is CommunalWidgetContentModel.Available ->
+                    currentUserIds.contains(widget.providerInfo.profile?.identifier)
+                is CommunalWidgetContentModel.Pending -> true
+            }
         }
     }
 

@@ -285,6 +285,9 @@
     the amount by the view is positioned above the screen before the animation starts. -->
     <dimen name="heads_up_appear_y_above_screen">32dp</dimen>
 
+    <!-- padding between the old and new heads up notifications for the hun cycling animation -->
+    <dimen name="heads_up_cycling_padding">8dp</dimen>
+
     <!-- padding between the heads up and the statusbar -->
     <dimen name="heads_up_status_bar_padding">8dp</dimen>
 
@@ -430,6 +433,7 @@
     <dimen name="overlay_button_corner_radius">16dp</dimen>
     <!-- Margin between successive chips -->
     <dimen name="overlay_action_chip_margin_start">8dp</dimen>
+    <dimen name="shelf_action_chip_margin_start">12dp</dimen>
     <dimen name="overlay_action_chip_padding_vertical">12dp</dimen>
     <dimen name="overlay_action_chip_icon_size">24sp</dimen>
     <!-- Padding on each side of the icon for icon-only chips -->
@@ -445,6 +449,8 @@
     <dimen name="overlay_preview_container_margin">8dp</dimen>
     <dimen name="overlay_action_container_margin_horizontal">8dp</dimen>
     <dimen name="overlay_action_container_margin_bottom">6dp</dimen>
+    <!-- minimum distance to the left, right or bottom edges. -->
+    <dimen name="overlay_action_container_minimum_edge_spacing">12dp</dimen>
     <dimen name="overlay_bg_protection_height">242dp</dimen>
     <dimen name="overlay_action_container_corner_radius">20dp</dimen>
     <dimen name="overlay_action_container_padding_vertical">8dp</dimen>
@@ -616,7 +622,7 @@
     <dimen name="volume_panel_slice_vertical_padding">8dp</dimen>
     <dimen name="volume_panel_slice_horizontal_padding">24dp</dimen>
 
-    <dimen name="volume_panel_corner_radius">28dp</dimen>
+    <dimen name="bottom_sheet_corner_radius">28dp</dimen>
 
     <!-- Size of each item in the ringer selector drawer. -->
     <dimen name="volume_ringer_drawer_item_size">42dp</dimen>
@@ -908,8 +914,8 @@
     <dimen name="communal_enforced_rounded_corner_max_radius">28dp</dimen>
 
     <!-- Width and height used to filter widgets displayed in the communal widget picker -->
-    <dimen name="communal_widget_picker_desired_width">424dp</dimen>
-    <dimen name="communal_widget_picker_desired_height">282dp</dimen>
+    <dimen name="communal_widget_picker_desired_width">360dp</dimen>
+    <dimen name="communal_widget_picker_desired_height">240dp</dimen>
 
     <!-- The width/height of the unlock icon view on keyguard. -->
     <dimen name="keyguard_lock_height">42dp</dimen>
@@ -1094,9 +1100,9 @@
     <dimen name="remote_input_history_extra_height">60dp</dimen>
 
     <!-- Biometric Dialog values -->
-    <dimen name="biometric_dialog_face_icon_size">54dp</dimen>
-    <dimen name="biometric_dialog_fingerprint_icon_width">80dp</dimen>
-    <dimen name="biometric_dialog_fingerprint_icon_height">80dp</dimen>
+    <dimen name="biometric_dialog_face_icon_size">68dp</dimen>
+    <dimen name="biometric_dialog_fingerprint_icon_width">100dp</dimen>
+    <dimen name="biometric_dialog_fingerprint_icon_height">100dp</dimen>
     <dimen name="biometric_dialog_button_negative_max_width">160dp</dimen>
     <dimen name="biometric_dialog_button_positive_max_width">136dp</dimen>
     <dimen name="biometric_dialog_corner_size">28dp</dimen>
@@ -1707,12 +1713,12 @@
     <dimen name="wallet_button_horizontal_padding">24dp</dimen>
     <dimen name="wallet_button_vertical_padding">8dp</dimen>
 
-    <!-- Ongoing call chip -->
-    <dimen name="ongoing_call_chip_side_padding">12dp</dimen>
-    <dimen name="ongoing_call_chip_icon_size">16dp</dimen>
+    <!-- Ongoing activity chip -->
+    <dimen name="ongoing_activity_chip_side_padding">12dp</dimen>
+    <dimen name="ongoing_activity_chip_icon_size">16dp</dimen>
     <!-- The padding between the icon and the text. -->
-    <dimen name="ongoing_call_chip_icon_text_padding">4dp</dimen>
-    <dimen name="ongoing_call_chip_corner_radius">28dp</dimen>
+    <dimen name="ongoing_activity_chip_icon_text_padding">4dp</dimen>
+    <dimen name="ongoing_activity_chip_corner_radius">28dp</dimen>
 
     <!-- Status bar user chip -->
     <dimen name="status_bar_user_chip_avatar_size">16dp</dimen>
@@ -1793,9 +1799,9 @@
     the lockscreen -->
     <dimen name="communal_right_edge_swipe_region_width">40dp</dimen>
     <!-- Height of area at top of communal hub where swipes should open the notification shade -->
-    <dimen name="communal_top_edge_swipe_region_height">68dp</dimen>
+    <dimen name="communal_top_edge_swipe_region_height">64dp</dimen>
     <!-- Height of area at bottom of communal hub where swipes should open the bouncer -->
-    <dimen name="communal_bottom_edge_swipe_region_height">68dp</dimen>
+    <dimen name="communal_bottom_edge_swipe_region_height">140dp</dimen>
 
     <dimen name="drag_and_drop_icon_size">70dp</dimen>
 

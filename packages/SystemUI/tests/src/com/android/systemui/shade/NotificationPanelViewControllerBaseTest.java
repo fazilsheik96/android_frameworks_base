@@ -448,6 +448,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                 mUiEventLogger,
                 () -> mKosmos.getInteractionJankMonitor(),
                 mJavaAdapter,
+                () -> mKeyguardTransitionInteractor,
                 () -> mShadeInteractor,
                 () -> mKosmos.getDeviceUnlockedInteractor(),
                 () -> mKosmos.getSceneInteractor(),
@@ -548,6 +549,8 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
         }).when(mView).setOnTouchListener(any(NotificationPanelViewController.TouchHandler.class));
 
         // Dreaming->Lockscreen
+        when(mKeyguardTransitionInteractor.transition(any()))
+                .thenReturn(emptyFlow());
         when(mKeyguardTransitionInteractor.transition(any(), any()))
                 .thenReturn(emptyFlow());
         when(mDreamingToLockscreenTransitionViewModel.getLockscreenAlpha())
@@ -602,6 +605,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                                 new UiEventLoggerFake(),
                                 () -> mKosmos.getInteractionJankMonitor(),
                                 mJavaAdapter,
+                                () -> mKeyguardTransitionInteractor,
                                 () -> mShadeInteractor,
                                 () -> mKosmos.getDeviceUnlockedInteractor(),
                                 () -> mKosmos.getSceneInteractor(),
@@ -655,7 +659,7 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
         when(mView.getParent()).thenReturn(mViewParent);
         when(mQs.getHeader()).thenReturn(mQsHeader);
         when(mDownMotionEvent.getAction()).thenReturn(MotionEvent.ACTION_DOWN);
-        when(mSysUiState.setFlag(anyInt(), anyBoolean())).thenReturn(mSysUiState);
+        when(mSysUiState.setFlag(anyLong(), anyBoolean())).thenReturn(mSysUiState);
 
         mMainHandler = new Handler(Looper.getMainLooper());
 

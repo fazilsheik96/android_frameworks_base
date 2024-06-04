@@ -25,11 +25,21 @@ import java.util.function.Consumer
  * notification stack, but is otherwise agnostic to the content.
  */
 interface NotificationScrollView {
+
+    /**
+     * Height in view pixels at which the Notification Stack would like to be laid out, including
+     * Notification rows, paddings the Shelf and the Footer.
+     */
+    val intrinsicStackHeight: Int
+
     /**
      * Since this is an interface rather than a literal View, this provides cast-like access to the
      * underlying view.
      */
     fun asView(): View
+
+    /** Max alpha for this view */
+    fun setMaxAlpha(alpha: Float)
 
     /** Set the clipping bounds used when drawing */
     fun setScrimClippingShape(shape: ShadeScrimShape?)
@@ -48,8 +58,8 @@ interface NotificationScrollView {
 
     /** Set a consumer for synthetic scroll events */
     fun setSyntheticScrollConsumer(consumer: Consumer<Float>?)
-    /** Set a consumer for stack height changed events */
-    fun setStackHeightConsumer(consumer: Consumer<Float>?)
+    /** Set a consumer for current gesture overscroll events */
+    fun setCurrentGestureOverscrollConsumer(consumer: Consumer<Boolean>?)
     /** Set a consumer for heads up height changed events */
     fun setHeadsUpHeightConsumer(consumer: Consumer<Float>?)
 
@@ -61,4 +71,10 @@ interface NotificationScrollView {
 
     /** Sets whether the view is displayed in doze mode. */
     fun setDozing(dozing: Boolean)
+
+    /** Sets a listener to be notified, when the stack height might have changed. */
+    fun addStackHeightChangedListener(runnable: Runnable)
+
+    /** @see addStackHeightChangedListener */
+    fun removeStackHeightChangedListener(runnable: Runnable)
 }

@@ -179,6 +179,7 @@
     <protected-broadcast android:name="android.bluetooth.device.action.CONNECTION_ACCESS_REPLY" />
     <protected-broadcast android:name="android.bluetooth.device.action.CONNECTION_ACCESS_CANCEL" />
     <protected-broadcast android:name="android.bluetooth.device.action.CONNECTION_ACCESS_REQUEST" />
+    <protected-broadcast android:name="android.bluetooth.device.action.KEY_MISSING" />
     <protected-broadcast android:name="android.bluetooth.device.action.SDP_RECORD" />
     <protected-broadcast android:name="android.bluetooth.device.action.BATTERY_LEVEL_CHANGED" />
     <protected-broadcast android:name="android.bluetooth.device.action.REMOTE_ISSUE_OCCURRED" />
@@ -302,6 +303,9 @@
     <protected-broadcast android:name="com.android.bluetooth.sap.action.DISCONNECT_ACTION" />
 
     <protected-broadcast android:name="android.hardware.display.action.WIFI_DISPLAY_STATUS_CHANGED" />
+
+    <protected-broadcast android:name="android.hardware.hdmi.action.OSD_MESSAGE" />
+    <protected-broadcast android:name="android.hardware.hdmi.action.ON_ACTIVE_SOURCE_RECOVERED_DISMISS_UI" />
 
     <protected-broadcast android:name="android.hardware.usb.action.USB_STATE" />
     <protected-broadcast android:name="android.hardware.usb.action.USB_PORT_CHANGED" />
@@ -6251,7 +6255,7 @@
           @hide
           @removed -->
     <permission android:name="android.permission.CAPTURE_SECURE_VIDEO_OUTPUT"
-        android:protectionLevel="signature" />
+        android:protectionLevel="signature|role" />
 
     <!-- Allows an application to know what content is playing and control its playback.
          <p>Not for use by third-party applications due to privacy of media consumption</p>  -->
@@ -8284,7 +8288,7 @@
         </activity>
         <activity android:name="com.android.internal.accessibility.dialog.AccessibilityButtonChooserActivity"
                   android:exported="false"
-                  android:theme="@style/Theme.DeviceDefault.Resolver"
+                  android:theme="@style/AccessibilityButtonChooserDialog"
                   android:finishOnCloseSystemDialogs="true"
                   android:excludeFromRecents="true"
                   android:documentLaunchMode="never"
@@ -8821,6 +8825,7 @@
 
         <service android:name="com.android.server.companion.datatransfer.contextsync.CallMetadataSyncInCallService"
                  android:permission="android.permission.BIND_INCALL_SERVICE"
+                 android:enabled="@bool/config_enableContextSyncInCall"
                  android:exported="true">
             <meta-data android:name="android.telecom.INCLUDE_SELF_MANAGED_CALLS"
                        android:value="true" />

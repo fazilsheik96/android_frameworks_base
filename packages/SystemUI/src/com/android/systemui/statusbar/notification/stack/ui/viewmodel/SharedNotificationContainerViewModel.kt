@@ -26,6 +26,7 @@ import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
+import com.android.systemui.keyguard.shared.model.Edge
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.shared.model.KeyguardState.ALTERNATE_BOUNCER
 import com.android.systemui.keyguard.shared.model.KeyguardState.AOD
@@ -41,6 +42,7 @@ import com.android.systemui.keyguard.shared.model.StatusBarState.SHADE_LOCKED
 import com.android.systemui.keyguard.shared.model.TransitionState.RUNNING
 import com.android.systemui.keyguard.ui.viewmodel.AlternateBouncerToGoneTransitionViewModel
 import com.android.systemui.keyguard.ui.viewmodel.AodBurnInViewModel
+import com.android.systemui.keyguard.ui.viewmodel.AodToGoneTransitionViewModel
 import com.android.systemui.keyguard.ui.viewmodel.AodToLockscreenTransitionViewModel
 import com.android.systemui.keyguard.ui.viewmodel.AodToOccludedTransitionViewModel
 import com.android.systemui.keyguard.ui.viewmodel.BurnInParameters
@@ -63,12 +65,13 @@ import com.android.systemui.keyguard.ui.viewmodel.PrimaryBouncerToGoneTransition
 import com.android.systemui.keyguard.ui.viewmodel.PrimaryBouncerToLockscreenTransitionViewModel
 import com.android.systemui.keyguard.ui.viewmodel.ViewStateAccessor
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
+import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
 import com.android.systemui.statusbar.notification.stack.domain.interactor.NotificationStackAppearanceInteractor
 import com.android.systemui.statusbar.notification.stack.domain.interactor.SharedNotificationContainerInteractor
 import com.android.systemui.unfold.domain.interactor.UnfoldTransitionInteractor
-import com.android.systemui.util.kotlin.BooleanFlowOperators.and
-import com.android.systemui.util.kotlin.BooleanFlowOperators.or
+import com.android.systemui.util.kotlin.BooleanFlowOperators.allOf
+import com.android.systemui.util.kotlin.BooleanFlowOperators.anyOf
 import com.android.systemui.util.kotlin.FlowDumperImpl
 import com.android.systemui.util.kotlin.Utils.Companion.sample as sampleCombine
 import javax.inject.Inject
@@ -106,6 +109,7 @@ constructor(
     private val notificationStackAppearanceInteractor: NotificationStackAppearanceInteractor,
     private val alternateBouncerToGoneTransitionViewModel:
         AlternateBouncerToGoneTransitionViewModel,
+    private val aodToGoneTransitionViewModel: AodToGoneTransitionViewModel,
     private val aodToLockscreenTransitionViewModel: AodToLockscreenTransitionViewModel,
     private val aodToOccludedTransitionViewModel: AodToOccludedTransitionViewModel,
     private val dozingToLockscreenTransitionViewModel: DozingToLockscreenTransitionViewModel,
@@ -244,7 +248,7 @@ constructor(
                 keyguardTransitionInteractor.finishedKeyguardState.map { state ->
                     state == GLANCEABLE_HUB
                 },
-                or(
+                anyOf(
                     keyguardTransitionInteractor.isInTransitionToState(GLANCEABLE_HUB),
                     keyguardTransitionInteractor.isInTransitionFromState(GLANCEABLE_HUB),
                 ),
@@ -293,8 +297,7 @@ constructor(
         return combine(
                 isOnLockscreenWithoutShade,
                 keyguardTransitionInteractor.isInTransition(
-                    from = LOCKSCREEN,
-                    to = AOD,
+                    edge = Edge.create(from = LOCKSCREEN, to = AOD)
                 ),
                 ::Pair
             )
@@ -422,14 +425,14 @@ constructor(
                 while (currentCoroutineContext().isActive) {
                     emit(false)
                     // Ensure states are inactive to start
-                    and(
+                    allOf(
                             *toFlowArray(statesForHiddenKeyguard) { state ->
                                 keyguardTransitionInteractor.transitionValue(state).map { it == 0f }
                             }
                         )
                         .first { it }
                     // Wait for a qualifying transition to begin
-                    or(
+                    anyOf(
                             *toFlowArray(statesForHiddenKeyguard) { state ->
                                 keyguardTransitionInteractor
                                     .transitionStepsToState(state)
@@ -444,7 +447,7 @@ constructor(
                     // it is considered safe to reset alpha to 1f for HUNs.
                     combine(
                             keyguardInteractor.statusBarState,
-                            and(
+                            allOf(
                                 *toFlowArray(statesForHiddenKeyguard) { state ->
                                     keyguardTransitionInteractor.transitionValue(state).map {
                                         it == 0f
@@ -464,6 +467,7 @@ constructor(
         val alphaTransitions =
             merge(
                 alternateBouncerToGoneTransitionViewModel.notificationAlpha(viewState),
+                aodToGoneTransitionViewModel.notificationAlpha(viewState),
                 aodToLockscreenTransitionViewModel.notificationAlpha,
                 aodToOccludedTransitionViewModel.lockscreenAlpha(viewState),
                 dozingToLockscreenTransitionViewModel.lockscreenAlpha,
@@ -633,7 +637,7 @@ constructor(
                 showUnlimitedNotifications,
                 shadeInteractor.isUserInteracting,
                 availableHeight,
-                interactor.notificationStackChanged.onStart { emit(Unit) },
+                interactor.notificationStackChanged,
                 interactor.useExtraShelfSpace,
             ) { flows ->
                 val showLimitedNotifications = flows[0] as Boolean

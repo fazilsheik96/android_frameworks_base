@@ -30,6 +30,8 @@ import static android.hardware.biometrics.BiometricConstants.BIOMETRIC_LOCKOUT_N
 import static android.hardware.biometrics.BiometricConstants.BIOMETRIC_LOCKOUT_PERMANENT;
 import static android.hardware.biometrics.BiometricConstants.BIOMETRIC_LOCKOUT_TIMED;
 import static android.hardware.biometrics.BiometricConstants.LockoutMode;
+import static android.hardware.biometrics.BiometricFaceConstants.FACE_ERROR_HW_UNAVAILABLE;
+import static android.hardware.biometrics.BiometricFaceConstants.FACE_ERROR_LOCKOUT_PERMANENT;
 import static android.hardware.biometrics.BiometricSourceType.FACE;
 import static android.hardware.biometrics.BiometricSourceType.FINGERPRINT;
 import static android.os.BatteryManager.BATTERY_STATUS_UNKNOWN;
@@ -302,6 +304,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
     HashMap<Integer, SimData> mSimDatas = new HashMap<>();
     HashMap<Integer, ServiceState> mServiceStates = new HashMap<>();
+    HashMap<Integer, ServiceState> mServiceStatesWithSlotid = new HashMap<>();
 
     private int mPhoneState;
     private boolean mKeyguardShowing;
@@ -1218,9 +1221,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         boolean cameraPrivacyEnabled = mSensorPrivacyManager.isSensorPrivacyEnabled(
                 SensorPrivacyManager.TOGGLE_TYPE_SOFTWARE, SensorPrivacyManager.Sensors.CAMERA);
 
-        final boolean isHwUnavailable = msgId == FaceManager.FACE_ERROR_HW_UNAVAILABLE;
+        final boolean isHwUnavailable = msgId == FACE_ERROR_HW_UNAVAILABLE;
 
-        if (msgId == FaceManager.FACE_ERROR_LOCKOUT_PERMANENT) {
+        if (msgId == FACE_ERROR_LOCKOUT_PERMANENT) {
             if (getFaceAuthInteractor() != null && getFaceAuthInteractor().isFaceAuthStrong()) {
                 updateFingerprintListeningState(BIOMETRIC_ACTION_STOP);
             }
@@ -1699,9 +1702,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 ServiceState serviceState = ServiceState.newFromBundle(intent.getExtras());
                 int subId = intent.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
                         SubscriptionManager.INVALID_SUBSCRIPTION_ID);
-                mLogger.logServiceStateIntent(action, serviceState, subId);
+                int slotId = intent.getIntExtra(SubscriptionManager.EXTRA_SLOT_INDEX,
+                        SubscriptionManager.INVALID_SIM_SLOT_INDEX);
+                mLogger.logServiceStateIntent(action, serviceState, subId, slotId);
                 mHandler.sendMessage(
-                        mHandler.obtainMessage(MSG_SERVICE_STATE_CHANGE, subId, 0, serviceState));
+                        mHandler.obtainMessage(MSG_SERVICE_STATE_CHANGE, subId, slotId, serviceState));
             } else if (TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED.equals(action)) {
                 mHandler.sendEmptyMessage(MSG_SIM_SUBSCRIPTION_INFO_CHANGED);
             } else if (DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED.equals(
@@ -2247,7 +2252,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                         handleAirplaneModeChanged();
                         break;
                     case MSG_SERVICE_STATE_CHANGE:
-                        handleServiceStateChange(msg.arg1, (ServiceState) msg.obj);
+                        handleServiceStateChange(msg.arg1, msg.arg2, (ServiceState) msg.obj);
                         break;
                     case MSG_SERVICE_PROVIDERS_UPDATED:
                         handleServiceProvidersUpdated((Intent) msg.obj);
@@ -2347,8 +2352,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mBackgroundExecutor.execute(() -> {
             int subId = SubscriptionManager.getDefaultSubscriptionId();
             ServiceState serviceState = mTelephonyManager.getServiceStateForSubscriber(subId);
+            int slotId = SubscriptionManager.getSlotIndex(subId);
             mHandler.sendMessage(
-                    mHandler.obtainMessage(MSG_SERVICE_STATE_CHANGE, subId, 0, serviceState));
+                    mHandler.obtainMessage(MSG_SERVICE_STATE_CHANGE, subId, slotId, serviceState));
         });
 
         final IntentFilter allUserFilter = new IntentFilter();
@@ -3329,9 +3335,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
      * Handle {@link #MSG_SERVICE_STATE_CHANGE}
      */
     @VisibleForTesting
-    void handleServiceStateChange(int subId, ServiceState serviceState) {
-        mLogger.logServiceStateChange(subId, serviceState);
-
+    void handleServiceStateChange(int subId, int slotId, ServiceState serviceState) {
+        mLogger.logServiceStateChange(subId, slotId, serviceState);
+        if (serviceState != null) {
+            mServiceStatesWithSlotid.put(slotId, serviceState);
+        }
         if (!SubscriptionManager.isValidSubscriptionId(subId)) {
             mLogger.w("invalid subId in handleServiceStateChange()");
             for (int j = 0; j < mCallbacks.size(); j++) {
@@ -3659,6 +3667,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
     public ServiceState getServiceState(int subId) {
         return mServiceStates.get(subId);
+    }
+
+    public ServiceState getServiceStateWithSlotid(int slotId) {
+        ServiceState ss = mServiceStatesWithSlotid.get(slotId);
+        return ss;
     }
 
     /**
@@ -4020,6 +4033,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         }
 
         return ret;
+    }
+
+    public int getActiveSlots() {
+        return mTelephonyManager.getActiveModemCount();
     }
 
     @SuppressLint("MissingPermission")

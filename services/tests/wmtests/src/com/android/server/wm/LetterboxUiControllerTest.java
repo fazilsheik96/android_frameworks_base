@@ -29,6 +29,7 @@ import static android.content.pm.ActivityInfo.OVERRIDE_ENABLE_COMPAT_IGNORE_ORIE
 import static android.content.pm.ActivityInfo.OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION;
 import static android.content.pm.ActivityInfo.OVERRIDE_LANDSCAPE_ORIENTATION_TO_REVERSE_LANDSCAPE;
 import static android.content.pm.ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO;
+import static android.content.pm.ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_ONLY_FOR_CAMERA;
 import static android.content.pm.ActivityInfo.OVERRIDE_ORIENTATION_ONLY_FOR_CAMERA;
 import static android.content.pm.ActivityInfo.OVERRIDE_UNDEFINED_ORIENTATION_TO_NOSENSOR;
 import static android.content.pm.ActivityInfo.OVERRIDE_UNDEFINED_ORIENTATION_TO_PORTRAIT;
@@ -73,6 +74,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import android.annotation.Nullable;
@@ -82,6 +85,8 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.Property;
 import android.content.res.Resources;
 import android.graphics.Rect;
+import android.platform.test.annotations.DisableFlags;
+import android.platform.test.annotations.EnableFlags;
 import android.platform.test.annotations.Presubmit;
 import android.view.InsetsSource;
 import android.view.InsetsState;
@@ -93,6 +98,7 @@ import android.view.WindowManager;
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.R;
+import com.android.window.flags.Flags;
 
 import libcore.junit.util.compat.CoreCompatChangeRule.DisableCompatChanges;
 import libcore.junit.util.compat.CoreCompatChangeRule.EnableCompatChanges;
@@ -1086,6 +1092,39 @@ public class LetterboxUiControllerTest extends WindowTestsBase {
         assertFalse(mController.shouldApplyUserMinAspectRatioOverride());
     }
 
+    @Test
+    public void testRecomputeConfigurationForCameraCompatIfNeeded() {
+        spyOn(mController);
+        doReturn(false).when(mController).isOverrideOrientationOnlyForCameraEnabled();
+        doReturn(false).when(mController).isCameraCompatSplitScreenAspectRatioAllowed();
+        doReturn(false).when(mController).shouldOverrideMinAspectRatioForCamera();
+        clearInvocations(mActivity);
+
+        mController.recomputeConfigurationForCameraCompatIfNeeded();
+
+        verify(mActivity, never()).recomputeConfiguration();
+
+        // isOverrideOrientationOnlyForCameraEnabled
+        doReturn(true).when(mController).isOverrideOrientationOnlyForCameraEnabled();
+        clearInvocations(mActivity);
+        mController.recomputeConfigurationForCameraCompatIfNeeded();
+        verify(mActivity).recomputeConfiguration();
+
+        // isCameraCompatSplitScreenAspectRatioAllowed
+        doReturn(false).when(mController).isOverrideOrientationOnlyForCameraEnabled();
+        doReturn(true).when(mController).isCameraCompatSplitScreenAspectRatioAllowed();
+        clearInvocations(mActivity);
+        mController.recomputeConfigurationForCameraCompatIfNeeded();
+        verify(mActivity).recomputeConfiguration();
+
+        // shouldOverrideMinAspectRatioForCamera
+        doReturn(false).when(mController).isCameraCompatSplitScreenAspectRatioAllowed();
+        doReturn(true).when(mController).shouldOverrideMinAspectRatioForCamera();
+        clearInvocations(mActivity);
+        mController.recomputeConfigurationForCameraCompatIfNeeded();
+        verify(mActivity).recomputeConfiguration();
+    }
+
     private void prepareActivityForShouldApplyUserMinAspectRatioOverride(
             boolean orientationRequest) {
         spyOn(mController);
@@ -1280,6 +1319,78 @@ public class LetterboxUiControllerTest extends WindowTestsBase {
     }
 
     @Test
+    @EnableCompatChanges({OVERRIDE_MIN_ASPECT_RATIO_ONLY_FOR_CAMERA})
+    public void shouldOverrideMinAspectRatioForCamera_overrideEnabled_returnsTrue() {
+        doReturn(true).when(mActivity).isCameraActive();
+        mController = new LetterboxUiController(mWm, mActivity);
+
+        assertTrue(mController.shouldOverrideMinAspectRatioForCamera());
+    }
+
+    @Test
+    @EnableCompatChanges({OVERRIDE_MIN_ASPECT_RATIO_ONLY_FOR_CAMERA})
+    public void shouldOverrideMinAspectRatioForCamera_propertyTrue_overrideEnabled_returnsTrue()
+            throws Exception {
+        doReturn(true).when(mActivity).isCameraActive();
+        mockThatProperty(PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE, /* value */ true);
+        mController = new LetterboxUiController(mWm, mActivity);
+
+        assertTrue(mController.shouldOverrideMinAspectRatioForCamera());
+    }
+
+    @Test
+    @EnableCompatChanges({OVERRIDE_MIN_ASPECT_RATIO_ONLY_FOR_CAMERA})
+    public void shouldOverrideMinAspectRatioForCamera_propertyTrue_overrideEnabled_returnsFalse()
+            throws Exception {
+        doReturn(false).when(mActivity).isCameraActive();
+        mockThatProperty(PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE, /* value */ true);
+        mController = new LetterboxUiController(mWm, mActivity);
+
+        assertFalse(mController.shouldOverrideMinAspectRatioForCamera());
+    }
+
+    @Test
+    @DisableCompatChanges({OVERRIDE_MIN_ASPECT_RATIO_ONLY_FOR_CAMERA})
+    public void shouldOverrideMinAspectRatioForCamera_propertyTrue_overrideDisabled_returnsFalse()
+            throws Exception {
+        doReturn(true).when(mActivity).isCameraActive();
+        mockThatProperty(PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE, /* value */ true);
+        mController = new LetterboxUiController(mWm, mActivity);
+
+        assertFalse(mController.shouldOverrideMinAspectRatioForCamera());
+    }
+
+    @Test
+    @DisableCompatChanges({OVERRIDE_MIN_ASPECT_RATIO_ONLY_FOR_CAMERA})
+    public void shouldOverrideMinAspectRatioForCamera_overrideDisabled_returnsFalse() {
+        doReturn(true).when(mActivity).isCameraActive();
+        mController = new LetterboxUiController(mWm, mActivity);
+
+        assertFalse(mController.shouldOverrideMinAspectRatioForCamera());
+    }
+
+    @Test
+    @EnableCompatChanges({OVERRIDE_MIN_ASPECT_RATIO_ONLY_FOR_CAMERA})
+    public void shouldOverrideMinAspectRatioForCamera_propertyFalse_overrideEnabled_returnsFalse()
+            throws Exception {
+        mockThatProperty(PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE, /* value */ false);
+        mController = new LetterboxUiController(mWm, mActivity);
+
+        assertFalse(mController.shouldOverrideMinAspectRatioForCamera());
+    }
+
+    @Test
+    @DisableCompatChanges({OVERRIDE_MIN_ASPECT_RATIO_ONLY_FOR_CAMERA})
+    public void shouldOverrideMinAspectRatioForCamera_propertyFalse_noOverride_returnsFalse()
+            throws Exception {
+        mockThatProperty(PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE, /* value */ false);
+        doReturn(true).when(mActivity).isCameraActive();
+        mController = new LetterboxUiController(mWm, mActivity);
+
+        assertFalse(mController.shouldOverrideMinAspectRatioForCamera());
+    }
+
+    @Test
     @EnableCompatChanges({FORCE_RESIZE_APP})
     public void testshouldOverrideForceResizeApp_overrideEnabled_returnsTrue() {
         mController = new LetterboxUiController(mWm, mActivity);
@@ -1418,6 +1529,104 @@ public class LetterboxUiControllerTest extends WindowTestsBase {
         assertEquals(mController.getSplitScreenAspectRatio(),
                 mController.getFixedOrientationLetterboxAspectRatio(
                         mActivity.getParent().getConfiguration()), /* delta */  0.01);
+    }
+
+    @Test
+    public void testIsVerticalThinLetterboxed() {
+        // Vertical thin letterbox disabled
+        doReturn(-1).when(mActivity.mWmService.mLetterboxConfiguration)
+                .getThinLetterboxHeightPx();
+        assertFalse(mController.isVerticalThinLetterboxed());
+        // Define a Task 100x100
+        final Task task = mock(Task.class);
+        doReturn(new Rect(0, 0, 100, 100)).when(task).getBounds();
+        doReturn(10).when(mActivity.mWmService.mLetterboxConfiguration)
+                .getThinLetterboxHeightPx();
+
+        // Vertical thin letterbox disabled without Task
+        doReturn(null).when(mActivity).getTask();
+        assertFalse(mController.isVerticalThinLetterboxed());
+        // Assign a Task for the Activity
+        doReturn(task).when(mActivity).getTask();
+
+        // (task.width() - act.width()) / 2  = 5 < 10
+        doReturn(new Rect(5, 5, 95, 95)).when(mActivity).getBounds();
+        assertTrue(mController.isVerticalThinLetterboxed());
+
+        // (task.width() - act.width()) / 2  = 10 = 10
+        doReturn(new Rect(10, 10, 90, 90)).when(mActivity).getBounds();
+        assertTrue(mController.isVerticalThinLetterboxed());
+
+        // (task.width() - act.width()) / 2  = 11 > 10
+        doReturn(new Rect(11, 11, 89, 89)).when(mActivity).getBounds();
+        assertFalse(mController.isVerticalThinLetterboxed());
+    }
+
+    @Test
+    public void testIsHorizontalThinLetterboxed() {
+        // Horizontal thin letterbox disabled
+        doReturn(-1).when(mActivity.mWmService.mLetterboxConfiguration)
+                .getThinLetterboxWidthPx();
+        assertFalse(mController.isHorizontalThinLetterboxed());
+        // Define a Task 100x100
+        final Task task = mock(Task.class);
+        doReturn(new Rect(0, 0, 100, 100)).when(task).getBounds();
+        doReturn(10).when(mActivity.mWmService.mLetterboxConfiguration)
+                .getThinLetterboxWidthPx();
+
+        // Vertical thin letterbox disabled without Task
+        doReturn(null).when(mActivity).getTask();
+        assertFalse(mController.isHorizontalThinLetterboxed());
+        // Assign a Task for the Activity
+        doReturn(task).when(mActivity).getTask();
+
+        // (task.height() - act.height()) / 2  = 5 < 10
+        doReturn(new Rect(5, 5, 95, 95)).when(mActivity).getBounds();
+        assertTrue(mController.isHorizontalThinLetterboxed());
+
+        // (task.height() - act.height()) / 2  = 10 = 10
+        doReturn(new Rect(10, 10, 90, 90)).when(mActivity).getBounds();
+        assertTrue(mController.isHorizontalThinLetterboxed());
+
+        // (task.height() - act.height()) / 2  = 11 > 10
+        doReturn(new Rect(11, 11, 89, 89)).when(mActivity).getBounds();
+        assertFalse(mController.isHorizontalThinLetterboxed());
+    }
+
+    @Test
+    @EnableFlags(Flags.FLAG_DISABLE_THIN_LETTERBOXING_REACHABILITY)
+    public void testAllowReachabilityForThinLetterboxWithFlagEnabled() {
+        spyOn(mController);
+        doReturn(true).when(mController).isVerticalThinLetterboxed();
+        assertFalse(mController.allowVerticalReachabilityForThinLetterbox());
+        doReturn(true).when(mController).isHorizontalThinLetterboxed();
+        assertFalse(mController.allowHorizontalReachabilityForThinLetterbox());
+
+        doReturn(false).when(mController).isVerticalThinLetterboxed();
+        assertTrue(mController.allowVerticalReachabilityForThinLetterbox());
+        doReturn(false).when(mController).isHorizontalThinLetterboxed();
+        assertTrue(mController.allowHorizontalReachabilityForThinLetterbox());
+    }
+
+    @Test
+    @DisableFlags(Flags.FLAG_DISABLE_THIN_LETTERBOXING_REACHABILITY)
+    public void testAllowReachabilityForThinLetterboxWithFlagDisabled() {
+        spyOn(mController);
+        doReturn(true).when(mController).isVerticalThinLetterboxed();
+        assertTrue(mController.allowVerticalReachabilityForThinLetterbox());
+        doReturn(true).when(mController).isHorizontalThinLetterboxed();
+        assertTrue(mController.allowHorizontalReachabilityForThinLetterbox());
+
+        doReturn(false).when(mController).isVerticalThinLetterboxed();
+        assertTrue(mController.allowVerticalReachabilityForThinLetterbox());
+        doReturn(false).when(mController).isHorizontalThinLetterboxed();
+        assertTrue(mController.allowHorizontalReachabilityForThinLetterbox());
+    }
+
+    @Test
+    public void testIsLetterboxEducationEnabled() {
+        mController.isLetterboxEducationEnabled();
+        verify(mLetterboxConfiguration).getIsEducationEnabled();
     }
 
     private void mockThatProperty(String propertyName, boolean value) throws Exception {

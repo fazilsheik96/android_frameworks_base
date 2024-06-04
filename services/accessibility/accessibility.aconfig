@@ -49,6 +49,16 @@ flag {
 }
 
 flag {
+    name: "do_not_reset_key_event_state"
+    namespace: "accessibility"
+    description: "Don't reset the event stream state when receiving an event without policy flag FLAG_PASS_TO_USER. Just pass it through the pipeline."
+    bug: "331900630"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
     name: "enable_a11y_checker_logging"
     namespace: "accessibility"
     description: "Whether to identify and log app a11y issues."
@@ -120,7 +130,7 @@ flag {
 flag {
     name: "manager_avoid_receiver_timeout"
     namespace: "accessibility"
-    description: "Avoid broadcast receiver timeout by offloading potentially slow operations to the background thread."
+    description: "Register receivers on background handler so they have more time to complete"
     bug: "333890389"
     metadata {
         purpose: PURPOSE_BUGFIX
@@ -139,6 +149,16 @@ flag {
     namespace: "accessibility"
     description: "Fixes race condition described in b/286587811"
     bug: "286587811"
+}
+
+flag {
+    name: "remove_on_window_infos_changed_handler"
+    namespace: "accessibility"
+    description: "Updates onWindowInfosChanged() to run without posting to a handler."
+    bug: "333834990"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
 }
 
 flag {
@@ -172,4 +192,11 @@ flag {
     metadata {
         purpose: PURPOSE_BUGFIX
     }
+}
+
+flag {
+    name: "enable_color_correction_saturation"
+    namespace: "accessibility"
+    description: "Feature allows users to change color correction saturation for daltonizer."
+    bug: "322829049"
 }

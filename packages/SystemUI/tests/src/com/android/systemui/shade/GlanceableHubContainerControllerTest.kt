@@ -16,48 +16,46 @@
 
 package com.android.systemui.shade
 
-import android.content.Context
+import android.graphics.Rect
 import android.os.PowerManager
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
 import android.testing.ViewUtils
 import android.view.MotionEvent
 import android.view.View
-import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.test.filters.SmallTest
+import com.android.compose.animation.scene.ObservableTransitionState
 import com.android.compose.animation.scene.SceneKey
 import com.android.systemui.Flags
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.ambient.touch.TouchHandler
 import com.android.systemui.ambient.touch.TouchMonitor
 import com.android.systemui.ambient.touch.dagger.AmbientTouchComponent
+import com.android.systemui.bouncer.data.repository.fakeKeyguardBouncerRepository
 import com.android.systemui.communal.data.repository.FakeCommunalRepository
 import com.android.systemui.communal.data.repository.fakeCommunalRepository
 import com.android.systemui.communal.domain.interactor.communalInteractor
 import com.android.systemui.communal.domain.interactor.setCommunalAvailable
 import com.android.systemui.communal.shared.model.CommunalScenes
+import com.android.systemui.communal.ui.compose.CommunalContent
 import com.android.systemui.communal.ui.viewmodel.CommunalViewModel
 import com.android.systemui.communal.util.CommunalColors
 import com.android.systemui.coroutines.collectLastValue
-import com.android.systemui.keyguard.data.repository.fakeKeyguardTransitionRepository
 import com.android.systemui.keyguard.domain.interactor.keyguardInteractor
-import com.android.systemui.keyguard.domain.interactor.keyguardTransitionInteractor
-import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.kosmos.Kosmos
 import com.android.systemui.kosmos.testDispatcher
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.res.R
 import com.android.systemui.scene.shared.model.sceneDataSourceDelegator
-import com.android.systemui.shade.data.repository.fakeShadeRepository
 import com.android.systemui.shade.domain.interactor.shadeInteractor
-import com.android.systemui.statusbar.phone.SystemUIDialogFactory
 import com.android.systemui.testKosmos
 import com.android.systemui.util.mockito.any
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -85,9 +83,9 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
 
     @Mock private lateinit var communalViewModel: CommunalViewModel
     @Mock private lateinit var powerManager: PowerManager
-    @Mock private lateinit var dialogFactory: SystemUIDialogFactory
     @Mock private lateinit var touchMonitor: TouchMonitor
     @Mock private lateinit var communalColors: CommunalColors
+    @Mock private lateinit var communalContent: CommunalContent
     private lateinit var ambientTouchComponentFactory: AmbientTouchComponent.Factory
 
     private lateinit var parentView: FrameLayout
@@ -119,19 +117,23 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
                 GlanceableHubContainerController(
                     communalInteractor,
                     communalViewModel,
-                    dialogFactory,
-                    keyguardTransitionInteractor,
                     keyguardInteractor,
                     shadeInteractor,
                     powerManager,
                     communalColors,
                     ambientTouchComponentFactory,
+                    communalContent,
                     kosmos.sceneDataSourceDelegator,
                 )
         }
         testableLooper = TestableLooper.get(this)
 
         overrideResource(R.dimen.communal_right_edge_swipe_region_width, RIGHT_SWIPE_REGION_WIDTH)
+        overrideResource(R.dimen.communal_top_edge_swipe_region_height, TOP_SWIPE_REGION_WIDTH)
+        overrideResource(
+            R.dimen.communal_bottom_edge_swipe_region_height,
+            BOTTOM_SWIPE_REGION_WIDTH
+        )
 
         // Make communal available so that communalInteractor.desiredScene accurately reflects
         // scene changes instead of just returning Blank.
@@ -157,13 +159,12 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
                     GlanceableHubContainerController(
                         communalInteractor,
                         communalViewModel,
-                        dialogFactory,
-                        keyguardTransitionInteractor,
                         keyguardInteractor,
                         shadeInteractor,
                         powerManager,
                         communalColors,
                         ambientTouchComponentFactory,
+                        communalContent,
                         kosmos.sceneDataSourceDelegator,
                     )
 
@@ -204,13 +205,39 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
         }
 
     @Test
+    fun onTouchEvent_communalTransitioning_interceptsTouches() =
+        with(kosmos) {
+            testScope.runTest {
+                // Communal is opening.
+                communalRepository.setTransitionState(
+                    flowOf(
+                        ObservableTransitionState.Transition(
+                            fromScene = CommunalScenes.Blank,
+                            toScene = CommunalScenes.Communal,
+                            currentScene = flowOf(CommunalScenes.Blank),
+                            progress = flowOf(0.5f),
+                            isInitiatedByUserInput = true,
+                            isUserInputOngoing = flowOf(true)
+                        )
+                    )
+                )
+                testableLooper.processAllMessages()
+
+                // Touch events are intercepted.
+                assertThat(underTest.onTouchEvent(DOWN_EVENT)).isTrue()
+                // User activity sent to PowerManager.
+                verify(powerManager).userActivity(any(), any(), any())
+            }
+        }
+
+    @Test
     fun onTouchEvent_communalOpen_interceptsTouches() =
         with(kosmos) {
             testScope.runTest {
                 // Communal is open.
                 goToScene(CommunalScenes.Communal)
 
-                // Touch events are intercepted outside of any gesture areas.
+                // Touch events are intercepted.
                 assertThat(underTest.onTouchEvent(DOWN_EVENT)).isTrue()
                 // User activity sent to PowerManager.
                 verify(powerManager).userActivity(any(), any(), any())
@@ -225,11 +252,7 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
                 goToScene(CommunalScenes.Communal)
 
                 // Bouncer is visible.
-                fakeKeyguardTransitionRepository.sendTransitionSteps(
-                    KeyguardState.GLANCEABLE_HUB,
-                    KeyguardState.PRIMARY_BOUNCER,
-                    testScope
-                )
+                fakeKeyguardBouncerRepository.setPrimaryShow(true)
                 testableLooper.processAllMessages()
 
                 // Touch events are not intercepted.
@@ -247,7 +270,7 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
                 goToScene(CommunalScenes.Communal)
 
                 // Shade shows up.
-                fakeShadeRepository.setQsExpansion(1.0f)
+                shadeTestUtil.setQsExpansion(1.0f)
                 testableLooper.processAllMessages()
 
                 // Touch events are not intercepted.
@@ -280,13 +303,12 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
                 GlanceableHubContainerController(
                     communalInteractor,
                     communalViewModel,
-                    dialogFactory,
-                    keyguardTransitionInteractor,
                     keyguardInteractor,
                     shadeInteractor,
                     powerManager,
                     communalColors,
                     ambientTouchComponentFactory,
+                    communalContent,
                     kosmos.sceneDataSourceDelegator,
                 )
 
@@ -300,13 +322,12 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
                 GlanceableHubContainerController(
                     communalInteractor,
                     communalViewModel,
-                    dialogFactory,
-                    keyguardTransitionInteractor,
                     keyguardInteractor,
                     shadeInteractor,
                     powerManager,
                     communalColors,
                     ambientTouchComponentFactory,
+                    communalContent,
                     kosmos.sceneDataSourceDelegator,
                 )
 
@@ -355,11 +376,7 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
                 goToScene(CommunalScenes.Communal)
 
                 // Bouncer is visible.
-                fakeKeyguardTransitionRepository.sendTransitionSteps(
-                    KeyguardState.GLANCEABLE_HUB,
-                    KeyguardState.PRIMARY_BOUNCER,
-                    testScope
-                )
+                fakeKeyguardBouncerRepository.setPrimaryShow(true)
                 testableLooper.processAllMessages()
 
                 assertThat(underTest.lifecycle.currentState).isEqualTo(Lifecycle.State.STARTED)
@@ -374,11 +391,7 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
                 goToScene(CommunalScenes.Communal)
 
                 // Bouncer is visible.
-                fakeKeyguardTransitionRepository.sendTransitionSteps(
-                    KeyguardState.GLANCEABLE_HUB,
-                    KeyguardState.ALTERNATE_BOUNCER,
-                    testScope
-                )
+                fakeKeyguardBouncerRepository.setAlternateVisible(true)
                 testableLooper.processAllMessages()
 
                 assertThat(underTest.lifecycle.currentState).isEqualTo(Lifecycle.State.STARTED)
@@ -401,7 +414,7 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
                 goToScene(CommunalScenes.Communal)
 
                 // Shade shows up.
-                fakeShadeRepository.setQsExpansion(1.0f)
+                shadeTestUtil.setQsExpansion(1.0f)
                 testableLooper.processAllMessages()
 
                 assertThat(underTest.lifecycle.currentState).isEqualTo(Lifecycle.State.STARTED)
@@ -421,6 +434,71 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
             }
         }
 
+    @Test
+    fun gestureExclusionZone_setAfterInit() =
+        with(kosmos) {
+            testScope.runTest {
+                goToScene(CommunalScenes.Communal)
+
+                assertThat(containerView.systemGestureExclusionRects)
+                    .containsExactly(
+                        Rect(
+                            /* left */ 0,
+                            /* top */ TOP_SWIPE_REGION_WIDTH,
+                            /* right */ CONTAINER_WIDTH,
+                            /* bottom */ CONTAINER_HEIGHT - BOTTOM_SWIPE_REGION_WIDTH
+                        )
+                    )
+            }
+        }
+
+    @Test
+    fun gestureExclusionZone_unsetWhenShadeOpen() =
+        with(kosmos) {
+            testScope.runTest {
+                goToScene(CommunalScenes.Communal)
+
+                // Shade shows up.
+                shadeTestUtil.setQsExpansion(1.0f)
+                testableLooper.processAllMessages()
+
+                // Exclusion rects are unset.
+                assertThat(containerView.systemGestureExclusionRects).isEmpty()
+            }
+        }
+
+    @Test
+    fun gestureExclusionZone_unsetWhenBouncerOpen() =
+        with(kosmos) {
+            testScope.runTest {
+                goToScene(CommunalScenes.Communal)
+
+                // Bouncer is visible.
+                fakeKeyguardBouncerRepository.setPrimaryShow(true)
+                testableLooper.processAllMessages()
+
+                // Exclusion rects are unset.
+                assertThat(containerView.systemGestureExclusionRects).isEmpty()
+            }
+        }
+
+    @Test
+    fun gestureExclusionZone_unsetWhenHubClosed() =
+        with(kosmos) {
+            testScope.runTest {
+                goToScene(CommunalScenes.Communal)
+
+                // Exclusion rect is set.
+                assertThat(containerView.systemGestureExclusionRects).hasSize(1)
+
+                // Leave the hub.
+                goToScene(CommunalScenes.Blank)
+
+                // Exclusion rect is unset.
+                assertThat(containerView.systemGestureExclusionRects).isEmpty()
+            }
+        }
+
     private fun initAndAttachContainerView() {
         containerView = View(context)
 
@@ -430,18 +508,9 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
         underTest.initView(containerView)
 
         // Attach the view so that flows start collecting.
-        ViewUtils.attachView(parentView)
+        ViewUtils.attachView(parentView, CONTAINER_WIDTH, CONTAINER_HEIGHT)
         // Attaching is async so processAllMessages is required for view.repeatWhenAttached to run.
         testableLooper.processAllMessages()
-
-        // Give the view a fixed size to simplify testing for edge swipes.
-        val lp =
-            parentView.layoutParams.apply {
-                width = CONTAINER_WIDTH
-                height = CONTAINER_HEIGHT
-            }
-        val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        wm.updateViewLayout(parentView, lp)
     }
 
     private fun goToScene(scene: SceneKey) {
@@ -453,6 +522,8 @@ class GlanceableHubContainerControllerTest : SysuiTestCase() {
         private const val CONTAINER_WIDTH = 100
         private const val CONTAINER_HEIGHT = 100
         private const val RIGHT_SWIPE_REGION_WIDTH = 20
+        private const val TOP_SWIPE_REGION_WIDTH = 12
+        private const val BOTTOM_SWIPE_REGION_WIDTH = 14
 
         /**
          * A touch down event right in the middle of the screen, to avoid being in any of the swipe

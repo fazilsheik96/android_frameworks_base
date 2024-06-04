@@ -89,6 +89,12 @@ interface KeyguardTransitionRepository {
     suspend fun startTransition(info: TransitionInfo): UUID?
 
     /**
+     * Emits STARTED and FINISHED transition steps to the given state. This is used during boot to
+     * seed the repository with the appropriate initial state.
+     */
+    suspend fun emitInitialStepsFromOff(to: KeyguardState)
+
+    /**
      * Allows manual control of a transition. When calling [startTransition], the consumer must pass
      * in a null animator. In return, it will get a unique [UUID] that will be validated to allow
      * further updates.
@@ -128,7 +134,7 @@ constructor(
             TransitionInfo(
                 ownerName = "",
                 from = KeyguardState.OFF,
-                to = KeyguardState.LOCKSCREEN,
+                to = KeyguardState.OFF,
                 animator = null
             )
         )
@@ -141,9 +147,17 @@ constructor(
     private var updateTransitionId: UUID? = null
 
     init {
-        // Seed with transitions signaling a boot into lockscreen state. If updating this, please
-        // also update FakeKeyguardTransitionRepository.
-        initialTransitionSteps.forEach(::emitTransition)
+        // Start with a FINISHED transition in OFF. KeyguardBootInteractor will transition from OFF
+        // to either GONE or LOCKSCREEN once we're booted up and can determine which state we should
+        // start in.
+        emitTransition(
+            TransitionStep(
+                KeyguardState.OFF,
+                KeyguardState.OFF,
+                1f,
+                TransitionState.FINISHED,
+            )
+        )
     }
 
     override suspend fun startTransition(info: TransitionInfo): UUID? {
@@ -233,7 +247,7 @@ constructor(
         state: TransitionState
     ) {
         if (updateTransitionId != transitionId) {
-            Log.wtf(TAG, "Attempting to update with old/invalid transitionId: $transitionId")
+            Log.w(TAG, "Attempting to update with old/invalid transitionId: $transitionId")
             return
         }
 
@@ -249,6 +263,36 @@ constructor(
         logAndTrace(nextStep, isManual)
         _transitions.tryEmit(nextStep)
         lastStep = nextStep
+    }
+
+    override suspend fun emitInitialStepsFromOff(to: KeyguardState) {
+        _currentTransitionInfo.value =
+            TransitionInfo(
+                ownerName = "KeyguardTransitionRepository(boot)",
+                from = KeyguardState.OFF,
+                to = to,
+                animator = null
+            )
+
+        emitTransition(
+            TransitionStep(
+                KeyguardState.OFF,
+                to,
+                0f,
+                TransitionState.STARTED,
+                ownerName = "KeyguardTransitionRepository(boot)",
+            )
+        )
+
+        emitTransition(
+            TransitionStep(
+                KeyguardState.OFF,
+                to,
+                1f,
+                TransitionState.FINISHED,
+                ownerName = "KeyguardTransitionRepository(boot)",
+            ),
+        )
     }
 
     private fun logAndTrace(step: TransitionStep, isManual: Boolean) {
@@ -271,31 +315,5 @@ constructor(
 
     companion object {
         private const val TAG = "KeyguardTransitionRepository"
-
-        /**
-         * Transition steps to seed the repository with, so that all of the transition interactor
-         * flows emit reasonable initial values.
-         */
-        val initialTransitionSteps: List<TransitionStep> =
-            listOf(
-                TransitionStep(
-                    KeyguardState.OFF,
-                    KeyguardState.OFF,
-                    1f,
-                    TransitionState.FINISHED,
-                ),
-                TransitionStep(
-                    KeyguardState.OFF,
-                    KeyguardState.LOCKSCREEN,
-                    0f,
-                    TransitionState.STARTED,
-                ),
-                TransitionStep(
-                    KeyguardState.OFF,
-                    KeyguardState.LOCKSCREEN,
-                    1f,
-                    TransitionState.FINISHED,
-                ),
-            )
     }
 }

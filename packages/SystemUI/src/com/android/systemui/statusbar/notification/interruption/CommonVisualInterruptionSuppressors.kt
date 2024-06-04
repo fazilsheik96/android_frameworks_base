@@ -153,12 +153,12 @@ class PeekOldWhenSuppressor(private val systemClock: SystemClock) :
         uiEventId = HUN_SUPPRESSED_OLD_WHEN
     ) {
     private fun whenAge(entry: NotificationEntry) =
-        systemClock.currentTimeMillis() - entry.sbn.notification.`when`
+        systemClock.currentTimeMillis() - entry.sbn.notification.getWhen()
 
     override fun shouldSuppress(entry: NotificationEntry): Boolean =
         when {
             // Ignore a "when" of 0, as it is unlikely to be a meaningful timestamp.
-            entry.sbn.notification.`when` <= 0L -> false
+            entry.sbn.notification.getWhen() <= 0L -> false
 
             // Assume all HUNs with FSIs, foreground services, or user-initiated jobs are
             // time-sensitive, regardless of their "when".
@@ -241,9 +241,6 @@ class AvalancheSuppressor(
     ) {
     val TAG = "AvalancheSuppressor"
 
-    override var reason: String = "avalanche"
-        protected set
-
     enum class State {
         ALLOW_CONVERSATION_AFTER_AVALANCHE,
         ALLOW_HIGH_PRIORITY_CONVERSATION_ANY_TIME,
@@ -257,19 +254,15 @@ class AvalancheSuppressor(
 
     override fun shouldSuppress(entry: NotificationEntry): Boolean {
         if (!isCooldownEnabled()) {
-            reason = "FALSE avalanche cooldown setting DISABLED"
             return false
         }
         val timeSinceAvalancheMs = systemClock.currentTimeMillis() - avalancheProvider.startTime
         val timedOut = timeSinceAvalancheMs >= avalancheProvider.timeoutMs
         if (timedOut) {
-            reason = "FALSE avalanche event TIMED OUT. " +
-                    "${timeSinceAvalancheMs/1000} seconds since last avalanche"
             return false
         }
         val state = calculateState(entry)
         if (state != State.SUPPRESS) {
-            reason = "FALSE avalanche IN ALLOWLIST: $state"
             return false
         }
         return true
@@ -278,7 +271,7 @@ class AvalancheSuppressor(
     private fun calculateState(entry: NotificationEntry): State {
         if (
             entry.ranking.isConversation &&
-                entry.sbn.notification.`when` > avalancheProvider.startTime
+                entry.sbn.notification.getWhen() > avalancheProvider.startTime
         ) {
             return State.ALLOW_CONVERSATION_AFTER_AVALANCHE
         }

@@ -23,7 +23,6 @@ import static com.android.app.animation.Interpolators.STANDARD;
 import static com.android.internal.jank.InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_SCROLL_FLING;
 import static com.android.server.notification.Flags.screenshareNotificationHiding;
 import static com.android.systemui.Dependency.ALLOW_NOTIFICATION_LONG_PRESS_NAME;
-import static com.android.systemui.Flags.nsslFalsingFix;
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.OnEmptySpaceClickListener;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.OnOverscrollTopChangedListener;
@@ -206,6 +205,7 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     private final SeenNotificationsInteractor mSeenNotificationsInteractor;
     private final KeyguardTransitionRepository mKeyguardTransitionRepo;
     private NotificationStackScrollLayout mView;
+    private TouchHandler mTouchHandler;
     private NotificationSwipeHelper mSwipeHelper;
     @Nullable
     private Boolean mHistoryEnabled;
@@ -356,6 +356,7 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     private float mMaxAlphaForKeyguard = 1.0f;
     private String mMaxAlphaForKeyguardSource = "constructor";
     private float mMaxAlphaForUnhide = 1.0f;
+    private float mMaxAlphaFromView = 1.0f;
 
     /**
      * Maximum alpha when to and from or sitting idle on the glanceable hub. Will be 1.0f when the
@@ -806,7 +807,8 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         mView.setStackStateLogger(mStackStateLogger);
         mView.setController(this);
         mView.setLogger(mLogger);
-        mView.setTouchHandler(new TouchHandler());
+        mTouchHandler = new TouchHandler();
+        mView.setTouchHandler(mTouchHandler);
         mView.setResetUserExpandedStatesRunnable(mNotificationsController::resetUserExpandedStates);
         mView.setActivityStarter(mActivityStarter);
         mView.setClearAllAnimationListener(this::onAnimationEnd);
@@ -1317,9 +1319,14 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         updateAlpha();
     }
 
+    void setMaxAlphaFromView(float alpha) {
+        mMaxAlphaFromView = alpha;
+        updateAlpha();
+    }
+
     private void updateAlpha() {
         if (mView != null) {
-            mView.setAlpha(Math.min(mMaxAlphaForKeyguard,
+            mView.setAlpha(Math.min(Math.min(mMaxAlphaFromView, mMaxAlphaForKeyguard),
                     Math.min(mMaxAlphaForUnhide, mMaxAlphaForGlanceableHub)));
         }
     }
@@ -1787,8 +1794,14 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         }
     }
 
+    @VisibleForTesting
+    TouchHandler getTouchHandler() {
+        return mTouchHandler;
+    }
+
     @Override
     public void dump(@NonNull PrintWriter pw, @NonNull String[] args) {
+        pw.println("mMaxAlphaFromView=" + mMaxAlphaFromView);
         pw.println("mMaxAlphaForUnhide=" + mMaxAlphaForUnhide);
         pw.println("mMaxAlphaForGlanceableHub=" + mMaxAlphaForGlanceableHub);
         pw.println("mMaxAlphaForKeyguard=" + mMaxAlphaForKeyguard);
@@ -2036,37 +2049,30 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                 expandingNotification = mView.isExpandingNotification();
                 if (mView.getExpandedInThisMotion() && !expandingNotification && wasExpandingBefore
                         && !mView.getDisallowScrollingInThisMotion()) {
-                    mView.dispatchDownEventToScroller(ev);
+                    // We need to dispatch the overscroll differently when Scene Container is on,
+                    // since NSSL no longer controls its own scroll.
+                    if (SceneContainerFlag.isEnabled() && !isCancelOrUp) {
+                        mView.startOverscrollAfterExpanding();
+                        return true;
+                    } else {
+                        mView.dispatchDownEventToScroller(ev);
+                    }
                 }
             }
             boolean horizontalSwipeWantsIt = false;
             boolean scrollerWantsIt = false;
-            if (nsslFalsingFix() || MigrateClocksToBlueprint.isEnabled()) {
-                // Reverse the order relative to the else statement. onScrollTouch will reset on an
-                // UP event, causing horizontalSwipeWantsIt to be set to true on vertical swipes.
-                if (mLongPressedView == null && !mView.isBeingDragged()
-                        && !expandingNotification
-                        && !mView.getExpandedInThisMotion()
-                        && !onlyScrollingInThisMotion
-                        && !mView.getDisallowDismissInThisMotion()) {
-                    horizontalSwipeWantsIt = mSwipeHelper.onTouchEvent(ev);
-                }
-                if (mLongPressedView == null && mView.isExpanded() && !mSwipeHelper.isSwiping()
-                        && !expandingNotification && !mView.getDisallowScrollingInThisMotion()) {
-                    scrollerWantsIt = mView.onScrollTouch(ev);
-                }
-            } else {
-                if (mLongPressedView == null && mView.isExpanded() && !mSwipeHelper.isSwiping()
-                        && !expandingNotification && !mView.getDisallowScrollingInThisMotion()) {
-                    scrollerWantsIt = mView.onScrollTouch(ev);
-                }
-                if (mLongPressedView == null && !mView.isBeingDragged()
-                        && !expandingNotification
-                        && !mView.getExpandedInThisMotion()
-                        && !onlyScrollingInThisMotion
-                        && !mView.getDisallowDismissInThisMotion()) {
-                    horizontalSwipeWantsIt = mSwipeHelper.onTouchEvent(ev);
-                }
+            // NOTE: the order of these is important. If reversed, onScrollTouch will reset on an
+            // UP event, causing horizontalSwipeWantsIt to be set to true on vertical swipes.
+            if (mLongPressedView == null && !mView.isBeingDragged()
+                    && !expandingNotification
+                    && !mView.getExpandedInThisMotion()
+                    && !onlyScrollingInThisMotion
+                    && !mView.getDisallowDismissInThisMotion()) {
+                horizontalSwipeWantsIt = mSwipeHelper.onTouchEvent(ev);
+            }
+            if (mLongPressedView == null && mView.isExpanded() && !mSwipeHelper.isSwiping()
+                    && !expandingNotification && !mView.getDisallowScrollingInThisMotion()) {
+                scrollerWantsIt = mView.onScrollTouch(ev);
             }
 
             // Check if we need to clear any snooze leavebehinds

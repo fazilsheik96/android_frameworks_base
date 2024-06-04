@@ -3971,7 +3971,7 @@ public class CarrierConfigManager {
 
     /**
      * Whether device resets all of NR timers when device is in a voice call and QOS is established.
-     * The default value is false;
+     * The default value is true;
      *
      * @see #KEY_5G_ICON_DISPLAY_GRACE_PERIOD_STRING
      * @see #KEY_5G_ICON_DISPLAY_SECONDARY_GRACE_PERIOD_STRING
@@ -6090,7 +6090,7 @@ public class CarrierConfigManager {
             defaults.putBoolean(KEY_ENABLE_PRESENCE_CAPABILITY_EXCHANGE_BOOL, false);
             defaults.putBoolean(KEY_RCS_BULK_CAPABILITY_EXCHANGE_BOOL, false);
             defaults.putBoolean(KEY_ENABLE_PRESENCE_GROUP_SUBSCRIBE_BOOL, false);
-            defaults.putInt(KEY_SUBSCRIBE_RETRY_DURATION_MILLIS_LONG, -1);
+            defaults.putLong(KEY_SUBSCRIBE_RETRY_DURATION_MILLIS_LONG, -1);
             defaults.putBoolean(KEY_USE_SIP_URI_FOR_PRESENCE_SUBSCRIBE_BOOL, false);
             defaults.putInt(KEY_NON_RCS_CAPABILITIES_CACHE_EXPIRATION_SEC_INT, 30 * 24 * 60 * 60);
             defaults.putBoolean(KEY_RCS_REQUEST_FORBIDDEN_BY_SIP_489_BOOL, false);
@@ -11121,7 +11121,7 @@ public class CarrierConfigManager {
         sDefaults.putString(KEY_5G_ICON_DISPLAY_SECONDARY_GRACE_PERIOD_STRING, "");
         sDefaults.putInt(KEY_NR_ADVANCED_BANDS_SECONDARY_TIMER_SECONDS_INT, 0);
         sDefaults.putBoolean(KEY_NR_TIMERS_RESET_IF_NON_ENDC_AND_RRC_IDLE_BOOL, false);
-        sDefaults.putBoolean(KEY_NR_TIMERS_RESET_ON_VOICE_QOS_BOOL, false);
+        sDefaults.putBoolean(KEY_NR_TIMERS_RESET_ON_VOICE_QOS_BOOL, true);
         sDefaults.putBoolean(KEY_NR_TIMERS_RESET_ON_PLMN_CHANGE_BOOL, false);
         /* Default value is 1 hour. */
         sDefaults.putLong(KEY_5G_WATCHDOG_TIME_MS_LONG, 3600000);

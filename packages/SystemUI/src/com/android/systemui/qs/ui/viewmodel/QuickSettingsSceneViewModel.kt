@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+@file:OptIn(ExperimentalCoroutinesApi::class)
+
 package com.android.systemui.qs.ui.viewmodel
 
 import androidx.lifecycle.LifecycleOwner
@@ -27,10 +29,11 @@ import com.android.compose.animation.scene.UserActionResult
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntryInteractor
+import com.android.systemui.media.controls.domain.pipeline.interactor.MediaCarouselInteractor
 import com.android.systemui.qs.FooterActionsController
 import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsViewModel
 import com.android.systemui.qs.ui.adapter.QSSceneAdapter
-import com.android.systemui.scene.domain.interactor.SceneInteractor
+import com.android.systemui.scene.domain.interactor.SceneBackInteractor
 import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.settings.brightness.ui.viewModel.BrightnessMirrorViewModel
 import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
@@ -42,6 +45,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 /** Models UI state and handles user input for the quick settings scene. */
@@ -57,21 +62,31 @@ constructor(
     val notifications: NotificationsPlaceholderViewModel,
     private val footerActionsViewModelFactory: FooterActionsViewModel.Factory,
     private val footerActionsController: FooterActionsController,
-    sceneInteractor: SceneInteractor,
+    sceneBackInteractor: SceneBackInteractor,
+    val mediaCarouselInteractor: MediaCarouselInteractor,
 ) {
-    @OptIn(ExperimentalCoroutinesApi::class)
+    private val backScene: StateFlow<SceneKey> =
+        sceneBackInteractor.backScene
+            .filter { it != Scenes.QuickSettings }
+            .map { it ?: Scenes.Shade }
+            .stateIn(
+                scope = applicationScope,
+                started = SharingStarted.WhileSubscribed(),
+                initialValue = Scenes.Shade,
+            )
+
     val destinationScenes: StateFlow<Map<UserAction, UserActionResult>> =
         combine(
                 deviceEntryInteractor.isUnlocked,
                 deviceEntryInteractor.canSwipeToEnter,
-                qsSceneAdapter.isCustomizing,
-                sceneInteractor.previousScene(ignored = Scenes.QuickSettings),
-            ) { isUnlocked, canSwipeToDismiss, isCustomizing, previousScene ->
+                qsSceneAdapter.isCustomizerShowing,
+                backScene,
+            ) { isUnlocked, canSwipeToDismiss, isCustomizerShowing, backScene ->
                 destinationScenes(
                     isUnlocked,
                     canSwipeToDismiss,
-                    isCustomizing,
-                    previousScene,
+                    isCustomizerShowing,
+                    backScene,
                 )
             }
             .stateIn(
@@ -81,17 +96,18 @@ constructor(
                     destinationScenes(
                         isUnlocked = deviceEntryInteractor.isUnlocked.value,
                         canSwipeToDismiss = deviceEntryInteractor.canSwipeToEnter.value,
-                        isCustomizing = qsSceneAdapter.isCustomizing.value,
-                        previousScene = sceneInteractor
-                                .previousScene(ignored = Scenes.QuickSettings).value,
+                        isCustomizing = qsSceneAdapter.isCustomizerShowing.value,
+                        backScene = backScene.value,
                     ),
             )
+
+    val isMediaVisible: StateFlow<Boolean> = mediaCarouselInteractor.hasAnyMediaOrRecommendation
 
     private fun destinationScenes(
         isUnlocked: Boolean,
         canSwipeToDismiss: Boolean?,
         isCustomizing: Boolean,
-        previousScene: SceneKey?
+        backScene: SceneKey?,
     ): Map<UserAction, UserActionResult> {
         val upBottomEdge =
             when {
@@ -108,13 +124,15 @@ constructor(
                 // TODO(b/330200163) Add an Up from Bottom to be able to collapse the shade
                 // while customizing
             } else {
-                this[Back] = UserActionResult(previousScene ?: Scenes.Shade)
-                this[Swipe(SwipeDirection.Up)] = UserActionResult(previousScene ?: Scenes.Shade)
-                this[
+                put(Back, UserActionResult(backScene ?: Scenes.Shade))
+                put(Swipe(SwipeDirection.Up), UserActionResult(backScene ?: Scenes.Shade))
+                put(
                     Swipe(
                         fromSource = Edge.Bottom,
                         direction = SwipeDirection.Up,
-                    )] = UserActionResult(upBottomEdge)
+                    ),
+                    UserActionResult(upBottomEdge),
+                )
             }
         }
     }

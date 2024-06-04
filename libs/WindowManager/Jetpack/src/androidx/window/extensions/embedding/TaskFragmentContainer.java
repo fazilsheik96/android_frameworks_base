@@ -184,6 +184,11 @@ class TaskFragmentContainer {
     private boolean mIsIsolatedNavigationEnabled;
 
     /**
+     * Whether this TaskFragment is pinned.
+     */
+    private boolean mIsPinned;
+
+    /**
      * Whether to apply dimming on the parent Task that was requested last.
      */
     private boolean mLastDimOnTask;
@@ -465,7 +470,7 @@ class TaskFragmentContainer {
             return;
         }
         // Early return if this container is not an overlay with activity association.
-        if (!isOverlay() || !isAssociatedWithActivity()) {
+        if (!isOverlayWithActivityAssociation()) {
             return;
         }
         if (mAssociatedActivityToken == activityToken) {
@@ -500,7 +505,7 @@ class TaskFragmentContainer {
         // sure the controller considers this container as the one containing the activity.
         // This is needed when the activity is added as pending appeared activity to one
         // TaskFragment while it is also an appeared activity in another.
-        return mController.getContainerWithActivity(activityToken) == this;
+        return mTaskContainer.getContainerWithActivity(activityToken) == this;
     }
 
     /** Whether this activity has appeared in the TaskFragment on the server side. */
@@ -893,6 +898,34 @@ class TaskFragmentContainer {
         mIsIsolatedNavigationEnabled = isolatedNavigationEnabled;
     }
 
+    /**
+     * Returns whether this container is pinned.
+     *
+     * @see android.window.TaskFragmentOperation#OP_TYPE_SET_PINNED
+     */
+    boolean isPinned() {
+        return mIsPinned;
+    }
+
+    /**
+     * Sets whether to pin this container or not.
+     *
+     * @see #isPinned()
+     */
+    void setPinned(boolean pinned) {
+        mIsPinned = pinned;
+    }
+
+    /**
+     * Indicates to skip activity resolving if the activity is from this container.
+     *
+     * @see #isIsolatedNavigationEnabled()
+     * @see #isPinned()
+     */
+    boolean shouldSkipActivityResolving() {
+        return isIsolatedNavigationEnabled() || isPinned();
+    }
+
     /** Sets whether to apply dim on the parent Task. */
     void setLastDimOnTask(boolean lastDimOnTask) {
         mLastDimOnTask = lastDimOnTask;
@@ -1019,16 +1052,16 @@ class TaskFragmentContainer {
         return mAssociatedActivityToken;
     }
 
-    boolean isAssociatedWithActivity() {
-        return mAssociatedActivityToken != null;
-    }
-
     /**
      * Returns {@code true} if the overlay container should be always on top, which should be
      * a non-fill-parent overlay without activity association.
      */
     boolean isAlwaysOnTopOverlay() {
-        return isOverlay() && !isAssociatedWithActivity();
+        return isOverlay() && mAssociatedActivityToken == null;
+    }
+
+    boolean isOverlayWithActivityAssociation() {
+        return isOverlay() && mAssociatedActivityToken != null;
     }
 
     @Override
@@ -1050,7 +1083,7 @@ class TaskFragmentContainer {
                 + " runningActivityCount=" + getRunningActivityCount()
                 + " isFinished=" + mIsFinished
                 + " overlayTag=" + mOverlayTag
-                + " associatedActivity" + mAssociatedActivityToken
+                + " associatedActivityToken=" + mAssociatedActivityToken
                 + " lastRequestedBounds=" + mLastRequestedBounds
                 + " pendingAppearedActivities=" + mPendingAppearedActivities
                 + (includeContainersToFinishOnExit ? " containersToFinishOnExit="

@@ -3295,8 +3295,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mOccludesParent = occludesParent;
         setMainWindowOpaque(occludesParent);
 
-        if (changed && task != null && !occludesParent) {
-            getRootTask().convertActivityToTranslucent(this);
+        if (changed && task != null) {
+            if (!occludesParent) {
+                getRootTask().convertActivityToTranslucent(this);
+            } else {
+                getRootTask().convertActivityFromTranslucent(this);
+            }
         }
         // Always ensure visibility if this activity doesn't occlude parent, so the
         // {@link #returningOptions} of the activity under this one can be applied in
@@ -4132,6 +4136,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         boolean removedFromHistory = false;
 
         cleanUp(false /* cleanServices */, false /* setState */);
+        setVisibleRequested(false);
 
         if (hasProcess()) {
             app.removeActivity(this, true /* keepAssociation */);
@@ -4295,6 +4300,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     void cleanUp(boolean cleanServices, boolean setState) {
         getTaskFragment().cleanUpActivityReferences(this);
         clearLastParentBeforePip();
+
+        // Abort and reset state if the scence transition is playing.
+        final Task rootTask = getRootTask();
+        if (rootTask != null) {
+            rootTask.abortTranslucentActivityWaiting(this);
+        }
 
         // Clean up the splash screen if it was still displayed.
         cleanUpSplashScreen();
@@ -8020,10 +8031,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     void prepareSurfaces() {
+        final boolean isDecorSurfaceBoosted =
+                getTask() != null && getTask().isDecorSurfaceBoosted();
         final boolean show = (isVisible()
                 // Ensure that the activity content is hidden when the decor surface is boosted to
                 // prevent UI redressing attack.
-                && !getTask().isDecorSurfaceBoosted())
+                && !isDecorSurfaceBoosted)
                 || isAnimating(PARENTS, ANIMATION_TYPE_APP_TRANSITION | ANIMATION_TYPE_RECENTS
                         | ANIMATION_TYPE_PREDICT_BACK);
 
@@ -8864,6 +8877,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // calculate the override, skip the override.
             return;
         }
+        // Make sure the orientation related fields will be updated by the override insets, because
+        // fixed rotation has assigned the fields from display's configuration.
+        if (hasFixedRotationTransform()) {
+            inOutConfig.windowConfiguration.setAppBounds(null);
+            inOutConfig.screenWidthDp = Configuration.SCREEN_WIDTH_DP_UNDEFINED;
+            inOutConfig.screenHeightDp = Configuration.SCREEN_HEIGHT_DP_UNDEFINED;
+            inOutConfig.smallestScreenWidthDp = Configuration.SMALLEST_SCREEN_WIDTH_DP_UNDEFINED;
+            inOutConfig.orientation = ORIENTATION_UNDEFINED;
+        }
 
         // Override starts here.
         final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
@@ -8900,8 +8922,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // For the case of PIP transition and multi-window environment, the
             // smallestScreenWidthDp is handled already. Override only if the app is in
             // fullscreen.
-            DisplayInfo info = new DisplayInfo();
-            mDisplayContent.getDisplay().getDisplayInfo(info);
+            final DisplayInfo info = new DisplayInfo(mDisplayContent.getDisplayInfo());
             mDisplayContent.computeSizeRanges(info, rotated, dw, dh,
                     mDisplayContent.getDisplayMetrics().density,
                     inOutConfig, true /* overrideConfig */);
@@ -9658,6 +9679,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return false;
     }
 
+    @Override
+    protected boolean setOverrideGender(Configuration requestsTmpConfig, int gender) {
+        return WindowProcessController.applyConfigGenderOverride(
+                requestsTmpConfig, gender, mAtmService.mGrammaticalManagerInternal, getUid());
+    }
+
     @VisibleForTesting
     @Override
     Rect getAnimationBounds(int appRootTaskClipMode) {
@@ -9983,10 +10010,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (mLetterboxUiController.shouldApplyUserMinAspectRatioOverride()) {
             return mLetterboxUiController.getUserMinAspectRatio();
         }
-        if (!mLetterboxUiController.shouldOverrideMinAspectRatio()) {
+        if (!mLetterboxUiController.shouldOverrideMinAspectRatio()
+                && !mLetterboxUiController.shouldOverrideMinAspectRatioForCamera()) {
             return info.getMinAspectRatio();
         }
-
         if (info.isChangeEnabled(OVERRIDE_MIN_ASPECT_RATIO_PORTRAIT_ONLY)
                 && !ActivityInfo.isFixedOrientationPortrait(
                         getOverrideOrientation())) {
@@ -10105,6 +10132,16 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         return updateReportedConfigurationAndSend();
+    }
+
+    /**
+     * @return {@code true} if the Camera is active for the current activity
+     */
+    boolean isCameraActive() {
+        return mDisplayContent != null
+                && mDisplayContent.getDisplayRotationCompatPolicy() != null
+                && mDisplayContent.getDisplayRotationCompatPolicy()
+                    .isCameraActive(this, /* mustBeFullscreen */ true);
     }
 
     boolean updateReportedConfigurationAndSend() {
@@ -11012,8 +11049,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             final Rect filledContainerBounds = mIsInFixedOrientationOrAspectRatioLetterbox
                     ? letterboxedContainerBounds
                     : task != null ? task.getBounds() : display.getBounds();
-            final int filledContainerRotation = task != null
-                    ? task.getConfiguration().windowConfiguration.getRotation()
+            final boolean useActivityRotation = container.hasFixedRotationTransform()
+                    && mIsInFixedOrientationOrAspectRatioLetterbox;
+            final int filledContainerRotation = useActivityRotation
+                    ? container.getWindowConfiguration().getRotation()
                     : display.getConfiguration().windowConfiguration.getRotation();
             final Point dimensions = getRotationZeroDimensions(
                     filledContainerBounds, filledContainerRotation);
@@ -11259,7 +11298,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * Otherwise, return the creation time of the top window.
      */
     long getLastWindowCreateTime() {
-        final WindowState window = getWindow(win -> true);
+        final WindowState window = getWindow(alwaysTruePredicate());
         return window != null && window.mAttrs.type != TYPE_BASE_APPLICATION
                 ? window.getCreateTime()
                 : createTime;

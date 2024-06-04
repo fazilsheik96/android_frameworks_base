@@ -16,52 +16,83 @@
 
 package com.android.systemui.qs.panels.ui.compose
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.dimensionResource
-import androidx.compose.ui.res.integerResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.qs.panels.domain.interactor.IconTilesInteractor
+import com.android.systemui.qs.panels.domain.interactor.InfiniteGridSizeInteractor
+import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.TileViewModel
+import com.android.systemui.qs.pipeline.shared.TileSpec
 import com.android.systemui.res.R
 import javax.inject.Inject
 
-class InfiniteGridLayout @Inject constructor() : GridLayout {
+@SysUISingleton
+class InfiniteGridLayout
+@Inject
+constructor(
+    private val iconTilesInteractor: IconTilesInteractor,
+    private val gridSizeInteractor: InfiniteGridSizeInteractor
+) : GridLayout {
 
     @Composable
     override fun TileGrid(
         tiles: List<TileViewModel>,
         modifier: Modifier,
-        tile: @Composable (TileViewModel) -> Unit
     ) {
         DisposableEffect(tiles) {
             val token = Any()
             tiles.forEach { it.startListening(token) }
             onDispose { tiles.forEach { it.stopListening(token) } }
         }
+        val iconTilesSpecs by iconTilesInteractor.iconTilesSpecs.collectAsStateWithLifecycle()
+        val columns by gridSizeInteractor.columns.collectAsStateWithLifecycle()
 
-        LazyVerticalGrid(
-            columns =
-                GridCells.Fixed(
-                    integerResource(R.integer.quick_settings_infinite_grid_num_columns)
-                ),
-            verticalArrangement =
-                Arrangement.spacedBy(dimensionResource(R.dimen.qs_tile_margin_vertical)),
-            horizontalArrangement =
-                Arrangement.spacedBy(dimensionResource(R.dimen.qs_tile_margin_horizontal)),
-            modifier = modifier
-        ) {
-            tiles.forEach { item(span = { it.span() }) { tile(it) } }
+        TileLazyGrid(modifier = modifier, columns = GridCells.Fixed(columns)) {
+            items(
+                tiles.size,
+                span = { index ->
+                    val iconOnly = iconTilesSpecs.contains(tiles[index].spec)
+                    if (iconOnly) {
+                        GridItemSpan(1)
+                    } else {
+                        GridItemSpan(2)
+                    }
+                }
+            ) { index ->
+                Tile(
+                    tiles[index],
+                    iconTilesSpecs.contains(tiles[index].spec),
+                    Modifier.height(dimensionResource(id = R.dimen.qs_tile_height))
+                )
+            }
         }
     }
 
-    private fun TileViewModel.span(): GridItemSpan =
-        if (iconOnly) {
-            GridItemSpan(1)
-        } else {
-            GridItemSpan(2)
-        }
+    @Composable
+    override fun EditTileGrid(
+        tiles: List<EditTileViewModel>,
+        modifier: Modifier,
+        onAddTile: (TileSpec, Int) -> Unit,
+        onRemoveTile: (TileSpec) -> Unit,
+    ) {
+        val iconOnlySpecs by iconTilesInteractor.iconTilesSpecs.collectAsStateWithLifecycle()
+        val columns by gridSizeInteractor.columns.collectAsStateWithLifecycle()
+
+        DefaultEditTileGrid(
+            tiles = tiles,
+            iconOnlySpecs = iconOnlySpecs,
+            columns = GridCells.Fixed(columns),
+            modifier = modifier,
+            onAddTile = onAddTile,
+            onRemoveTile = onRemoveTile,
+        )
+    }
 }

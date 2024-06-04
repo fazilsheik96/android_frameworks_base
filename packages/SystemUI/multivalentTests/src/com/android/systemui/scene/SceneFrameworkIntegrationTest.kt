@@ -52,6 +52,7 @@ import com.android.systemui.keyguard.ui.viewmodel.KeyguardLongPressViewModel
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenSceneViewModel
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.media.controls.domain.pipeline.MediaDataManager
+import com.android.systemui.media.controls.domain.pipeline.interactor.mediaCarouselInteractor
 import com.android.systemui.power.domain.interactor.PowerInteractor.Companion.setAsleepForTest
 import com.android.systemui.power.domain.interactor.PowerInteractor.Companion.setAwakeForTest
 import com.android.systemui.power.domain.interactor.powerInteractor
@@ -209,7 +210,7 @@ class SceneFrameworkIntegrationTest : SysuiTestCase() {
                 qsSceneAdapter = qsFlexiglassAdapter,
                 notifications = kosmos.notificationsPlaceholderViewModel,
                 brightnessMirrorViewModel = kosmos.brightnessMirrorViewModel,
-                mediaDataManager = mediaDataManager,
+                mediaCarouselInteractor = kosmos.mediaCarouselInteractor,
                 shadeInteractor = kosmos.shadeInteractor,
                 footerActionsController = kosmos.footerActionsController,
                 footerActionsViewModelFactory = kosmos.footerActionsViewModelFactory,
@@ -496,7 +497,7 @@ class SceneFrameworkIntegrationTest : SysuiTestCase() {
      */
     private fun getCurrentSceneInUi(): SceneKey {
         return when (val state = transitionState.value) {
-            is ObservableTransitionState.Idle -> state.scene
+            is ObservableTransitionState.Idle -> state.currentScene
             is ObservableTransitionState.Transition -> state.fromScene
         }
     }
@@ -558,6 +559,7 @@ class SceneFrameworkIntegrationTest : SysuiTestCase() {
             ObservableTransitionState.Transition(
                 fromScene = getCurrentSceneInUi(),
                 toScene = to,
+                currentScene = flowOf(to),
                 progress = progressFlow,
                 isInitiatedByUserInput = false,
                 isUserInputOngoing = flowOf(false),

@@ -15,6 +15,8 @@
  */
 package com.android.systemui.statusbar;
 
+import static com.android.systemui.Flags.mediaControlsUserInitiatedDismiss;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Notification;
@@ -29,6 +31,7 @@ import android.service.notification.StatusBarNotification;
 import android.util.Log;
 
 import com.android.systemui.Dumpable;
+import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.media.controls.domain.pipeline.MediaDataManager;
 import com.android.systemui.media.controls.shared.model.MediaData;
@@ -47,6 +50,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 /**
  * Handles tasks and state related to media notifications. For example, there is a 'current' media
@@ -74,6 +78,8 @@ public class NotificationMediaManager implements Dumpable {
 
     private final Context mContext;
     private final ArrayList<MediaListener> mMediaListeners;
+
+    private final Executor mBackgroundExecutor;
 
     protected NotificationPresenter mPresenter;
     private MediaController mMediaController;
@@ -115,13 +121,15 @@ public class NotificationMediaManager implements Dumpable {
             NotifPipeline notifPipeline,
             NotifCollection notifCollection,
             MediaDataManager mediaDataManager,
-            DumpManager dumpManager) {
+            DumpManager dumpManager,
+            @Background Executor backgroundExecutor) {
         mContext = context;
         mMediaListeners = new ArrayList<>();
         mVisibilityProvider = visibilityProvider;
         mMediaDataManager = mediaDataManager;
         mNotifPipeline = notifPipeline;
         mNotifCollection = notifCollection;
+        mBackgroundExecutor = backgroundExecutor;
 
         setupNotifPipeline();
 
@@ -169,14 +177,18 @@ public class NotificationMediaManager implements Dumpable {
             }
 
             @Override
-            public void onMediaDataRemoved(@NonNull String key) {
+            public void onMediaDataRemoved(@NonNull String key, boolean userInitiated) {
+                if (mediaControlsUserInitiatedDismiss() && !userInitiated) {
+                    // Dismissing the notification will send the app's deleteIntent, so ignore if
+                    // this was an automatic removal
+                    Log.d(TAG, "Not dismissing " + key + " because it was removed by the system");
+                    return;
+                }
                 mNotifPipeline.getAllNotifs()
                         .stream()
                         .filter(entry -> Objects.equals(entry.getKey(), key))
                         .findAny()
                         .ifPresent(entry -> {
-                            // TODO(b/160713608): "removing" this notification won't happen and
-                            //  won't send the 'deleteIntent' if the notification is ongoing.
                             mNotifCollection.dismissNotification(entry,
                                     getDismissedByUserStats(entry));
                         });
@@ -381,6 +393,7 @@ public class NotificationMediaManager implements Dumpable {
                 Log.v(TAG, "DEBUG_MEDIA: Disconnecting from old controller: "
                         + mMediaController.getPackageName());
             }
+            // TODO(b/336612071): move to background thread
             mMediaController.unregisterCallback(mMediaListener);
         }
         mMediaController = null;

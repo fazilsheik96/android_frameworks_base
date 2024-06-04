@@ -63,7 +63,7 @@ constructor(
     private val mediaDeviceManager: MediaDeviceManager,
     private val mediaDataCombineLatest: MediaDataCombineLatest,
     private val mediaDataFilter: MediaDataFilterImpl,
-    mediaFilterRepository: MediaFilterRepository,
+    private val mediaFilterRepository: MediaFilterRepository,
     private val mediaFlags: MediaFlags,
 ) : MediaDataManager, CoreStartable {
 
@@ -123,18 +123,8 @@ constructor(
                 initialValue = false,
             )
 
-    /** The most recent sorted set for user media instances */
-    val sortedMedia: StateFlow<List<MediaCommonModel>> =
-        mediaFilterRepository.sortedMedia
-            .mapLatest { it.values.toList() }
-            .stateIn(
-                scope = applicationScope,
-                started = SharingStarted.WhileSubscribed(),
-                initialValue = emptyList(),
-            )
-
-    /** Whether the current change in media was done by clicking on a recommendation */
-    val isMediaFromRec: StateFlow<Boolean> = mediaFilterRepository.isMediaFromRec
+    /** The current list for user media instances */
+    val currentMedia: StateFlow<List<MediaCommonModel>> = mediaFilterRepository.currentMedia
 
     override fun start() {
         if (!mediaFlags.isMediaControlsRefactorEnabled()) {
@@ -157,7 +147,7 @@ constructor(
 
         // Set up links back into the pipeline for listeners that need to send events upstream.
         mediaTimeoutListener.timeoutCallback = { key: String, timedOut: Boolean ->
-            setInactive(key, timedOut)
+            mediaDataProcessor.setInactive(key, timedOut)
         }
         mediaTimeoutListener.stateCallback = { key: String, state: PlaybackState ->
             mediaDataProcessor.updateState(key, state)
@@ -215,12 +205,12 @@ constructor(
         )
     }
 
-    override fun dismissMediaData(key: String, delay: Long): Boolean {
-        return mediaDataProcessor.dismissMediaData(key, delay)
+    override fun dismissMediaData(key: String, delay: Long, userInitiated: Boolean): Boolean {
+        return mediaDataProcessor.dismissMediaData(key, delay, userInitiated)
     }
 
     fun removeMediaControl(instanceId: InstanceId, delay: Long) {
-        mediaDataProcessor.dismissMediaData(instanceId, delay)
+        mediaDataProcessor.dismissMediaData(instanceId, delay, userInitiated = false)
     }
 
     override fun dismissSmartspaceRecommendation(key: String, delay: Long) {
@@ -250,6 +240,10 @@ constructor(
     override fun hasAnyMedia() = hasAnyMedia.value
 
     override fun isRecommendationActive() = mediaDataRepository.smartspaceMediaData.value.isActive
+
+    fun reorderMedia() {
+        mediaFilterRepository.setOrderedMedia()
+    }
 
     /** Add a listener for internal events. */
     private fun addInternalListener(listener: MediaDataManager.Listener) =

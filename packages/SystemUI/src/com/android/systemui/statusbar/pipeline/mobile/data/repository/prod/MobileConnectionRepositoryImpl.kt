@@ -16,7 +16,7 @@
 
 /*
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -194,21 +194,33 @@ class MobileConnectionRepositoryImpl(
                 val callback =
                     object :
                         TelephonyCallback(),
-                        TelephonyCallback.ServiceStateListener,
-                        TelephonyCallback.SignalStrengthsListener,
-                        TelephonyCallback.DataConnectionStateListener,
-                        TelephonyCallback.DataActivityListener,
                         TelephonyCallback.CarrierNetworkListener,
+                        TelephonyCallback.CarrierRoamingNtnModeListener,
+                        TelephonyCallback.DataActivityListener,
+                        TelephonyCallback.DataConnectionStateListener,
+                        TelephonyCallback.DataEnabledListener,
                         TelephonyCallback.DisplayInfoListener,
-                        TelephonyCallback.DataEnabledListener {
-                        override fun onServiceStateChanged(serviceState: ServiceState) {
-                            logger.logOnServiceStateChanged(serviceState, subId)
-                            trySend(CallbackEvent.OnServiceStateChanged(serviceState))
+                        TelephonyCallback.ServiceStateListener,
+                        TelephonyCallback.SignalStrengthsListener {
+
+                        override fun onCarrierNetworkChange(active: Boolean) {
+                            logger.logOnCarrierNetworkChange(active, subId)
+                            trySend(CallbackEvent.OnCarrierNetworkChange(active))
                         }
 
-                        override fun onSignalStrengthsChanged(signalStrength: SignalStrength) {
-                            logger.logOnSignalStrengthsChanged(signalStrength, subId)
-                            trySend(CallbackEvent.OnSignalStrengthChanged(signalStrength))
+                        override fun onCarrierRoamingNtnModeChanged(active: Boolean) {
+                            logger.logOnCarrierRoamingNtnModeChanged(active)
+                            trySend(CallbackEvent.OnCarrierRoamingNtnModeChanged(active))
+                        }
+
+                        override fun onDataActivity(direction: Int) {
+                            logger.logOnDataActivity(direction, subId)
+                            trySend(CallbackEvent.OnDataActivity(direction))
+                        }
+
+                        override fun onDataEnabledChanged(enabled: Boolean, reason: Int) {
+                            logger.logOnDataEnabledChanged(enabled, subId)
+                            trySend(CallbackEvent.OnDataEnabledChanged(enabled))
                         }
 
                         override fun onDataConnectionStateChanged(
@@ -219,16 +231,6 @@ class MobileConnectionRepositoryImpl(
                             trySend(CallbackEvent.OnDataConnectionStateChanged(dataState))
                         }
 
-                        override fun onDataActivity(direction: Int) {
-                            logger.logOnDataActivity(direction, subId)
-                            trySend(CallbackEvent.OnDataActivity(direction))
-                        }
-
-                        override fun onCarrierNetworkChange(active: Boolean) {
-                            logger.logOnCarrierNetworkChange(active, subId)
-                            trySend(CallbackEvent.OnCarrierNetworkChange(active))
-                        }
-
                         override fun onDisplayInfoChanged(
                             telephonyDisplayInfo: TelephonyDisplayInfo
                         ) {
@@ -236,9 +238,14 @@ class MobileConnectionRepositoryImpl(
                             trySend(CallbackEvent.OnDisplayInfoChanged(telephonyDisplayInfo))
                         }
 
-                        override fun onDataEnabledChanged(enabled: Boolean, reason: Int) {
-                            logger.logOnDataEnabledChanged(enabled, subId)
-                            trySend(CallbackEvent.OnDataEnabledChanged(enabled))
+                        override fun onServiceStateChanged(serviceState: ServiceState) {
+                            logger.logOnServiceStateChanged(serviceState, subId)
+                            trySend(CallbackEvent.OnServiceStateChanged(serviceState))
+                        }
+
+                        override fun onSignalStrengthsChanged(signalStrength: SignalStrength) {
+                            logger.logOnSignalStrengthsChanged(signalStrength, subId)
+                            trySend(CallbackEvent.OnSignalStrengthChanged(signalStrength))
                         }
                     }
 
@@ -257,8 +264,10 @@ class MobileConnectionRepositoryImpl(
             val listener =
                 object : IFiveGStateListener {
                     override fun onStateChanged(serviceState: FiveGServiceState) {
-                        logger.logOnNrIconTypeChanged(serviceState.nrIconType, subId)
-                        trySend(CallbackEvent.OnNrIconTypeChanged(serviceState.nrIconType))
+                        logger.logOnNrIconTypeChanged(serviceState.nrIconType,
+                            serviceState.is6Rx, subId)
+                        trySend(CallbackEvent.OnNrIconTypeChanged(serviceState.nrIconType,
+                            serviceState.is6Rx))
                     }
 
                     override fun onCiwlanAvailableChanged(available: Boolean) {
@@ -276,7 +285,7 @@ class MobileConnectionRepositoryImpl(
 
     private val fiveGState: Flow<TelephonyCallbackState> = run {
         val initial = flowOf(TelephonyCallbackState()
-            .applyEvent(CallbackEvent.OnNrIconTypeChanged(NrIconType.TYPE_NONE))
+            .applyEvent(CallbackEvent.OnNrIconTypeChanged(NrIconType.TYPE_NONE, false))
             .applyEvent(CallbackEvent.OnCiwlanAvailableChanged(false)))
         if (slotIndexForSubId == null) {
             initial
@@ -374,8 +383,8 @@ class MobileConnectionRepositoryImpl(
 
     override val isNonTerrestrial =
         callbackEvents
-            .mapNotNull { it.onServiceStateChanged }
-            .map { it.serviceState.isUsingNonTerrestrialNetwork }
+            .mapNotNull { it.onCarrierRoamingNtnModeChanged }
+            .map { it.active }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     override val isGsm =
@@ -592,6 +601,12 @@ class MobileConnectionRepositoryImpl(
             .mapNotNull {it.onNrIconTypeChanged }
             .map { it.nrIconType}
             .stateIn(scope, SharingStarted.WhileSubscribed(), NrIconType.TYPE_NONE)
+
+    override val is6Rx: StateFlow<Boolean> =
+        fiveGState
+            .mapNotNull {it.onNrIconTypeChanged }
+            .map { it.is6Rx}
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     private val dataRoamingSettingChangedEvent: Flow<Unit> = conflatedCallbackFlow {
         val observer =
@@ -851,6 +866,8 @@ private fun Intent.carrierId(): Int =
 sealed interface CallbackEvent {
     data class OnCarrierNetworkChange(val active: Boolean) : CallbackEvent
 
+    data class OnCarrierRoamingNtnModeChanged(val active: Boolean) : CallbackEvent
+
     data class OnDataActivity(val direction: Int) : CallbackEvent
 
     data class OnDataConnectionStateChanged(val dataState: Int) : CallbackEvent
@@ -863,7 +880,7 @@ sealed interface CallbackEvent {
 
     data class OnSignalStrengthChanged(val signalStrength: SignalStrength) : CallbackEvent
 
-    data class OnNrIconTypeChanged(val nrIconType: Int) : CallbackEvent
+    data class OnNrIconTypeChanged(val nrIconType: Int, val is6Rx: Boolean) : CallbackEvent
 
     data class OnCiwlanAvailableChanged(val available: Boolean): CallbackEvent
 }
@@ -875,6 +892,7 @@ sealed interface CallbackEvent {
 data class TelephonyCallbackState(
     val onDataActivity: CallbackEvent.OnDataActivity? = null,
     val onCarrierNetworkChange: CallbackEvent.OnCarrierNetworkChange? = null,
+    val onCarrierRoamingNtnModeChanged: CallbackEvent.OnCarrierRoamingNtnModeChanged? = null,
     val onDataConnectionStateChanged: CallbackEvent.OnDataConnectionStateChanged? = null,
     val onDataEnabledChanged: CallbackEvent.OnDataEnabledChanged? = null,
     val onDisplayInfoChanged: CallbackEvent.OnDisplayInfoChanged? = null,
@@ -886,6 +904,9 @@ data class TelephonyCallbackState(
     fun applyEvent(event: CallbackEvent): TelephonyCallbackState {
         return when (event) {
             is CallbackEvent.OnCarrierNetworkChange -> copy(onCarrierNetworkChange = event)
+            is CallbackEvent.OnCarrierRoamingNtnModeChanged -> {
+                copy(onCarrierRoamingNtnModeChanged = event)
+            }
             is CallbackEvent.OnDataActivity -> copy(onDataActivity = event)
             is CallbackEvent.OnDataConnectionStateChanged ->
                 copy(onDataConnectionStateChanged = event)

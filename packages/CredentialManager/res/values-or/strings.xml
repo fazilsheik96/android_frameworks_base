@@ -20,7 +20,7 @@
     <string name="app_name" msgid="4539824758261855508">"କ୍ରେଡେନସିଆଲ ମେନେଜର"</string>
     <string name="string_cancel" msgid="6369133483981306063">"ବାତିଲ କରନ୍ତୁ"</string>
     <string name="string_continue" msgid="1346732695941131882">"ଜାରି ରଖନ୍ତୁ"</string>
-    <string name="string_more_options" msgid="2763852250269945472">"ଅନ୍ୟ ଉପାୟରେ ସେଭ କର"</string>
+    <string name="string_more_options" msgid="2763852250269945472">"ଅନ୍ୟ ଭାବେ ସେଭ କରନ୍ତୁ"</string>
     <string name="string_learn_more" msgid="4541600451688392447">"ଅଧିକ ଜାଣନ୍ତୁ"</string>
     <string name="content_description_show_password" msgid="3283502010388521607">"ପାସୱାର୍ଡ ଦେଖାନ୍ତୁ"</string>
     <string name="content_description_hide_password" msgid="6841375971631767996">"ପାସୱାର୍ଡ ଲୁଚାନ୍ତୁ"</string>
@@ -57,9 +57,9 @@
     <string name="set_as_default" msgid="4415328591568654603">"ଡିଫଲ୍ଟ ଭାବେ ସେଟ କରନ୍ତୁ"</string>
     <string name="settings" msgid="6536394145760913145">"ସେଟିଂସ"</string>
     <string name="use_once" msgid="9027366575315399714">"ଥରେ ବ୍ୟବହାର କରନ୍ତୁ"</string>
-    <string name="more_options_usage_passwords_passkeys" msgid="3470113942332934279">"<xliff:g id="PASSWORDSNUMBER">%1$s</xliff:g>ଟି ପାସୱାର୍ଡ • <xliff:g id="PASSKEYSNUMBER">%2$s</xliff:g>ଟି ପାସକୀ"</string>
-    <string name="more_options_usage_passwords" msgid="1632047277723187813">"<xliff:g id="PASSWORDSNUMBER">%1$s</xliff:g>ଟି ପାସୱାର୍ଡ"</string>
-    <string name="more_options_usage_passkeys" msgid="5390320437243042237">"<xliff:g id="PASSKEYSNUMBER">%1$s</xliff:g>ଟି ପାସକୀ"</string>
+    <string name="more_options_usage_passwords_passkeys" msgid="3470113942332934279">"<xliff:g id="PASSWORDSNUMBER">%1$s</xliff:g> ପାସୱାର୍ଡ • <xliff:g id="PASSKEYSNUMBER">%2$s</xliff:g> ପାସକୀ"</string>
+    <string name="more_options_usage_passwords" msgid="1632047277723187813">"<xliff:g id="PASSWORDSNUMBER">%1$s</xliff:g> ପାସୱାର୍ଡ"</string>
+    <string name="more_options_usage_passkeys" msgid="5390320437243042237">"<xliff:g id="PASSKEYSNUMBER">%1$s</xliff:g> ପାସକୀ"</string>
     <string name="more_options_usage_credentials" msgid="1785697001787193984">"<xliff:g id="TOTALCREDENTIALSNUMBER">%1$s</xliff:g>ଟି କ୍ରେଡେନସିଆଲ"</string>
     <string name="passkey_before_subtitle" msgid="2448119456208647444">"ପାସକୀ"</string>
     <string name="another_device" msgid="5147276802037801217">"ଅନ୍ୟ ଏକ ଡିଭାଇସ"</string>

@@ -31,6 +31,8 @@ import com.android.systemui.animation.AnimationFeatureFlags;
 import com.android.systemui.animation.DialogTransitionAnimator;
 import com.android.systemui.bouncer.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpHandler;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.media.controls.domain.pipeline.MediaDataManager;
@@ -55,10 +57,10 @@ import com.android.systemui.statusbar.notification.collection.render.Notificatio
 import com.android.systemui.statusbar.phone.CentralSurfacesImpl;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
 import com.android.systemui.statusbar.phone.ManagedProfileControllerImpl;
-import com.android.systemui.statusbar.phone.StatusBarIconController;
-import com.android.systemui.statusbar.phone.StatusBarIconControllerImpl;
-import com.android.systemui.statusbar.phone.StatusBarIconList;
 import com.android.systemui.statusbar.phone.StatusBarRemoteInputCallback;
+import com.android.systemui.statusbar.phone.ui.StatusBarIconController;
+import com.android.systemui.statusbar.phone.ui.StatusBarIconControllerImpl;
+import com.android.systemui.statusbar.phone.ui.StatusBarIconList;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import dagger.Binds;
@@ -67,6 +69,8 @@ import dagger.Module;
 import dagger.Provides;
 import dagger.multibindings.ClassKey;
 import dagger.multibindings.IntoMap;
+
+import java.util.concurrent.Executor;
 
 import javax.inject.Provider;
 
@@ -94,14 +98,16 @@ public interface CentralSurfacesDependenciesModule {
             NotifPipeline notifPipeline,
             NotifCollection notifCollection,
             MediaDataManager mediaDataManager,
-            DumpManager dumpManager) {
+            DumpManager dumpManager,
+            @Background Executor backgroundExecutor) {
         return new NotificationMediaManager(
                 context,
                 visibilityProvider,
                 notifPipeline,
                 notifCollection,
                 mediaDataManager,
-                dumpManager);
+                dumpManager,
+                backgroundExecutor);
     }
 
     /** */
@@ -204,14 +210,16 @@ public interface CentralSurfacesDependenciesModule {
     /** */
     @Provides
     @SysUISingleton
-    static ActivityTransitionAnimator provideActivityTransitionAnimator() {
-        return new ActivityTransitionAnimator();
+    static ActivityTransitionAnimator provideActivityTransitionAnimator(
+            @Main Executor mainExecutor) {
+        return new ActivityTransitionAnimator(mainExecutor);
     }
 
     /** */
     @Provides
     @SysUISingleton
-    static DialogTransitionAnimator provideDialogTransitionAnimator(IDreamManager dreamManager,
+    static DialogTransitionAnimator provideDialogTransitionAnimator(@Main Executor mainExecutor,
+            IDreamManager dreamManager,
             KeyguardStateController keyguardStateController,
             Lazy<AlternateBouncerInteractor> alternateBouncerInteractor,
             InteractionJankMonitor interactionJankMonitor,
@@ -238,7 +246,7 @@ public interface CentralSurfacesDependenciesModule {
             }
         };
         return new DialogTransitionAnimator(
-                callback, interactionJankMonitor, animationFeatureFlags);
+                mainExecutor, callback, interactionJankMonitor, animationFeatureFlags);
     }
 
     /** */

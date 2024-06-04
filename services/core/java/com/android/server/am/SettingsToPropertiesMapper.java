@@ -20,6 +20,8 @@ import android.annotation.NonNull;
 import android.content.ContentResolver;
 import android.database.ContentObserver;
 import android.net.Uri;
+import android.net.LocalSocketAddress;
+import android.net.LocalSocket;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.SystemProperties;
@@ -27,14 +29,28 @@ import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Slog;
+import android.util.proto.ProtoInputStream;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
 
+import android.aconfigd.Aconfigd.StorageRequestMessage;
+import android.aconfigd.Aconfigd.StorageRequestMessages;
+import android.aconfigd.Aconfigd.StorageReturnMessage;
+import android.aconfigd.Aconfigd.StorageReturnMessages;
+import static com.android.aconfig_new_storage.Flags.enableAconfigStorageDaemon;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * Maps system settings to system properties.
@@ -124,6 +140,7 @@ public class SettingsToPropertiesMapper {
         "aoc",
         "app_widgets",
         "arc_next",
+        "art_mainline",
         "avic",
         "biometrics",
         "biometrics_framework",
@@ -180,6 +197,7 @@ public class SettingsToPropertiesMapper {
         "pmw",
         "power",
         "preload_safety",
+        "printing",
         "privacy_infra_policy",
         "resource_manager",
         "responsible_apis",
@@ -218,6 +236,8 @@ public class SettingsToPropertiesMapper {
 
     public static final String NAMESPACE_REBOOT_STAGING = "staged";
     public static final String NAMESPACE_REBOOT_STAGING_DELIMITER = "*";
+
+    public static final String NAMESPACE_LOCAL_OVERRIDES = "device_config_overrides";
 
     private final String[] mGlobalSettings;
 
@@ -320,16 +340,196 @@ public class SettingsToPropertiesMapper {
             NAMESPACE_REBOOT_STAGING,
             AsyncTask.THREAD_POOL_EXECUTOR,
             (DeviceConfig.Properties properties) -> {
-              String scope = properties.getNamespace();
-              for (String key : properties.getKeyset()) {
-                String aconfigPropertyName = makeAconfigFlagStagedPropertyName(key);
-                if (aconfigPropertyName == null) {
-                    log("unable to construct system property for " + scope + "/" + key);
-                    return;
+
+              HashMap<String, HashMap<String, String>> propsToStage =
+                  getStagedFlagsWithValueChange(properties);
+
+              // send prop stage request to sys prop
+              for (HashMap.Entry<String, HashMap<String, String>> entry : propsToStage.entrySet()) {
+                String actualNamespace = entry.getKey();
+                HashMap<String, String> flagValuesToStage = entry.getValue();
+
+                for (String flagName : flagValuesToStage.keySet()) {
+                  String stagedValue = flagValuesToStage.get(flagName);
+                  String propertyName = "next_boot." + makeAconfigFlagPropertyName(
+                      actualNamespace, flagName);
+
+                  if (!propertyName.matches(SYSTEM_PROPERTY_VALID_CHARACTERS_REGEX)
+                      || propertyName.contains(SYSTEM_PROPERTY_INVALID_SUBSTRING)) {
+                    log("unable to construct system property for " + actualNamespace
+                        + "/" + flagName);
+                    continue;
+                  }
+
+                  setProperty(propertyName, stagedValue);
                 }
-                setProperty(aconfigPropertyName, properties.getString(key, null));
               }
-            });
+
+              // send prop stage request to new storage
+              if (enableAconfigStorageDaemon()) {
+                  stageFlagsInNewStorage(propsToStage);
+              }
+
+        });
+
+        // add prop sync callback for flag local overrides
+        DeviceConfig.addOnPropertiesChangedListener(
+            NAMESPACE_LOCAL_OVERRIDES,
+            AsyncTask.THREAD_POOL_EXECUTOR,
+            (DeviceConfig.Properties properties) -> {
+                if (enableAconfigStorageDaemon()) {
+                    setLocalOverridesInNewStorage(properties);
+                }
+        });
+    }
+
+    /**
+     * apply flag local override in aconfig new storage
+     * @param requests: request proto output stream
+     * @return aconfigd socket return as proto input stream
+     */
+    static ProtoInputStream sendAconfigdRequests(ProtoOutputStream requests) {
+        // connect to aconfigd socket
+        LocalSocket client = new LocalSocket();
+        try{
+            client.connect(new LocalSocketAddress(
+                "aconfigd", LocalSocketAddress.Namespace.RESERVED));
+            log("connected to aconfigd socket");
+        } catch (IOException ioe) {
+            log("failed to connect to aconfigd socket", ioe);
+            return null;
+        }
+
+        DataInputStream inputStream = null;
+        DataOutputStream outputStream = null;
+        try {
+            inputStream = new DataInputStream(client.getInputStream());
+            outputStream = new DataOutputStream(client.getOutputStream());
+        } catch (IOException ioe) {
+            log("failed to get local socket iostreams", ioe);
+            return null;
+        }
+
+        // send requests
+        try {
+            byte[] requests_bytes = requests.getBytes();
+            outputStream.writeInt(requests_bytes.length);
+            outputStream.write(requests_bytes, 0, requests_bytes.length);
+            log("flag override requests sent to aconfigd");
+        } catch (IOException ioe) {
+            log("failed to send requests to aconfigd", ioe);
+            return null;
+        }
+
+        // read return
+        try {
+            int num_bytes = inputStream.readInt();
+            ProtoInputStream returns = new ProtoInputStream(inputStream);
+            log("received " + num_bytes + " bytes back from aconfigd");
+            return returns;
+        } catch (IOException ioe) {
+            log("failed to read requests return from aconfigd", ioe);
+            return null;
+        }
+    }
+
+    /**
+     * serialize a flag override request
+     * @param proto
+     */
+    static void writeFlagOverrideRequest(
+        ProtoOutputStream proto, String packageName, String flagName, String flagValue,
+        boolean isLocal) {
+      long msgsToken = proto.start(StorageRequestMessages.MSGS);
+      long msgToken = proto.start(StorageRequestMessage.FLAG_OVERRIDE_MESSAGE);
+      proto.write(StorageRequestMessage.FlagOverrideMessage.PACKAGE_NAME, packageName);
+      proto.write(StorageRequestMessage.FlagOverrideMessage.FLAG_NAME, flagName);
+      proto.write(StorageRequestMessage.FlagOverrideMessage.FLAG_VALUE, flagValue);
+      proto.write(StorageRequestMessage.FlagOverrideMessage.IS_LOCAL, isLocal);
+      proto.end(msgToken);
+      proto.end(msgsToken);
+    }
+
+    /**
+     * deserialize a flag input proto stream and log
+     * @param proto
+     */
+    static void parseAndLogAconfigdReturn(ProtoInputStream proto) throws IOException {
+        while (true) {
+          switch (proto.nextField()) {
+            case (int) StorageReturnMessages.MSGS:
+              long msgsToken = proto.start(StorageReturnMessages.MSGS);
+              switch (proto.nextField()) {
+                case (int) StorageReturnMessage.FLAG_OVERRIDE_MESSAGE:
+                  log("successfully handled override requests");
+                  long msgToken = proto.start(StorageReturnMessage.FLAG_OVERRIDE_MESSAGE);
+                  proto.end(msgToken);
+                  break;
+                case (int) StorageReturnMessage.ERROR_MESSAGE:
+                  String errmsg = proto.readString(StorageReturnMessage.ERROR_MESSAGE);
+                  log("override request failed: " + errmsg);
+                  break;
+                case ProtoInputStream.NO_MORE_FIELDS:
+                  break;
+                default:
+                  log("invalid message type, expecting only flag override return or error message");
+                  break;
+              }
+              proto.end(msgsToken);
+              break;
+            case ProtoInputStream.NO_MORE_FIELDS:
+              return;
+            default:
+              log("invalid message type, expect storage return message");
+              break;
+          }
+        }
+    }
+
+    /**
+     * apply flag local override in aconfig new storage
+     * @param props
+     */
+    static void setLocalOverridesInNewStorage(DeviceConfig.Properties props) {
+        int num_requests = 0;
+        ProtoOutputStream requests = new ProtoOutputStream();
+        for (String flagName : props.getKeyset()) {
+            String flagValue = props.getString(flagName, null);
+            if (flagName == null || flagValue == null) {
+                continue;
+            }
+
+            int idx = flagName.indexOf(":");
+            if (idx == -1 || idx == flagName.length() - 1 || idx == 0) {
+                log("invalid local flag override: " + flagName);
+                continue;
+            }
+            String actualNamespace = flagName.substring(0, idx);
+            String fullFlagName = flagName.substring(idx+1);
+            idx = fullFlagName.lastIndexOf(".");
+            if (idx == -1) {
+              log("invalid flag name: " + fullFlagName);
+              continue;
+            }
+            String packageName = fullFlagName.substring(0, idx);
+            String realFlagName = fullFlagName.substring(idx+1);
+            writeFlagOverrideRequest(requests, packageName, realFlagName, flagValue, true);
+            ++num_requests;
+        }
+
+        if (num_requests == 0) {
+          return;
+        }
+
+        // send requests to aconfigd and obtain the return byte buffer
+        ProtoInputStream returns = sendAconfigdRequests(requests);
+
+        // deserialize back using proto input stream
+        try {
+          parseAndLogAconfigdReturn(returns);
+        } catch (IOException ioe) {
+            log("failed to parse aconfigd return", ioe);
+        }
     }
 
     public static SettingsToPropertiesMapper start(ContentResolver contentResolver) {
@@ -400,33 +600,46 @@ public class SettingsToPropertiesMapper {
         return propertyName;
     }
 
+
     /**
-     * system property name constructing rule for staged aconfig flags, the flag name
-     * is in the form of [namespace]*[actual flag name], we should push the following
-     * to system properties
-     * "next_boot.[actual sys prop name]".
-     * If the name contains invalid characters or substrings for system property name,
-     * will return null.
-     * @param flagName
-     * @return
+     * stage flags in aconfig new storage
+     * @param propsToStage
      */
     @VisibleForTesting
-    static String makeAconfigFlagStagedPropertyName(String flagName) {
-        int idx = flagName.indexOf(NAMESPACE_REBOOT_STAGING_DELIMITER);
-        if (idx == -1 || idx == flagName.length() - 1 || idx == 0) {
-            log("invalid staged flag: " + flagName);
-            return null;
+    static void stageFlagsInNewStorage(HashMap<String, HashMap<String, String>> propsToStage) {
+        // write aconfigd requests proto to proto output stream
+        int num_requests = 0;
+        ProtoOutputStream requests = new ProtoOutputStream();
+        for (HashMap.Entry<String, HashMap<String, String>> entry : propsToStage.entrySet()) {
+            String actualNamespace = entry.getKey();
+            HashMap<String, String> flagValuesToStage = entry.getValue();
+            for (String fullFlagName : flagValuesToStage.keySet()) {
+                String stagedValue = flagValuesToStage.get(fullFlagName);
+                int idx = fullFlagName.lastIndexOf(".");
+                if (idx == -1) {
+                    log("invalid flag name: " + fullFlagName);
+                    continue;
+                }
+                String packageName = fullFlagName.substring(0, idx);
+                String flagName = fullFlagName.substring(idx+1);
+                writeFlagOverrideRequest(requests, packageName, flagName, stagedValue, false);
+                ++num_requests;
+            }
         }
 
-        String propertyName = "next_boot." + makeAconfigFlagPropertyName(
-                flagName.substring(0, idx), flagName.substring(idx+1));
-
-        if (!propertyName.matches(SYSTEM_PROPERTY_VALID_CHARACTERS_REGEX)
-                || propertyName.contains(SYSTEM_PROPERTY_INVALID_SUBSTRING)) {
-            return null;
+        if (num_requests == 0) {
+          return;
         }
 
-        return propertyName;
+        // send requests to aconfigd and obtain the return
+        ProtoInputStream returns = sendAconfigdRequests(requests);
+
+        // deserialize back using proto input stream
+        try {
+          parseAndLogAconfigdReturn(returns);
+        } catch (IOException ioe) {
+            log("failed to parse aconfigd return", ioe);
+        }
     }
 
     /**
@@ -449,6 +662,63 @@ public class SettingsToPropertiesMapper {
         }
 
         return propertyName;
+    }
+
+    /**
+     * Get the flags that need to be staged in sys prop, only these with a real value
+     * change needs to be staged in sys prop. Otherwise, the flag stage is useless and
+     * create performance problem at sys prop side.
+     * @param properties
+     * @return a hash map of namespace name to actual flags to stage
+     */
+    @VisibleForTesting
+    static HashMap<String, HashMap<String, String>> getStagedFlagsWithValueChange(
+        DeviceConfig.Properties properties) {
+
+      // sort flags by actual namespace of the flag
+      HashMap<String, HashMap<String, String>> stagedProps = new HashMap<>();
+      for (String flagName : properties.getKeyset()) {
+        int idx = flagName.indexOf(NAMESPACE_REBOOT_STAGING_DELIMITER);
+        if (idx == -1 || idx == flagName.length() - 1 || idx == 0) {
+          log("invalid staged flag: " + flagName);
+          continue;
+        }
+        String actualNamespace = flagName.substring(0, idx);
+        String actualFlagName = flagName.substring(idx+1);
+        HashMap<String, String> flagStagedValues = stagedProps.get(actualNamespace);
+        if (flagStagedValues == null) {
+          flagStagedValues = new HashMap<String, String>();
+          stagedProps.put(actualNamespace, flagStagedValues);
+        }
+        flagStagedValues.put(actualFlagName, properties.getString(flagName, null));
+      }
+
+      // for each namespace, find flags with real flag value change
+      HashMap<String, HashMap<String, String>> propsToStage = new HashMap<>();
+      for (HashMap.Entry<String, HashMap<String, String>> entry : stagedProps.entrySet()) {
+        String actualNamespace = entry.getKey();
+        HashMap<String, String> flagStagedValues = entry.getValue();
+        Map<String, String> flagCurrentValues = Settings.Config.getStrings(
+            actualNamespace, new ArrayList<String>(flagStagedValues.keySet()));
+
+        HashMap<String, String> flagsToStage = new HashMap<>();
+        for (String flagName : flagStagedValues.keySet()) {
+          String stagedValue = flagStagedValues.get(flagName);
+          String currentValue = flagCurrentValues.get(flagName);
+          if (stagedValue == null) {
+            continue;
+          }
+          if (currentValue == null || !stagedValue.equalsIgnoreCase(currentValue)) {
+            flagsToStage.put(flagName, stagedValue);
+          }
+        }
+
+        if (!flagsToStage.isEmpty()) {
+          propsToStage.put(actualNamespace, flagsToStage);
+        }
+      }
+
+      return propsToStage;
     }
 
     private void setProperty(String key, String value) {

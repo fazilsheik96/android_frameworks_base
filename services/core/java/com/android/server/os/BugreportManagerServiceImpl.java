@@ -19,6 +19,7 @@ package com.android.server.os;
 import static android.app.admin.flags.Flags.onboardingBugreportV2Enabled;
 
 import android.Manifest;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.app.AppOpsManager;
@@ -45,6 +46,7 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.LocalLog;
+import android.util.MutableBoolean;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.Xml;
@@ -68,6 +70,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
@@ -102,6 +105,7 @@ class BugreportManagerServiceImpl extends IDumpstate.Stub {
     private final TelephonyManager mTelephonyManager;
     private final ArraySet<String> mBugreportAllowlistedPackages;
     private final BugreportFileManager mBugreportFileManager;
+    private static final FeatureFlags sFeatureFlags = new FeatureFlagsImpl();
 
 
     @GuardedBy("mLock")
@@ -335,14 +339,22 @@ class BugreportManagerServiceImpl extends IDumpstate.Stub {
     }
 
     static class Injector {
+        class RoleManagerWrapper {
+            List<String> getRoleHolders(@NonNull String roleName) {
+                return mContext.getSystemService(RoleManager.class).getRoleHolders(roleName);
+            }
+        }
+
         Context mContext;
         ArraySet<String> mAllowlistedPackages;
         AtomicFile mMappingFile;
+        RoleManagerWrapper mRoleManagerWrapper;
 
         Injector(Context context, ArraySet<String> allowlistedPackages, AtomicFile mappingFile) {
             mContext = context;
             mAllowlistedPackages = allowlistedPackages;
             mMappingFile = mappingFile;
+            mRoleManagerWrapper = new RoleManagerWrapper();
         }
 
         Context getContext() {
@@ -367,6 +379,10 @@ class BugreportManagerServiceImpl extends IDumpstate.Stub {
 
         void setSystemProperty(String key, String value) {
             SystemProperties.set(key, value);
+        }
+
+        RoleManagerWrapper getRoleManagerWrapper() {
+            return mRoleManagerWrapper;
         }
     }
 
@@ -415,9 +431,51 @@ class BugreportManagerServiceImpl extends IDumpstate.Stub {
         ensureUserCanTakeBugReport(bugreportMode);
 
         Slogf.i(TAG, "Starting bugreport for %s / %d", callingPackage, callingUid);
-        synchronized (mLock) {
-            startBugreportLocked(callingUid, callingPackage, bugreportFd, screenshotFd,
-                    bugreportMode, bugreportFlags, listener, isScreenshotRequested);
+        final MutableBoolean handoffLock = new MutableBoolean(false);
+        if (sFeatureFlags.asyncStartBugreport()) {
+            synchronized (handoffLock) {
+                new Thread(()-> {
+                    try {
+                        synchronized (mLock) {
+                            synchronized (handoffLock) {
+                                handoffLock.value = true;
+                                handoffLock.notifyAll();
+                            }
+                            startBugreportLocked(
+                                    callingUid,
+                                    callingPackage,
+                                    bugreportFd,
+                                    screenshotFd,
+                                    bugreportMode,
+                                    bugreportFlags,
+                                    listener,
+                                    isScreenshotRequested);
+                        }
+                    } catch (Exception e) {
+                        Slog.e(TAG, "Cannot start a new bugreport due to an unknown error", e);
+                        reportError(listener, IDumpstateListener.BUGREPORT_ERROR_RUNTIME_ERROR);
+                    }
+                }, "BugreportManagerServiceThread").start();
+                try {
+                    while (!handoffLock.value) { // handle the rare case of a spurious wakeup
+                        handoffLock.wait(DEFAULT_BUGREPORT_SERVICE_TIMEOUT_MILLIS);
+                    }
+                } catch (InterruptedException e) {
+                    Slog.e(TAG, "Unexpectedly interrupted waiting for startBugreportLocked", e);
+                }
+            }
+        } else {
+            synchronized (mLock) {
+                startBugreportLocked(
+                        callingUid,
+                        callingPackage,
+                        bugreportFd,
+                        screenshotFd,
+                        bugreportMode,
+                        bugreportFlags,
+                        listener,
+                        isScreenshotRequested);
+            }
         }
     }
 
@@ -546,7 +604,7 @@ class BugreportManagerServiceImpl extends IDumpstate.Stub {
         if (!allowlisted) {
             final long token = Binder.clearCallingIdentity();
             try {
-                allowlisted = mContext.getSystemService(RoleManager.class).getRoleHolders(
+                allowlisted = mInjector.getRoleManagerWrapper().getRoleHolders(
                         ROLE_SYSTEM_AUTOMOTIVE_PROJECTION).contains(callingPackage);
             } finally {
                 Binder.restoreCallingIdentity(token);

@@ -1844,8 +1844,8 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED,
                 SecureSettingsProto.Accessibility.ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED);
         dumpSetting(s, p,
-                Settings.Secure.ACCESSIBILITY_FLOATING_MENU_TARGETS,
-                SecureSettingsProto.Accessibility.ACCESSIBILITY_FLOATING_MENU_TARGETS);
+                Settings.Secure.ACCESSIBILITY_GESTURE_TARGETS,
+                SecureSettingsProto.Accessibility.ACCESSIBILITY_GESTURE_TARGETS);
         dumpSetting(s, p,
                 Settings.Secure.ODI_CAPTIONS_VOLUME_UI_ENABLED,
                 SecureSettingsProto.Accessibility.ODI_CAPTIONS_VOLUME_UI_ENABLED);
@@ -2952,9 +2952,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ,
                 SystemSettingsProto.Screen.AUTO_BRIGHTNESS_ADJ);
-        dumpSetting(s, p,
-                Settings.System.SCREEN_BRIGHTNESS_FLOAT,
-                SystemSettingsProto.Screen.BRIGHTNESS_FLOAT);
         p.end(screenToken);
 
         dumpSetting(s, p,

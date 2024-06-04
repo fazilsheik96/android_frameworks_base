@@ -38,6 +38,7 @@ import com.android.systemui.flags.EnableSceneContainer
 import com.android.systemui.flags.Flags
 import com.android.systemui.flags.fakeFeatureFlagsClassic
 import com.android.systemui.kosmos.testScope
+import com.android.systemui.scene.domain.interactor.sceneContainerStartable
 import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.scene.shared.model.fakeSceneDataSource
 import com.android.systemui.testKosmos
@@ -65,12 +66,12 @@ class BouncerViewModelTest : SysuiTestCase() {
 
     private val kosmos = testKosmos()
     private val testScope = kosmos.testScope
-    private val authenticationInteractor by lazy { kosmos.authenticationInteractor }
-    private val bouncerInteractor by lazy { kosmos.bouncerInteractor }
+
     private lateinit var underTest: BouncerViewModel
 
     @Before
     fun setUp() {
+        kosmos.sceneContainerStartable.start()
         underTest = kosmos.bouncerViewModel
     }
 
@@ -160,11 +161,11 @@ class BouncerViewModelTest : SysuiTestCase() {
             assertThat(isInputEnabled).isTrue()
 
             repeat(FakeAuthenticationRepository.MAX_FAILED_AUTH_TRIES_BEFORE_LOCKOUT) {
-                bouncerInteractor.authenticate(WRONG_PIN)
+                kosmos.bouncerInteractor.authenticate(WRONG_PIN)
             }
             assertThat(isInputEnabled).isFalse()
 
-            val lockoutEndMs = authenticationInteractor.lockoutEndTimestamp ?: 0
+            val lockoutEndMs = kosmos.authenticationInteractor.lockoutEndTimestamp ?: 0
             advanceTimeBy(lockoutEndMs - testScope.currentTime)
             assertThat(isInputEnabled).isTrue()
         }

@@ -184,6 +184,7 @@ import android.content.LocusId;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ConfigurationInfo;
+import android.content.pm.FeatureInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
@@ -266,6 +267,7 @@ import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalManagerRegistry;
 import com.android.server.LocalServices;
+import com.android.server.SystemConfig;
 import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
 import com.android.server.UiThread;
@@ -951,7 +953,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         configuration.setGrammaticalGender(
-                mGrammaticalManagerInternal.retrieveSystemGrammaticalGender(configuration));
+                mGrammaticalManagerInternal.mergedFinalSystemGrammaticalGender());
 
         synchronized (mGlobalLock) {
             mForceResizableActivities = forceResizable;
@@ -1376,13 +1378,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
             final boolean debug = ((intent.getFlags() & Intent.FLAG_DEBUG_LOG_RESOLUTION) != 0);
 
+            final int userId = UserHandle.getCallingUserId();
             ActivityInfo aInfo = null;
             try {
                 List<ResolveInfo> resolves =
                         AppGlobals.getPackageManager().queryIntentActivities(
                                 intent, r.resolvedType,
                                 PackageManager.MATCH_DEFAULT_ONLY | STOCK_PM_FLAGS,
-                                UserHandle.getCallingUserId()).getList();
+                                userId).getList();
 
                 // Look for the original activity in the list...
                 final int N = resolves != null ? resolves.size() : 0;
@@ -1467,6 +1470,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                         .setRealCallingPid(-1)
                         .setRealCallingUid(r.launchedFromUid)
                         .setActivityOptions(options)
+                        .setUserId(userId)
                         .execute();
                 r.finishing = wasFinishing;
                 return res == ActivityManager.START_SUCCESS;
@@ -4381,7 +4385,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     protected boolean dumpActivity(FileDescriptor fd, PrintWriter pw, String name, String[] args,
             int opti, boolean dumpAll, boolean dumpVisibleRootTasksOnly,
-            boolean dumpFocusedRootTaskOnly, int displayIdFilter, @UserIdInt int userId) {
+            boolean dumpFocusedRootTaskOnly, int displayIdFilter, @UserIdInt int userId,
+            long timeout) {
         ArrayList<ActivityRecord> activities;
 
         synchronized (mGlobalLock) {
@@ -4426,7 +4431,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     }
                 }
             }
-            dumpActivity("  ", fd, pw, activities.get(i), newArgs, dumpAll);
+            dumpActivity("  ", fd, pw, activities.get(i), newArgs, dumpAll, timeout);
         }
         if (!printedAnything) {
             // Typically happpens when no task matches displayIdFilter
@@ -4440,7 +4445,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      * there is a thread associated with the activity.
      */
     private void dumpActivity(String prefix, FileDescriptor fd, PrintWriter pw,
-            ActivityRecord r, String[] args, boolean dumpAll) {
+            ActivityRecord r, String[] args, boolean dumpAll, long timeout) {
         String innerPrefix = prefix + "  ";
         IApplicationThread appThread = null;
         synchronized (mGlobalLock) {
@@ -4471,7 +4476,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             pw.flush();
             try (TransferPipe tp = new TransferPipe()) {
                 appThread.dumpActivity(tp.getWriteFd(), r.token, innerPrefix, args);
-                tp.go(fd);
+                tp.go(fd, timeout);
             } catch (IOException e) {
                 pw.println(innerPrefix + "Failure while dumping the activity: " + e);
             } catch (RemoteException e) {
@@ -6982,7 +6987,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 boolean dumpFocusedRootTaskOnly, int displayIdFilter,
                 @UserIdInt int userId) {
             return ActivityTaskManagerService.this.dumpActivity(fd, pw, name, args, opti, dumpAll,
-                    dumpVisibleRootTasksOnly, dumpFocusedRootTaskOnly, displayIdFilter, userId);
+                    dumpVisibleRootTasksOnly, dumpFocusedRootTaskOnly, displayIdFilter, userId,
+                    /* timeout= */ 5000);
         }
 
         @Override
@@ -7410,7 +7416,26 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    /** Cache the return value for {@link #isPip2ExperimentEnabled()} */
+    private static Boolean sIsPip2ExperimentEnabled = null;
+
+    /**
+     * @return {@code true} if PiP2 implementation should be used. Besides the trunk stable flag,
+     * system property can be used to override this read only flag during development.
+     * It's currently limited to phone form factor, i.e., not enabled on ARC / TV.
+     */
     static boolean isPip2ExperimentEnabled() {
-        return Flags.enablePip2Implementation();
+        if (sIsPip2ExperimentEnabled == null) {
+            final FeatureInfo arcFeature = SystemConfig.getInstance().getAvailableFeatures().get(
+                    "org.chromium.arc");
+            final FeatureInfo tvFeature = SystemConfig.getInstance().getAvailableFeatures().get(
+                    FEATURE_LEANBACK);
+            final boolean isArc = arcFeature != null && arcFeature.version >= 0;
+            final boolean isTv = tvFeature != null && tvFeature.version >= 0;
+            sIsPip2ExperimentEnabled = SystemProperties.getBoolean(
+                    "persist.wm_shell.pip2", false)
+                    || (Flags.enablePip2Implementation() && !isArc && !isTv);
+        }
+        return sIsPip2ExperimentEnabled;
     }
 }

@@ -25,13 +25,13 @@ import android.platform.test.flag.junit.FlagsParameterization
 import androidx.test.filters.SmallTest
 import com.android.systemui.Flags.FLAG_CENTRALIZED_STATUS_BAR_HEIGHT_FIX
 import com.android.systemui.Flags.FLAG_MIGRATE_CLOCKS_TO_BLUEPRINT
-import com.android.systemui.Flags.FLAG_SCENE_CONTAINER
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.common.shared.model.NotificationContainerBounds
 import com.android.systemui.common.ui.data.repository.fakeConfigurationRepository
 import com.android.systemui.coroutines.collectLastValue
 import com.android.systemui.coroutines.collectValues
 import com.android.systemui.flags.BrokenWithSceneContainer
+import com.android.systemui.flags.DisableSceneContainer
 import com.android.systemui.flags.EnableSceneContainer
 import com.android.systemui.flags.Flags
 import com.android.systemui.flags.andSceneContainer
@@ -51,9 +51,8 @@ import com.android.systemui.keyguard.ui.viewmodel.aodBurnInViewModel
 import com.android.systemui.keyguard.ui.viewmodel.keyguardRootViewModel
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.res.R
-import com.android.systemui.scene.shared.flag.SceneContainerFlag
-import com.android.systemui.shade.data.repository.shadeRepository
 import com.android.systemui.shade.mockLargeScreenHeaderHelper
+import com.android.systemui.shade.shadeTestUtil
 import com.android.systemui.statusbar.notification.stack.domain.interactor.sharedNotificationContainerInteractor
 import com.android.systemui.testKosmos
 import com.android.systemui.util.mockito.any
@@ -63,6 +62,7 @@ import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
@@ -76,7 +76,7 @@ import platform.test.runner.parameterized.Parameters
 @RunWith(ParameterizedAndroidJunit4::class)
 // SharedNotificationContainerViewModel is only bound when FLAG_MIGRATE_CLOCKS_TO_BLUEPRINT is on
 @EnableFlags(FLAG_MIGRATE_CLOCKS_TO_BLUEPRINT)
-class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : SysuiTestCase() {
+class SharedNotificationContainerViewModelTest(flags: FlagsParameterization) : SysuiTestCase() {
 
     companion object {
         @JvmStatic
@@ -90,7 +90,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
     }
 
     init {
-        mSetFlagsRule.setFlagsParameterization(flags!!)
+        mSetFlagsRule.setFlagsParameterization(flags)
     }
 
     val aodBurnInViewModel = mock(AodBurnInViewModel::class.java)
@@ -108,18 +108,25 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
     val testScope = kosmos.testScope
     val configurationRepository
         get() = kosmos.fakeConfigurationRepository
+
     val keyguardRepository
         get() = kosmos.fakeKeyguardRepository
+
     val keyguardInteractor
         get() = kosmos.keyguardInteractor
+
     val keyguardRootViewModel
         get() = kosmos.keyguardRootViewModel
+
     val keyguardTransitionRepository
         get() = kosmos.fakeKeyguardTransitionRepository
-    val shadeRepository
-        get() = kosmos.shadeRepository
+
+    val shadeTestUtil
+        get() = kosmos.shadeTestUtil
+
     val sharedNotificationContainerInteractor
         get() = kosmos.sharedNotificationContainerInteractor
+
     val largeScreenHeaderHelper
         get() = kosmos.mockLargeScreenHeaderHelper
 
@@ -127,7 +134,6 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
 
     @Before
     fun setUp() {
-        assertThat(SceneContainerFlag.isEnabled).isEqualTo(SceneContainerFlag.isEnabled)
         overrideResource(R.bool.config_use_split_notification_shade, false)
         movementFlow = MutableStateFlow(BurnInModel())
         whenever(aodBurnInViewModel.movement(any())).thenReturn(movementFlow)
@@ -234,7 +240,8 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @DisableFlags(FLAG_CENTRALIZED_STATUS_BAR_HEIGHT_FIX, FLAG_SCENE_CONTAINER)
+    @DisableFlags(FLAG_CENTRALIZED_STATUS_BAR_HEIGHT_FIX)
+    @DisableSceneContainer
     fun validateMarginTopWithLargeScreenHeader_refactorFlagOff_usesResource() =
         testScope.runTest {
             val headerResourceHeight = 50
@@ -273,7 +280,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @DisableFlags(FLAG_SCENE_CONTAINER)
+    @DisableSceneContainer
     @EnableFlags(FLAG_CENTRALIZED_STATUS_BAR_HEIGHT_FIX)
     fun validateMarginTopWithLargeScreenHeader_refactorFlagOn_usesHelper() =
         testScope.runTest {
@@ -313,7 +320,6 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @BrokenWithSceneContainer(bugId = 333132830)
     fun glanceableHubAlpha_lockscreenToHub() =
         testScope.runTest {
             val alpha by collectLastValue(underTest.glanceableHubAlpha)
@@ -357,7 +363,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
 
             // While state is GLANCEABLE_HUB, verify alpha is restored to full if glanceable hub is
             // not fully visible.
-            shadeRepository.setLockscreenShadeExpansion(0.1f)
+            shadeTestUtil.setLockscreenShadeExpansion(0.1f)
             assertThat(alpha).isEqualTo(1f)
         }
 
@@ -463,14 +469,13 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @BrokenWithSceneContainer(bugId = 333132830)
     fun isOnLockscreenWithoutShade() =
         testScope.runTest {
             val isOnLockscreenWithoutShade by collectLastValue(underTest.isOnLockscreenWithoutShade)
 
             // First on AOD
-            shadeRepository.setLockscreenShadeExpansion(0f)
-            shadeRepository.setQsExpansion(0f)
+            shadeTestUtil.setLockscreenShadeExpansion(0f)
+            shadeTestUtil.setQsExpansion(0f)
             keyguardTransitionRepository.sendTransitionSteps(
                 from = KeyguardState.LOCKSCREEN,
                 to = KeyguardState.OCCLUDED,
@@ -482,25 +487,24 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
             showLockscreen()
 
             // While state is LOCKSCREEN, validate variations of both shade and qs expansion
-            shadeRepository.setLockscreenShadeExpansion(0.1f)
-            shadeRepository.setQsExpansion(0f)
+            shadeTestUtil.setQsExpansion(0f)
+            shadeTestUtil.setLockscreenShadeExpansion(0.1f)
             assertThat(isOnLockscreenWithoutShade).isFalse()
 
-            shadeRepository.setLockscreenShadeExpansion(0.1f)
-            shadeRepository.setQsExpansion(0.1f)
+            shadeTestUtil.setLockscreenShadeExpansion(0.1f)
+            shadeTestUtil.setShadeAndQsExpansion(0.1f, .9f)
             assertThat(isOnLockscreenWithoutShade).isFalse()
 
-            shadeRepository.setLockscreenShadeExpansion(0f)
-            shadeRepository.setQsExpansion(0.1f)
+            shadeTestUtil.setLockscreenShadeExpansion(0f)
+            shadeTestUtil.setQsExpansion(0.1f)
             assertThat(isOnLockscreenWithoutShade).isFalse()
 
-            shadeRepository.setLockscreenShadeExpansion(0f)
-            shadeRepository.setQsExpansion(0f)
+            shadeTestUtil.setQsExpansion(0f)
+            shadeTestUtil.setLockscreenShadeExpansion(0f)
             assertThat(isOnLockscreenWithoutShade).isTrue()
         }
 
     @Test
-    @BrokenWithSceneContainer(bugId = 333132830)
     fun isOnGlanceableHubWithoutShade() =
         testScope.runTest {
             val isOnGlanceableHubWithoutShade by
@@ -519,25 +523,25 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
             assertThat(isOnGlanceableHubWithoutShade).isTrue()
 
             // While state is GLANCEABLE_HUB, validate variations of both shade and qs expansion
-            shadeRepository.setLockscreenShadeExpansion(0.1f)
-            shadeRepository.setQsExpansion(0f)
+            shadeTestUtil.setQsExpansion(0f)
+            shadeTestUtil.setLockscreenShadeExpansion(0.1f)
             assertThat(isOnGlanceableHubWithoutShade).isFalse()
 
-            shadeRepository.setLockscreenShadeExpansion(0.1f)
-            shadeRepository.setQsExpansion(0.1f)
+            shadeTestUtil.setLockscreenShadeExpansion(0.1f)
+            shadeTestUtil.setShadeAndQsExpansion(0.1f, .9f)
             assertThat(isOnGlanceableHubWithoutShade).isFalse()
 
-            shadeRepository.setLockscreenShadeExpansion(0f)
-            shadeRepository.setQsExpansion(0.1f)
+            shadeTestUtil.setLockscreenShadeExpansion(0f)
+            shadeTestUtil.setQsExpansion(0.1f)
             assertThat(isOnGlanceableHubWithoutShade).isFalse()
 
-            shadeRepository.setLockscreenShadeExpansion(0f)
-            shadeRepository.setQsExpansion(0f)
+            shadeTestUtil.setQsExpansion(0f)
+            shadeTestUtil.setLockscreenShadeExpansion(0f)
             assertThat(isOnGlanceableHubWithoutShade).isTrue()
         }
 
     @Test
-    @DisableFlags(FLAG_SCENE_CONTAINER)
+    @DisableSceneContainer
     fun boundsOnLockscreenNotInSplitShade() =
         testScope.runTest {
             val bounds by collectLastValue(underTest.bounds)
@@ -558,7 +562,8 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @DisableFlags(FLAG_CENTRALIZED_STATUS_BAR_HEIGHT_FIX, FLAG_SCENE_CONTAINER)
+    @DisableFlags(FLAG_CENTRALIZED_STATUS_BAR_HEIGHT_FIX)
+    @DisableSceneContainer
     fun boundsOnLockscreenInSplitShade_refactorFlagOff_usesLargeHeaderResource() =
         testScope.runTest {
             val bounds by collectLastValue(underTest.bounds)
@@ -593,7 +598,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
 
     @Test
     @EnableFlags(FLAG_CENTRALIZED_STATUS_BAR_HEIGHT_FIX)
-    @DisableFlags(FLAG_SCENE_CONTAINER)
+    @DisableSceneContainer
     fun boundsOnLockscreenInSplitShade_refactorFlagOn_usesLargeHeaderHelper() =
         testScope.runTest {
             val bounds by collectLastValue(underTest.bounds)
@@ -621,7 +626,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @DisableFlags(FLAG_SCENE_CONTAINER)
+    @DisableSceneContainer
     fun boundsOnShade() =
         testScope.runTest {
             val bounds by collectLastValue(underTest.bounds)
@@ -637,7 +642,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @DisableFlags(FLAG_SCENE_CONTAINER)
+    @DisableSceneContainer
     fun boundsOnQS() =
         testScope.runTest {
             val bounds by collectLastValue(underTest.bounds)
@@ -658,88 +663,80 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
             var notificationCount = 10
             val calculateSpace = { space: Float, useExtraShelfSpace: Boolean -> notificationCount }
             val maxNotifications by collectLastValue(underTest.getMaxNotifications(calculateSpace))
-
+            advanceTimeBy(50L)
             showLockscreen()
 
             overrideResource(R.bool.config_use_split_notification_shade, false)
             configurationRepository.onAnyConfigurationChange()
-            keyguardInteractor.setNotificationContainerBounds(
-                NotificationContainerBounds(top = 1f, bottom = 2f)
-            )
 
             assertThat(maxNotifications).isEqualTo(10)
 
             // Also updates when directly requested (as it would from NotificationStackScrollLayout)
             notificationCount = 25
             sharedNotificationContainerInteractor.notificationStackChanged()
+            advanceTimeBy(50L)
             assertThat(maxNotifications).isEqualTo(25)
 
             // Also ensure another collection starts with the same value. As an example, folding
             // then unfolding will restart the coroutine and it must get the last value immediately.
             val newMaxNotifications by
                 collectLastValue(underTest.getMaxNotifications(calculateSpace))
+            advanceTimeBy(50L)
             assertThat(newMaxNotifications).isEqualTo(25)
         }
 
     @Test
-    @BrokenWithSceneContainer(bugId = 333132830)
     fun maxNotificationsOnLockscreen_DoesNotUpdateWhenUserInteracting() =
         testScope.runTest {
             var notificationCount = 10
             val calculateSpace = { space: Float, useExtraShelfSpace: Boolean -> notificationCount }
             val maxNotifications by collectLastValue(underTest.getMaxNotifications(calculateSpace))
-
+            advanceTimeBy(50L)
             showLockscreen()
 
             overrideResource(R.bool.config_use_split_notification_shade, false)
             configurationRepository.onAnyConfigurationChange()
-            keyguardInteractor.setNotificationContainerBounds(
-                NotificationContainerBounds(top = 1f, bottom = 2f)
-            )
 
             assertThat(maxNotifications).isEqualTo(10)
 
             // Shade expanding... still 10
-            shadeRepository.setLockscreenShadeExpansion(0.5f)
+            shadeTestUtil.setLockscreenShadeExpansion(0.5f)
             assertThat(maxNotifications).isEqualTo(10)
 
             notificationCount = 25
 
             // When shade is expanding by user interaction
-            shadeRepository.setLegacyLockscreenShadeTracking(true)
+            shadeTestUtil.setLockscreenShadeTracking(true)
 
             // Should still be 10, since the user is interacting
             assertThat(maxNotifications).isEqualTo(10)
 
-            shadeRepository.setLegacyLockscreenShadeTracking(false)
-            shadeRepository.setLockscreenShadeExpansion(0f)
+            shadeTestUtil.setLockscreenShadeTracking(false)
+            shadeTestUtil.setLockscreenShadeExpansion(0f)
 
             // Stopped tracking, show 25
             assertThat(maxNotifications).isEqualTo(25)
         }
 
     @Test
-    @BrokenWithSceneContainer(bugId = 333132830)
     fun maxNotificationsOnShade() =
         testScope.runTest {
             val calculateSpace = { space: Float, useExtraShelfSpace: Boolean -> 10 }
             val maxNotifications by collectLastValue(underTest.getMaxNotifications(calculateSpace))
+            advanceTimeBy(50L)
 
             // Show lockscreen with shade expanded
             showLockscreenWithShadeExpanded()
 
             overrideResource(R.bool.config_use_split_notification_shade, false)
             configurationRepository.onAnyConfigurationChange()
-            keyguardInteractor.setNotificationContainerBounds(
-                NotificationContainerBounds(top = 1f, bottom = 2f)
-            )
 
             // -1 means No Limit
             assertThat(maxNotifications).isEqualTo(-1)
         }
 
     @Test
-    @DisableFlags(FLAG_SCENE_CONTAINER)
+    @DisableSceneContainer
     fun translationYUpdatesOnKeyguardForBurnIn() =
         testScope.runTest {
             val translationY by collectLastValue(underTest.translationY(BurnInParameters()))
@@ -752,7 +749,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @DisableFlags(FLAG_SCENE_CONTAINER)
+    @DisableSceneContainer
     fun translationYUpdatesOnKeyguard() =
         testScope.runTest {
             val translationY by collectLastValue(underTest.translationY(BurnInParameters()))
@@ -764,7 +761,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
             configurationRepository.onAnyConfigurationChange()
 
             // legacy expansion means the user is swiping up, usually for the bouncer
-            shadeRepository.setLegacyShadeExpansion(0.5f)
+            shadeTestUtil.setShadeExpansion(0.5f)
 
             showLockscreen()
 
@@ -773,7 +770,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @DisableFlags(FLAG_SCENE_CONTAINER)
+    @DisableSceneContainer
     fun translationYDoesNotUpdateWhenShadeIsExpanded() =
         testScope.runTest {
             val translationY by collectLastValue(underTest.translationY(BurnInParameters()))
@@ -786,7 +783,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
 
             // legacy expansion means the user is swiping up, usually for the bouncer but also for
             // shade collapsing
-            shadeRepository.setLegacyShadeExpansion(0.5f)
+            shadeTestUtil.setShadeExpansion(0.5f)
 
             showLockscreenWithShadeExpanded()
 
@@ -794,7 +791,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @DisableFlags(FLAG_SCENE_CONTAINER)
+    @DisableSceneContainer
     fun updateBounds_fromKeyguardRoot() =
         testScope.runTest {
             val bounds by collectLastValue(underTest.bounds)
@@ -806,7 +803,6 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @BrokenWithSceneContainer(bugId = 333132830)
     fun alphaOnFullQsExpansion() =
         testScope.runTest {
             val viewState = ViewStateAccessor()
@@ -815,17 +811,18 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
             showLockscreenWithQSExpanded()
 
             // Alpha fades out as QS expands
-            shadeRepository.setQsExpansion(0.5f)
+            shadeTestUtil.setQsExpansion(0.5f)
             assertThat(alpha).isWithin(0.01f).of(0.5f)
-            shadeRepository.setQsExpansion(0.9f)
+            shadeTestUtil.setQsExpansion(0.9f)
             assertThat(alpha).isWithin(0.01f).of(0.1f)
 
             // Ensure that alpha is set back to 1f when QS is fully expanded
-            shadeRepository.setQsExpansion(1f)
+            shadeTestUtil.setQsExpansion(1f)
             assertThat(alpha).isEqualTo(1f)
         }
 
     @Test
+    @BrokenWithSceneContainer(330311871)
     fun alphaDoesNotUpdateWhileGoneTransitionIsRunning() =
         testScope.runTest {
             val viewState = ViewStateAccessor()
@@ -856,7 +853,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
             assertThat(alpha).isEqualTo(0f)
 
             // An attempt to override by the shade should be ignored
-            shadeRepository.setQsExpansion(0.5f)
+            shadeTestUtil.setQsExpansion(0.5f)
             assertThat(alpha).isEqualTo(0f)
         }
 
@@ -891,7 +888,7 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
             assertThat(alpha).isEqualTo(0f)
 
             // An attempt to override by the shade should be ignored
-            shadeRepository.setQsExpansion(0.5f)
+            shadeTestUtil.setQsExpansion(0.5f)
             assertThat(alpha).isEqualTo(0f)
         }
 
@@ -914,7 +911,6 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     @Test
-    @BrokenWithSceneContainer(bugId = 333132830)
     fun shadeCollapseFadeIn() =
         testScope.runTest {
             val fadeIn by collectValues(underTest.shadeCollapseFadeIn)
@@ -961,8 +957,8 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
         }
 
     private suspend fun TestScope.showLockscreen() {
-        shadeRepository.setLockscreenShadeExpansion(0f)
-        shadeRepository.setQsExpansion(0f)
+        shadeTestUtil.setQsExpansion(0f)
+        shadeTestUtil.setLockscreenShadeExpansion(0f)
         runCurrent()
         keyguardRepository.setStatusBarState(StatusBarState.KEYGUARD)
         runCurrent()
@@ -974,8 +970,8 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
     }
 
     private suspend fun TestScope.showDream() {
-        shadeRepository.setLockscreenShadeExpansion(0f)
-        shadeRepository.setQsExpansion(0f)
+        shadeTestUtil.setQsExpansion(0f)
+        shadeTestUtil.setLockscreenShadeExpansion(0f)
         runCurrent()
         keyguardRepository.setDreaming(true)
         runCurrent()
@@ -987,8 +983,8 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
     }
 
     private suspend fun TestScope.showLockscreenWithShadeExpanded() {
-        shadeRepository.setLockscreenShadeExpansion(1f)
-        shadeRepository.setQsExpansion(0f)
+        shadeTestUtil.setQsExpansion(0f)
+        shadeTestUtil.setLockscreenShadeExpansion(1f)
         runCurrent()
         keyguardRepository.setStatusBarState(StatusBarState.SHADE_LOCKED)
         runCurrent()
@@ -1000,8 +996,8 @@ class SharedNotificationContainerViewModelTest(flags: FlagsParameterization?) : 
     }
 
     private suspend fun TestScope.showLockscreenWithQSExpanded() {
-        shadeRepository.setLockscreenShadeExpansion(0f)
-        shadeRepository.setQsExpansion(1f)
+        shadeTestUtil.setLockscreenShadeExpansion(0f)
+        shadeTestUtil.setQsExpansion(1f)
         runCurrent()
         keyguardRepository.setStatusBarState(StatusBarState.SHADE_LOCKED)
         runCurrent()

@@ -33,7 +33,8 @@ import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
 
 /**
- * Test IME window opening transitions. To run this test: `atest FlickerTests:ReOpenImeWindowTest`
+ * Test IME window opening transitions.
+ * To run this test: `atest FlickerTestsIme2:ShowImeOnAppStartWhenLaunchingAppFromOverviewTest`
  */
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
@@ -50,7 +51,7 @@ class ShowImeOnAppStartWhenLaunchingAppFromOverviewTest(flicker: LegacyFlickerTe
             testApp.launchViaIntent(wmHelper)
             testApp.openIME(wmHelper)
             this.setRotation(flicker.scenario.startRotation)
-            if (flicker.scenario.isTablet) {
+            if (flicker.scenario.isTablet && tapl.isTransientTaskbar()) {
                 tapl.launchedAppState.swipeUpToUnstashTaskbar()
             }
             tapl.launchedAppState.switchToOverview()

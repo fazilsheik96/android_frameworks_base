@@ -61,10 +61,11 @@ import com.android.systemui.statusbar.notification.icon.ui.viewbinder.Notificati
 import com.android.systemui.statusbar.phone.HeadsUpAppearanceController;
 import com.android.systemui.statusbar.phone.NotificationIconAreaController;
 import com.android.systemui.statusbar.phone.StatusBarHideIconsForBouncerManager;
-import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarLocationPublisher;
 import com.android.systemui.statusbar.phone.fragment.dagger.StatusBarFragmentComponent;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallController;
+import com.android.systemui.statusbar.phone.ui.DarkIconManager;
+import com.android.systemui.statusbar.phone.ui.StatusBarIconController;
 import com.android.systemui.statusbar.pipeline.shared.ui.viewmodel.FakeCollapsedStatusBarViewBinder;
 import com.android.systemui.statusbar.pipeline.shared.ui.viewmodel.FakeCollapsedStatusBarViewModel;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
@@ -117,9 +118,9 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
     @Mock
     private PanelExpansionInteractor mPanelExpansionInteractor;
     @Mock
-    private StatusBarIconController.DarkIconManager.Factory mIconManagerFactory;
+    private DarkIconManager.Factory mIconManagerFactory;
     @Mock
-    private StatusBarIconController.DarkIconManager mIconManager;
+    private DarkIconManager mIconManager;
     private FakeCollapsedStatusBarViewModel mCollapsedStatusBarViewModel;
     private FakeCollapsedStatusBarViewBinder mCollapsedStatusBarViewBinder;
     @Mock
@@ -425,7 +426,7 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
         fragment.disable(DEFAULT_DISPLAY, 0, 0, false);
 
         assertEquals(View.GONE,
-                mFragment.getView().findViewById(R.id.ongoing_call_chip).getVisibility());
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
     }
 
     @Test
@@ -437,7 +438,7 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
         fragment.disable(DEFAULT_DISPLAY, 0, 0, false);
 
         assertEquals(View.VISIBLE,
-                mFragment.getView().findViewById(R.id.ongoing_call_chip).getVisibility());
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
         assertEquals(View.INVISIBLE, getNotificationAreaView().getVisibility());
     }
 
@@ -451,7 +452,7 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
                 StatusBarManager.DISABLE_NOTIFICATION_ICONS, 0, false);
 
         assertEquals(View.GONE,
-                mFragment.getView().findViewById(R.id.ongoing_call_chip).getVisibility());
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
     }
 
     @Test
@@ -464,7 +465,7 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
         fragment.disable(DEFAULT_DISPLAY, 0, 0, false);
 
         assertEquals(View.GONE,
-                mFragment.getView().findViewById(R.id.ongoing_call_chip).getVisibility());
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
     }
 
     @Test
@@ -476,21 +477,21 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
         fragment.disable(DEFAULT_DISPLAY, 0, 0, false);
 
         assertEquals(View.VISIBLE,
-                mFragment.getView().findViewById(R.id.ongoing_call_chip).getVisibility());
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
 
         // Ongoing call ended
         when(mOngoingCallController.hasOngoingCall()).thenReturn(false);
         fragment.disable(DEFAULT_DISPLAY, 0, 0, false);
 
         assertEquals(View.GONE,
-                mFragment.getView().findViewById(R.id.ongoing_call_chip).getVisibility());
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
 
         // Ongoing call started
         when(mOngoingCallController.hasOngoingCall()).thenReturn(true);
         fragment.disable(DEFAULT_DISPLAY, 0, 0, false);
 
         assertEquals(View.VISIBLE,
-                mFragment.getView().findViewById(R.id.ongoing_call_chip).getVisibility());
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
     }
 
     @Test

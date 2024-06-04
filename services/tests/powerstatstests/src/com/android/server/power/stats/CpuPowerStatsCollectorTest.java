@@ -32,6 +32,7 @@ import android.os.ConditionVariable;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.platform.test.ravenwood.RavenwoodRule;
+import android.util.IndentingPrintWriter;
 import android.util.SparseArray;
 
 import androidx.test.filters.SmallTest;
@@ -51,6 +52,7 @@ import org.mockito.MockitoAnnotations;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
+import java.io.StringWriter;
 import java.util.function.IntSupplier;
 
 @RunWith(AndroidJUnit4.class)
@@ -341,7 +343,7 @@ public class CpuPowerStatsCollectorTest {
                 }}, 0, 1234);
 
         mMockClock.uptime = 1000;
-        collector.forceSchedule();
+        collector.schedule();
         waitForIdle();
 
         mUidResolver.noteIsolatedUidRemoved(ISOLATED_UID, UID_2);
@@ -354,13 +356,43 @@ public class CpuPowerStatsCollectorTest {
                 }}, 1234, 3421);
 
         mMockClock.uptime = 2000;
-        collector.forceSchedule();
+        collector.schedule();
         waitForIdle();
 
         assertThat(layout.getUidTimeByPowerBracket(mCollectedStats.uidStats.get(UID_2), 0))
                 .isEqualTo(245);
         assertThat(layout.getUidTimeByPowerBracket(mCollectedStats.uidStats.get(UID_2), 1))
                 .isEqualTo(528);
+    }
+
+    @Test
+    public void dump() {
+        mockCpuScalingPolicies(1);
+        mockPowerProfile();
+        mockEnergyConsumers();
+
+        CpuPowerStatsCollector collector = createCollector(8, 0);
+        collector.collectStats();       // Establish baseline
+
+        mockKernelCpuStats(new long[]{1111, 2222, 3333},
+                new SparseArray<>() {{
+                    put(UID_1, new long[]{100, 200});
+                    put(UID_2, new long[]{100, 150});
+                    put(ISOLATED_UID, new long[]{200, 450});
+                }}, 0, 1234);
+
+        PowerStats powerStats = collector.collectStats();
+
+        StringWriter sw = new StringWriter();
+        IndentingPrintWriter pw = new IndentingPrintWriter(sw);
+        powerStats.dump(pw);
+        pw.flush();
+        String dump = sw.toString();
+
+        assertThat(dump).contains("duration=1234");
+        assertThat(dump).contains("steps: [1111, 2222, 3333]");
+        assertThat(dump).contains("UID 42: time: [100, 200]");
+        assertThat(dump).contains("UID 99: time: [300, 600]");
     }
 
     private void mockCpuScalingPolicies(int clusterCount) {

@@ -1021,6 +1021,7 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
         final boolean allowWhileBooting = (r.intent.getFlags()
                 & Intent.FLAG_RECEIVER_BOOT_UPGRADE) != 0;
 
+        long startTimeNs = SystemClock.uptimeNanos();
         if (DEBUG_BROADCAST) logv("Scheduling " + r + " to cold " + queue);
         queue.app = mService.startProcessLocked(queue.processName, info, true, intentFlags,
                 hostingRecord, zygotePolicyFlags, allowWhileBooting, false);
@@ -1032,8 +1033,7 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
         }
         // TODO: b/335420031 - cache receiver intent to avoid multiple calls to getReceiverIntent.
         mService.mProcessList.getAppStartInfoTracker().handleProcessBroadcastStart(
-                SystemClock.elapsedRealtimeNanos(), queue.app, r.getReceiverIntent(receiver),
-                r.alarm /* isAlarm */);
+                startTimeNs, queue.app, r.getReceiverIntent(receiver), r.alarm /* isAlarm */);
         return false;
     }
 
@@ -1339,8 +1339,14 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
                     MSG_DELIVERY_TIMEOUT, "BROADCAST_TIMEOUT", true);
         }
 
-        void start(@NonNull BroadcastProcessQueue queue, long timeoutMillis) {
-            start(queue, queue.app.getPid(), queue.app.uid, timeoutMillis);
+        @Override
+        public int getPid(@NonNull BroadcastProcessQueue queue) {
+            return (queue.app != null) ? queue.app.getPid() : 0;
+        }
+
+        @Override
+        public int getUid(@NonNull BroadcastProcessQueue queue) {
+            return (queue.app != null) ? queue.app.uid : 0;
         }
     }
 

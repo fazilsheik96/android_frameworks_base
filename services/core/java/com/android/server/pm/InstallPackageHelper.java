@@ -37,7 +37,7 @@ import static android.content.pm.PackageManager.INSTALL_FAILED_UID_CHANGED;
 import static android.content.pm.PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE;
 import static android.content.pm.PackageManager.INSTALL_STAGED;
 import static android.content.pm.PackageManager.INSTALL_SUCCEEDED;
-import static android.content.pm.PackageManager.PROPERTY_ANDROID_SAFETY_LABEL_PATH;
+import static android.content.pm.PackageManager.PROPERTY_ANDROID_SAFETY_LABEL;
 import static android.content.pm.PackageManager.UNINSTALL_REASON_UNKNOWN;
 import static android.content.pm.SigningDetails.SignatureSchemeVersion.SIGNING_BLOCK_V4;
 import static android.content.pm.parsing.ApkLiteParseUtils.isApkFile;
@@ -89,6 +89,7 @@ import static com.android.server.pm.PackageManagerServiceUtils.comparePackageSig
 import static com.android.server.pm.PackageManagerServiceUtils.compareSignatures;
 import static com.android.server.pm.PackageManagerServiceUtils.compressedFileExists;
 import static com.android.server.pm.PackageManagerServiceUtils.deriveAbiOverride;
+import static com.android.server.pm.PackageManagerServiceUtils.extractAppMetadataFromApk;
 import static com.android.server.pm.PackageManagerServiceUtils.isInstalledByAdb;
 import static com.android.server.pm.PackageManagerServiceUtils.logCriticalInfo;
 import static com.android.server.pm.PackageManagerServiceUtils.makeDirRecursive;
@@ -501,6 +502,37 @@ final class InstallPackageHelper {
             mPm.setUpCustomResolverActivity(pkg, pkgSetting);
         }
 
+        // When upgrading a package, pkgSetting is copied from oldPkgSetting. Clear the app
+        // metadata file path for the new package.
+        if (oldPkgSetting != null) {
+            pkgSetting.setAppMetadataFilePath(null);
+            pkgSetting.setAppMetadataSource(APP_METADATA_SOURCE_UNKNOWN);
+        }
+        // If the app metadata file path is not null then this is a system app with a preloaded app
+        // metadata file on the system image. Do not reset the path and source if this is the
+        // case.
+        if (pkgSetting.getAppMetadataFilePath() == null) {
+            File dir = new File(pkg.getPath());
+            if (pkgSetting.isSystem()) {
+                dir = new File(Environment.getDataDirectory(),
+                        "app-metadata/" + pkg.getPackageName());
+            }
+            File appMetadataFile = new File(dir, APP_METADATA_FILE_NAME);
+            if (appMetadataFile.exists()) {
+                pkgSetting.setAppMetadataFilePath(appMetadataFile.getAbsolutePath());
+                if (Flags.aslInApkAppMetadataSource()) {
+                    pkgSetting.setAppMetadataSource(APP_METADATA_SOURCE_INSTALLER);
+                }
+            } else if (Flags.aslInApkAppMetadataSource()) {
+                Map<String, PackageManager.Property> properties = pkg.getProperties();
+                if (properties.containsKey(PROPERTY_ANDROID_SAFETY_LABEL)) {
+                    // ASL file extraction is done in post-install
+                    pkgSetting.setAppMetadataFilePath(appMetadataFile.getAbsolutePath());
+                    pkgSetting.setAppMetadataSource(APP_METADATA_SOURCE_APK);
+                }
+            }
+        }
+
         if (pkg.getPackageName().equals("android")) {
             mPm.setPlatformPackage(pkg, pkgSetting);
         }
@@ -574,12 +606,16 @@ final class InstallPackageHelper {
                     (scanFlags & SCAN_DONT_KILL_APP) != 0 /* retainImplicitGrantOnReplace */);
             mPm.addAllPackageProperties(pkg);
 
-            if (oldPkgSetting == null || oldPkgSetting.getPkg() == null) {
-                mPm.mDomainVerificationManager.addPackage(pkgSetting,
-                        request.getPreVerifiedDomains());
-            } else {
-                mPm.mDomainVerificationManager.migrateState(oldPkgSetting, pkgSetting,
-                        request.getPreVerifiedDomains());
+            // Only verify app links for non-archival installations, otherwise there won't be any
+            // declared app links.
+            if (!request.isArchived()) {
+                if (oldPkgSetting == null || oldPkgSetting.getPkg() == null) {
+                    mPm.mDomainVerificationManager.addPackage(pkgSetting,
+                            request.getPreVerifiedDomains());
+                } else {
+                    mPm.mDomainVerificationManager.migrateState(oldPkgSetting, pkgSetting,
+                            request.getPreVerifiedDomains());
+                }
             }
 
             int collectionSize = ArrayUtils.size(pkg.getInstrumentations());
@@ -831,7 +867,7 @@ final class InstallPackageHelper {
             doRestore = performRollbackManagerRestore(userId, token, request);
         }
 
-        if (succeeded && !request.hasPostInstallRunnable()) {
+        if (succeeded && doRestore && !request.hasPostInstallRunnable()) {
             boolean hasNeverBeenRestored =
                     packageSetting != null && packageSetting.isPendingRestore();
             request.setPostInstallRunnable(() -> {
@@ -951,13 +987,13 @@ final class InstallPackageHelper {
     }
 
     void installPackagesTraced(List<InstallRequest> requests) {
-        synchronized (mPm.mInstallLock) {
-            try {
-                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "installPackages");
-                installPackagesLI(requests);
-            } finally {
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-            }
+        mPm.mInstallLock.lock();
+        try {
+            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "installPackages");
+            installPackagesLI(requests);
+        } finally {
+            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+            mPm.mInstallLock.unlock();
         }
     }
 
@@ -2226,24 +2262,6 @@ final class InstallPackageHelper {
                 installRequest.setNewUsers(
                         ps.queryInstalledUsers(allUsers, true));
                 ps.setUpdateAvailable(false /*updateAvailable*/);
-
-                File appMetadataFile = new File(ps.getPath(), APP_METADATA_FILE_NAME);
-                if (appMetadataFile.exists()) {
-                    ps.setAppMetadataFilePath(appMetadataFile.getAbsolutePath());
-                    if (Flags.aslInApkAppMetadataSource()) {
-                        ps.setAppMetadataSource(APP_METADATA_SOURCE_INSTALLER);
-                    }
-                } else {
-                    Map<String, PackageManager.Property> properties = parsedPackage.getProperties();
-                    if (Flags.aslInApkAppMetadataSource()
-                            && properties.containsKey(PROPERTY_ANDROID_SAFETY_LABEL_PATH)) {
-                        // ASL file extraction is done in post-install
-                        ps.setAppMetadataFilePath(appMetadataFile.getAbsolutePath());
-                        ps.setAppMetadataSource(APP_METADATA_SOURCE_APK);
-                    } else {
-                        ps.setAppMetadataFilePath(null);
-                    }
-                }
             }
             if (installRequest.getReturnCode() == PackageManager.INSTALL_SUCCEEDED) {
                 // If this is an archival installation then we'll initialize the archive status,
@@ -2595,22 +2613,30 @@ final class InstallPackageHelper {
             final boolean performDexopt = DexOptHelper.shouldPerformDexopt(installRequest,
                     dexoptOptions, mContext);
             if (performDexopt) {
-                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "dexopt");
+                // dexopt can take long, and ArtService doesn't require installd, so we release
+                // the lock here and re-acquire the lock after dexopt is finished.
+                mPm.mInstallLock.unlock();
+                try {
+                    Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "dexopt");
 
-                // This mirrors logic from commitReconciledScanResultLocked, where the library files
-                // needed for dexopt are assigned.
-                PackageSetting realPkgSetting = installRequest.getRealPackageSetting();
+                    // This mirrors logic from commitReconciledScanResultLocked, where the library
+                    // files needed for dexopt are assigned.
+                    PackageSetting realPkgSetting = installRequest.getRealPackageSetting();
 
-                // Unfortunately, the updated system app flag is only tracked on this PackageSetting
-                boolean isUpdatedSystemApp =
-                        installRequest.getScannedPackageSetting().isUpdatedSystemApp();
+                    // Unfortunately, the updated system app flag is only tracked on this
+                    // PackageSetting
+                    boolean isUpdatedSystemApp =
+                            installRequest.getScannedPackageSetting().isUpdatedSystemApp();
 
-                realPkgSetting.getPkgState().setUpdatedSystemApp(isUpdatedSystemApp);
+                    realPkgSetting.getPkgState().setUpdatedSystemApp(isUpdatedSystemApp);
 
-                DexoptResult dexOptResult =
-                        DexOptHelper.dexoptPackageUsingArtService(installRequest, dexoptOptions);
-                installRequest.onDexoptFinished(dexOptResult);
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+                    DexoptResult dexOptResult = DexOptHelper.dexoptPackageUsingArtService(
+                            installRequest, dexoptOptions);
+                    installRequest.onDexoptFinished(dexOptResult);
+                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+                } finally {
+                    mPm.mInstallLock.lock();
+                }
             }
         }
         PackageManagerServiceUtils.waitForNativeBinariesExtractionForIncremental(
@@ -2851,8 +2877,8 @@ final class InstallPackageHelper {
         if (succeeded) {
             if (Flags.aslInApkAppMetadataSource()
                     && pkgSetting.getAppMetadataSource() == APP_METADATA_SOURCE_APK) {
-                if (!PackageManagerServiceUtils.extractAppMetadataFromApk(request.getPkg(),
-                        pkgSetting.getAppMetadataFilePath())) {
+                if (!extractAppMetadataFromApk(request.getPkg(),
+                        pkgSetting.getAppMetadataFilePath(), pkgSetting.isSystem())) {
                     synchronized (mPm.mLock) {
                         PackageSetting setting = mPm.mSettings.getPackageLPr(packageName);
                         if (setting != null) {
@@ -2955,7 +2981,6 @@ final class InstallPackageHelper {
                 info.mRemovedUsers = firstUserIds;
                 info.mBroadcastUsers = firstUserIds;
                 info.mUid = request.getAppId();
-                info.mIsAppIdRemoved = true;
                 info.mRemovedPackageVersionCode = request.getPkg().getLongVersionCode();
                 info.mRemovedForAllUsers = true;
 
@@ -3835,6 +3860,18 @@ final class InstallPackageHelper {
                 // Continue monitoring loading progress of active incremental packages
                 mIncrementalManager.registerLoadingProgressCallback(parsedPackage.getPath(),
                         new IncrementalProgressListener(parsedPackage.getPackageName(), mPm));
+            }
+        }
+
+        if (Flags.aslInApkAppMetadataSource()
+                && scanResult.mPkgSetting.getAppMetadataSource() == APP_METADATA_SOURCE_APK) {
+            if (!extractAppMetadataFromApk(parsedPackage,
+                    scanResult.mPkgSetting.getAppMetadataFilePath(),
+                    scanResult.mPkgSetting.isSystem())) {
+                synchronized (mPm.mLock) {
+                    scanResult.mPkgSetting.setAppMetadataFilePath(null)
+                            .setAppMetadataSource(APP_METADATA_SOURCE_UNKNOWN);
+                }
             }
         }
         return scanResult.mPkgSetting.getPkg();

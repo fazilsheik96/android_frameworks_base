@@ -50,6 +50,7 @@ import android.app.RemoteServiceException.BadUserInitiatedJobNotificationExcepti
 import android.app.RemoteServiceException.CannotPostForegroundServiceNotificationException;
 import android.app.RemoteServiceException.CrashedByAdbException;
 import android.app.RemoteServiceException.ForegroundServiceDidNotStartInTimeException;
+import android.app.RemoteServiceException.ForegroundServiceDidNotStopInTimeException;
 import android.app.RemoteServiceException.MissingRequestPasswordComplexityPermissionException;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
@@ -353,6 +354,9 @@ public final class ActivityThread extends ClientTransactionHandler
     private final Object mNetworkPolicyLock = new Object();
 
     private static final String DEFAULT_FULL_BACKUP_AGENT = "android.app.backup.FullBackupAgent";
+
+    private static final long BINDER_CALLBACK_THROTTLE = 10_100L;
+    private long mBinderCallbackLast = -1;
 
     /**
      * Denotes the sequence number of the process state change for which the main thread needs
@@ -2234,6 +2238,9 @@ public final class ActivityThread extends ClientTransactionHandler
             case ForegroundServiceDidNotStartInTimeException.TYPE_ID:
                 throw generateForegroundServiceDidNotStartInTimeException(message, extras);
 
+            case ForegroundServiceDidNotStopInTimeException.TYPE_ID:
+                throw generateForegroundServiceDidNotStopInTimeException(message, extras);
+
             case CannotPostForegroundServiceNotificationException.TYPE_ID:
                 throw new CannotPostForegroundServiceNotificationException(message);
 
@@ -2262,6 +2269,15 @@ public final class ActivityThread extends ClientTransactionHandler
         final Exception inner = (serviceClassName == null) ? null
                 : Service.getStartForegroundServiceStackTrace(serviceClassName);
         throw new ForegroundServiceDidNotStartInTimeException(message, inner);
+    }
+
+    private ForegroundServiceDidNotStopInTimeException
+            generateForegroundServiceDidNotStopInTimeException(String message, Bundle extras) {
+        final String serviceClassName =
+                ForegroundServiceDidNotStopInTimeException.getServiceClassNameFromExtras(extras);
+        final Exception inner = (serviceClassName == null) ? null
+                : Service.getStartForegroundServiceStackTrace(serviceClassName);
+        throw new ForegroundServiceDidNotStopInTimeException(message, inner);
     }
 
     class H extends Handler {
@@ -7454,6 +7470,7 @@ public final class ActivityThread extends ClientTransactionHandler
         }
         mDdmSyncStageUpdater.next(Stage.Running);
 
+        long timestampApplicationOnCreateNs = 0;
         try {
             // If the app is being launched for full backup or restore, bring it up in
             // a restricted environment with the base application class.
@@ -7496,8 +7513,10 @@ public final class ActivityThread extends ClientTransactionHandler
                     + data.instrumentationName + ": " + e.toString(), e);
             }
             try {
+                timestampApplicationOnCreateNs = SystemClock.elapsedRealtimeNanos();
                 mInstrumentation.callApplicationOnCreate(app);
             } catch (Exception e) {
+                timestampApplicationOnCreateNs = 0;
                 if (!mInstrumentation.onException(app, e)) {
                     throw new RuntimeException(
                       "Unable to create application " + app.getClass().getName()
@@ -7562,7 +7581,7 @@ public final class ActivityThread extends ClientTransactionHandler
         }
 
         try {
-            mgr.finishAttachApplication(mStartSeq);
+            mgr.finishAttachApplication(mStartSeq, timestampApplicationOnCreateNs);
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
         }
@@ -7571,6 +7590,12 @@ public final class ActivityThread extends ClientTransactionHandler
         Binder.setTransactionCallback(new IBinderCallback() {
             @Override
             public void onTransactionError(int pid, int code, int flags, int err) {
+                final long now = SystemClock.uptimeMillis();
+                if (now < mBinderCallbackLast + BINDER_CALLBACK_THROTTLE) {
+                    Slog.d(TAG, "Too many transaction errors, throttling freezer binder callback.");
+                    return;
+                }
+                mBinderCallbackLast = now;
                 try {
                     mgr.frozenBinderTransactionDetected(pid, code, flags, err);
                 } catch (RemoteException ex) {

@@ -16,7 +16,7 @@
 
 package com.android.server.notification;
 
-import static android.app.Flags.updateRankingTime;
+import static android.app.Flags.sortSectionByTime;
 import static android.app.Notification.FLAG_INSISTENT;
 import static android.app.Notification.FLAG_ONLY_ALERT_ONCE;
 import static android.app.NotificationManager.IMPORTANCE_MIN;
@@ -135,7 +135,7 @@ public final class NotificationAttentionHelper {
     private LogicalLight mAttentionLight;
 
     private final boolean mUseAttentionLight;
-    boolean mHasLight = true;
+    boolean mHasLight;
 
     private final SettingsObserver mSettingsObserver;
 
@@ -149,7 +149,7 @@ public final class NotificationAttentionHelper {
     private boolean mInCallStateOffHook = false;
     private boolean mScreenOn = true;
     private boolean mUserPresent = false;
-    boolean mNotificationPulseEnabled;
+    private boolean mNotificationPulseEnabled;
     private final Uri mInCallNotificationUri;
     private final AudioAttributes mInCallNotificationAudioAttributes;
     private final float mInCallNotificationVolume;
@@ -305,6 +305,13 @@ public final class NotificationAttentionHelper {
     }
 
     private void loadUserSettings() {
+        boolean pulseEnabled = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.NOTIFICATION_LIGHT_PULSE, 0, UserHandle.USER_CURRENT) != 0;
+        if (mNotificationPulseEnabled != pulseEnabled) {
+            mNotificationPulseEnabled = pulseEnabled;
+            updateLightsLocked();
+        }
+
         if (Flags.politeNotifications()) {
             try {
                 mCurrentWorkProfileId = getManagedProfileId(ActivityManager.getCurrentUser());
@@ -497,7 +504,7 @@ public final class NotificationAttentionHelper {
                     Slog.v(TAG, "INTERRUPTIVENESS: "
                             + record.getKey() + " is interruptive: alerted");
                 }
-                if (updateRankingTime()) {
+                if (sortSectionByTime()) {
                     if (buzz || beep) {
                         record.resetRankingTime();
                     }
@@ -874,6 +881,9 @@ public final class NotificationAttentionHelper {
 
     boolean canShowLightsLocked(final NotificationRecord record, final Signals signals,
             boolean aboveThreshold) {
+        if (!mSystemReady) {
+            return false;
+        }
         // device lacks light
         if (!mHasLight) {
             return false;
@@ -1528,7 +1538,7 @@ public final class NotificationAttentionHelper {
 
             // recent conversation
             if (record.isConversation()
-                    && record.getNotification().when > mLastAvalancheTriggerTimestamp) {
+                    && record.getNotification().getWhen() > mLastAvalancheTriggerTimestamp) {
                 return true;
             }
 
@@ -1721,8 +1731,6 @@ public final class NotificationAttentionHelper {
     void setLights(LogicalLight light) {
         mNotificationLight = light;
         mAttentionLight = light;
-        mNotificationPulseEnabled = true;
-        mHasLight = true;
     }
 
     @VisibleForTesting

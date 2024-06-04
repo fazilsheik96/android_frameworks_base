@@ -62,6 +62,7 @@ import android.content.pm.dex.ArtManager;
 import android.content.pm.verify.domain.DomainVerificationManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
 import android.graphics.Rect;
 import android.graphics.drawable.AdaptiveIconDrawable;
@@ -269,11 +270,20 @@ public abstract class PackageManager {
     /**
      * Application level {@link android.content.pm.PackageManager.Property PackageManager
      * .Property} for a app to inform the installer that a file containing the app's android
-     * safety label data is bundled into the APK at the given path.
+     * safety label data is bundled into the APK as a raw resource.
+     *
+     * <p>For example:
+     * <pre>
+     * &lt;application&gt;
+     *   &lt;property
+     *     android:name="android.content.PROPERTY_ANDROID_SAFETY_LABEL"
+     *     android:resource="@raw/app-metadata"/&gt;
+     * &lt;/application&gt;
+     * </pre>
      * @hide
      */
-    public static final String PROPERTY_ANDROID_SAFETY_LABEL_PATH =
-            "android.content.SAFETY_LABEL_PATH";
+    public static final String PROPERTY_ANDROID_SAFETY_LABEL =
+            "android.content.PROPERTY_ANDROID_SAFETY_LABEL";
 
     /**
      * A property value set within the manifest.
@@ -11742,5 +11752,18 @@ public abstract class PackageManager {
             @NonNull Function<XmlResourceParser, T> parserFunction) throws IOException {
         throw new UnsupportedOperationException(
                 "parseAndroidManifest not implemented in subclass");
+    }
+
+    /**
+     * @param info    The {@link ServiceInfo} to pull the attributes from.
+     * @param name    The name of the Xml metadata where the attributes are stored.
+     * @param rootTag The root tag of the attributes.
+     * @return A {@link TypedArray} of attributes if successful, {@code null} otherwise.
+     * @hide
+     */
+    public TypedArray extractPackageItemInfoAttributes(PackageItemInfo info, String name,
+            String rootTag, int[] attributes) {
+        throw new UnsupportedOperationException(
+                "parseServiceMetadata not implemented in subclass");
     }
 }

@@ -69,6 +69,7 @@ import android.telephony.ims.aidl.IImsRegistrationCallback;
 import android.telephony.ims.aidl.IRcsConfigCallback;
 import android.telephony.satellite.INtnSignalStrengthCallback;
 import android.telephony.satellite.ISatelliteCapabilitiesCallback;
+import android.telephony.satellite.ISatelliteCommunicationAllowedStateCallback;
 import android.telephony.satellite.ISatelliteDatagramCallback;
 import android.telephony.satellite.ISatelliteTransmissionUpdateCallback;
 import android.telephony.satellite.ISatelliteProvisionStateCallback;
@@ -1398,19 +1399,18 @@ interface ITelephony {
     oneway void requestModemActivityInfo(in ResultReceiver result);
 
     /**
-     * Get the service state on specified subscription
-     * @param subId Subscription id
+     * Get the service state on specified SIM slot.
+     * @param slotIndex of phone whose service state is returned
      * @param renounceFineLocationAccess Set this to true if the caller would not like to
      * receive fine location related information
      * @param renounceCoarseLocationAccess Set this to true if the caller would not like to
      * receive coarse location related information
      * @param callingPackage The package making the call
      * @param callingFeatureId The feature in the package
-     * @return Service state on specified subscription.
+     * @return Service state on specified SIM slot.
      */
-    ServiceState getServiceStateForSubscriber(int subId, boolean renounceFineLocationAccess,
-            boolean renounceCoarseLocationAccess,
-            String callingPackage, String callingFeatureId);
+    ServiceState getServiceStateForSlot(int slotIndex, boolean renounceFineLocationAccess,
+            boolean renounceCoarseLocationAccess, String callingPackage, String callingFeatureId);
 
     /**
      * Returns the URI for the per-account voicemail ringtone set in Phone settings.
@@ -3244,6 +3244,12 @@ interface ITelephony {
     boolean clearDomainSelectionServiceOverride();
 
     /**
+     * @return {@code true} if the AOSP domain selection service is supported,
+     *         {@code false} otherwise.
+     */
+    boolean isAospDomainSelectionService();
+
+    /**
      * Enable or disable notifications sent for cellular identifier disclosure events.
      *
      * Disclosure events are defined as instances where a device has sent a cellular identifier
@@ -3341,4 +3347,29 @@ interface ITelephony {
             + "android.Manifest.permission.SATELLITE_COMMUNICATION)")
     void unregisterForSatelliteSupportedStateChanged(int subId,
             in ISatelliteSupportedStateCallback callback);
+
+    /**
+     * Registers for satellite communication allowed state changed.
+     *
+     * @param subId The subId of the subscription to register for communication allowed state.
+     * @param callback The callback to handle the communication allowed state changed event.
+     *
+     * @return The {@link SatelliteError} result of the operation.
+     */
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission("
+            + "android.Manifest.permission.SATELLITE_COMMUNICATION)")
+    int registerForCommunicationAllowedStateChanged(int subId,
+            in ISatelliteCommunicationAllowedStateCallback callback);
+
+    /**
+     * Unregisters for satellite communication allowed state.
+     * If callback was not registered before, the request will be ignored.
+     *
+     * @param subId The subId of the subscription to unregister for supported state changed.
+     * @param callback The callback that was passed to registerForCommunicationAllowedStateChanged.
+     */
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission("
+            + "android.Manifest.permission.SATELLITE_COMMUNICATION)")
+    void unregisterForCommunicationAllowedStateChanged(int subId,
+            in ISatelliteCommunicationAllowedStateCallback callback);
 }

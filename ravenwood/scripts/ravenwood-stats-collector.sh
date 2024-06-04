@@ -17,11 +17,20 @@
 
 set -e
 
-# Output file
-out=/tmp/ravenwood-stats-all.csv
+# Output files
+out_dir=/tmp/ravenwood
+stats=$out_dir/ravenwood-stats-all.csv
+apis=$out_dir/ravenwood-apis-all.csv
+keep_all_dir=$out_dir/ravenwood-keep-all/
+
+rm -fr $out_dir
+mkdir -p $out_dir
+mkdir -p $keep_all_dir
 
 # Where the input files are.
 path=$ANDROID_BUILD_TOP/out/host/linux-x86/testcases/ravenwood-stats-checker/x86_64/
+
+timestamp="$(date --iso-8601=seconds)"
 
 m() {
     ${ANDROID_BUILD_TOP}/build/soong/soong_ui.bash --make-mode "$@"
@@ -38,15 +47,42 @@ dump() {
     local jar=$1
     local file=$2
 
-    sed -e '1d' -e "s/^/$jar,/"  $file
+    # Remove the header row, and prepend the columns.
+    sed -e '1d' -e "s/^/$jar,$timestamp,/" $file
 }
 
-collect() {
-    echo 'Jar,PackageName,ClassName,SupportedMethods,TotalMethods'
-    dump "framework-minus-apex"  hoststubgen_framework-minus-apex_stats.csv
-    dump "service.core"  hoststubgen_services.core_stats.csv
+collect_stats() {
+    local out="$1"
+    {
+        # Copy the header, with the first column appended.
+        echo -n "Jar,Generated Date,"
+        head -n 1 hoststubgen_framework-minus-apex_stats.csv
+
+        dump "framework-minus-apex" hoststubgen_framework-minus-apex_stats.csv
+        dump "service.core"  hoststubgen_services.core_stats.csv
+    } > "$out"
+
+    echo "Stats CVS created at $out"
 }
 
-collect >$out
+collect_apis() {
+    local out="$1"
+    {
+        # Copy the header, with the first column appended.
+        echo -n "Jar,Generated Date,"
+        head -n 1 hoststubgen_framework-minus-apex_apis.csv
 
-echo "Full dump CVS created at $out"
+        dump "framework-minus-apex"  hoststubgen_framework-minus-apex_apis.csv
+        dump "service.core"  hoststubgen_services.core_apis.csv
+    } > "$out"
+
+    echo "API CVS created at $out"
+}
+
+
+collect_stats $stats
+collect_apis $apis
+
+cp *keep_all.txt $keep_all_dir
+echo "Keep all files created at:"
+find $keep_all_dir -type f

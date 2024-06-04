@@ -16,22 +16,97 @@
 
 package com.android.systemui.qs.panels.dagger
 
+import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.log.LogBuffer
+import com.android.systemui.log.LogBufferFactory
+import com.android.systemui.qs.panels.data.repository.GridLayoutTypeRepository
+import com.android.systemui.qs.panels.data.repository.GridLayoutTypeRepositoryImpl
 import com.android.systemui.qs.panels.data.repository.IconTilesRepository
 import com.android.systemui.qs.panels.data.repository.IconTilesRepositoryImpl
-import com.android.systemui.qs.panels.shared.model.GridLayoutTypeKey
+import com.android.systemui.qs.panels.domain.interactor.GridTypeConsistencyInteractor
+import com.android.systemui.qs.panels.domain.interactor.InfiniteGridConsistencyInteractor
+import com.android.systemui.qs.panels.domain.interactor.NoopGridConsistencyInteractor
+import com.android.systemui.qs.panels.shared.model.GridConsistencyLog
+import com.android.systemui.qs.panels.shared.model.GridLayoutType
 import com.android.systemui.qs.panels.shared.model.InfiniteGridLayoutType
+import com.android.systemui.qs.panels.shared.model.StretchedGridLayoutType
 import com.android.systemui.qs.panels.ui.compose.GridLayout
 import com.android.systemui.qs.panels.ui.compose.InfiniteGridLayout
+import com.android.systemui.qs.panels.ui.compose.StretchedGridLayout
 import dagger.Binds
 import dagger.Module
-import dagger.multibindings.IntoMap
+import dagger.Provides
+import dagger.multibindings.IntoSet
 
 @Module
 interface PanelsModule {
     @Binds fun bindIconTilesRepository(impl: IconTilesRepositoryImpl): IconTilesRepository
 
     @Binds
-    @IntoMap
-    @GridLayoutTypeKey(InfiniteGridLayoutType::class)
-    fun bindGridLayout(impl: InfiniteGridLayout): GridLayout
+    fun bindGridLayoutTypeRepository(impl: GridLayoutTypeRepositoryImpl): GridLayoutTypeRepository
+
+    @Binds
+    fun bindDefaultGridConsistencyInteractor(
+        impl: NoopGridConsistencyInteractor
+    ): GridTypeConsistencyInteractor
+
+    companion object {
+        @Provides
+        @SysUISingleton
+        @GridConsistencyLog
+        fun providesGridConsistencyLog(factory: LogBufferFactory): LogBuffer {
+            return factory.create("GridConsistencyLog", 50)
+        }
+
+        @Provides
+        @IntoSet
+        fun provideGridLayout(gridLayout: InfiniteGridLayout): Pair<GridLayoutType, GridLayout> {
+            return Pair(InfiniteGridLayoutType, gridLayout)
+        }
+
+        @Provides
+        @IntoSet
+        fun provideStretchedGridLayout(
+            gridLayout: StretchedGridLayout
+        ): Pair<GridLayoutType, GridLayout> {
+            return Pair(StretchedGridLayoutType, gridLayout)
+        }
+
+        @Provides
+        fun provideGridLayoutMap(
+            entries: Set<@JvmSuppressWildcards Pair<GridLayoutType, GridLayout>>
+        ): Map<GridLayoutType, GridLayout> {
+            return entries.toMap()
+        }
+
+        @Provides
+        fun provideGridLayoutTypes(
+            entries: Set<@JvmSuppressWildcards Pair<GridLayoutType, GridLayout>>
+        ): Set<GridLayoutType> {
+            return entries.map { it.first }.toSet()
+        }
+
+        @Provides
+        @IntoSet
+        fun provideGridConsistencyInteractor(
+            consistencyInteractor: InfiniteGridConsistencyInteractor
+        ): Pair<GridLayoutType, GridTypeConsistencyInteractor> {
+            return Pair(InfiniteGridLayoutType, consistencyInteractor)
+        }
+
+        @Provides
+        @IntoSet
+        fun provideStretchedGridConsistencyInteractor(
+            consistencyInteractor: NoopGridConsistencyInteractor
+        ): Pair<GridLayoutType, GridTypeConsistencyInteractor> {
+            return Pair(StretchedGridLayoutType, consistencyInteractor)
+        }
+
+        @Provides
+        fun provideGridConsistencyInteractorMap(
+            entries: Set<@JvmSuppressWildcards Pair<GridLayoutType, GridTypeConsistencyInteractor>>
+        ): Map<GridLayoutType, GridTypeConsistencyInteractor> {
+            return entries.toMap()
+        }
+    }
 }

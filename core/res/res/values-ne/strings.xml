@@ -84,7 +84,7 @@
     <string name="NetworkPreferenceSwitchTitle" msgid="1008329951315753038">"मोबाइल नेटवर्कमाथि पहुँच राख्न सकिएन"</string>
     <string name="NetworkPreferenceSwitchSummary" msgid="2086506181486324860">"रुचाइएको नेटवर्क परिवर्तन गरी हेर्नुहोस्‌। परिवर्तन गर्न ट्याप गर्नुहोस्‌।"</string>
     <string name="EmergencyCallWarningTitle" msgid="1615688002899152860">"आपत्‌कालीन कल सेवा अनुपलब्ध छ"</string>
-    <string name="EmergencyCallWarningSummary" msgid="9102799172089265268">"आपत्कालीन कलहरू गर्न मोबाइल नेटवर्क चाहिन्छ"</string>
+    <string name="EmergencyCallWarningSummary" msgid="9102799172089265268">"आपत्‌कालीन कलहरू गर्न मोबाइल नेटवर्क चाहिन्छ"</string>
     <string name="notification_channel_network_alert" msgid="4788053066033851841">"अलर्टहरू"</string>
     <string name="notification_channel_call_forward" msgid="8230490317314272406">"कल फर्वार्ड गर्ने सेवा"</string>
     <string name="notification_channel_emergency_callback" msgid="54074839059123159">"आपत्‌कालीन कलब्याक मोड"</string>
@@ -153,16 +153,19 @@
     <string name="cfTemplateForwardedTime" msgid="735042369233323609">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: <xliff:g id="DIALING_NUMBER">{1}</xliff:g> पछि <xliff:g id="TIME_DELAY">{2}</xliff:g> सेकेन्ड"</string>
     <string name="cfTemplateRegistered" msgid="5619930473441550596">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: अगाडि बढाइएको छैन"</string>
     <string name="cfTemplateRegisteredTime" msgid="5222794399642525045">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: अगाडि बढाइएको छैन"</string>
-    <string name="scCellularNetworkSecurityTitle" msgid="90330018476923559">"मोबाइल नेटवर्कको सुरक्षा"</string>
-    <string name="scCellularNetworkSecuritySummary" msgid="8659128412709908263">"सेटिङको समीक्षा गर्नुहोस्"</string>
-    <string name="scIdentifierDisclosureIssueTitle" msgid="3737384845335568193">"डिभाइसको आइडेन्टिफायर एक्सेस गरियो"</string>
-    <string name="scIdentifierDisclosureIssueSummary" msgid="3870743771498510600">"<xliff:g id="DISCLOSURE_NETWORK">%4$s</xliff:g> मा कनेक्ट गरिएको कुनै नेटवर्कले <xliff:g id="DISCLOSURE_WINDOW_START_TIME">%2$tr</xliff:g> र <xliff:g id="DISCLOSURE_WINDOW_END_TIME">%3$tr</xliff:g> बिचको अवधिमा तपाईंको डिभाइसको अद्वितीय आइडेन्टिफायर (IMSI) <xliff:g id="DISCLOSURE_COUNT">%1$d</xliff:g> पटक रेकर्ड गर्‍यो।"</string>
-    <string name="scNullCipherIssueEncryptedTitle" msgid="8426373579673205292">"<xliff:g id="NETWORK_NAME">%1$s</xliff:g> सँगको कनेक्सन इन्क्रिप्ट गरिएको छ"</string>
-    <string name="scNullCipherIssueEncryptedSummary" msgid="6437468449554283998">"तपाईं अब अझ सुरक्षित मोबाइल नेटवर्कमा कनेक्ट हुनुभएको छ।"</string>
-    <string name="scNullCipherIssueNonEncryptedTitle" msgid="2069674849204163569">"<xliff:g id="NETWORK_NAME">%1$s</xliff:g> सँगको कनेक्सन इन्क्रिप्ट गरिएको छैन"</string>
-    <string name="scNullCipherIssueNonEncryptedSummary" msgid="3577092996366374833">"तपाईं इन्क्रिप्ट नगरिएको मोबाइल नेटवर्कमा कनेक्ट हुनुहुन्छ। तपाईंका कल, म्यासेज र जानकारी इन्टरसेप्ट हुन सक्ने जोखिम छ।"</string>
-    <string name="scNullCipherIssueActionSettings" msgid="8378372959891478470">"मोबाइल नेटवर्कको सुरक्षासम्बन्धी सेटिङ"</string>
+    <string name="scCellularNetworkSecurityTitle" msgid="7752521808690294384">"मोबाइल नेटवर्कको सुरक्षा"</string>
+    <string name="scCellularNetworkSecuritySummary" msgid="7042036754550545005">"इन्क्रिप्सन, इन्क्रिप्ट नगरिएका नेटवर्कसम्बन्धी सूचना"</string>
+    <string name="scIdentifierDisclosureIssueTitle" msgid="2898888825129970328">"डिभाइसको ID एक्सेस गरियो"</string>
+    <string name="scIdentifierDisclosureIssueSummaryNotification" msgid="3699930821270580416">"तपाईंले आफ्नो <xliff:g id="DISCLOSURE_NETWORK">%2$s</xliff:g> SIM प्रयोग गर्दै गर्दा तपाईंको डिभाइसको नजिकै रहेको एउटा नेटवर्कले <xliff:g id="DISCLOSURE_TIME">%1$s</xliff:g> मा तपाईंको डिभाइसको अद्वितीय ID रेकर्ड गरेको छ"</string>
+    <string name="scIdentifierDisclosureIssueSummary" msgid="7283387338827749276">"तपाईंले आफ्नो <xliff:g id="DISCLOSURE_NETWORK">%2$s</xliff:g> SIM प्रयोग गर्दै गर्दा तपाईंको डिभाइसको नजिकै रहेको एउटा नेटवर्कले <xliff:g id="DISCLOSURE_TIME">%1$s</xliff:g> मा तपाईंको डिभाइसको अद्वितीय ID रेकर्ड गरेको छ।\n\nयसको अर्थ तपाईंको लोकेसन, गतिविधि वा पहिचान लग गरिएको छ। यसो गर्नु सामान्य हो तर आफ्नो गोपनीयताका बारेमा चिन्ता लिने मान्छेहरूका लागि यो समस्याको विषय हुन सक्छ।"</string>
+    <string name="scNullCipherIssueEncryptedTitle" msgid="234717016411824969">"इन्क्रिप्ट गरिएको नेटवर्क <xliff:g id="NETWORK_NAME">%1$s</xliff:g> मा कनेक्ट गरियो"</string>
+    <string name="scNullCipherIssueEncryptedSummary" msgid="8577510708842150475">"<xliff:g id="NETWORK_NAME">%1$s</xliff:g> SIM को कनेक्सन अब सुरक्षित छ"</string>
+    <string name="scNullCipherIssueNonEncryptedTitle" msgid="3978071464929453915">"इन्क्रिप्ट नगरिएको नेटवर्कमा कनेक्ट गरियो"</string>
+    <string name="scNullCipherIssueNonEncryptedSummaryNotification" msgid="7386936934128110388">"हाल तपाईंले <xliff:g id="NETWORK_NAME">%1$s</xliff:g> SIM प्रयोग गर्दै गर्दा कल, म्यासेज र डेटा एक्सेस गरिने जोखिम बढी छ"</string>
+    <string name="scNullCipherIssueNonEncryptedSummary" msgid="5093428974513703253">"हाल तपाईंले <xliff:g id="NETWORK_NAME">%1$s</xliff:g> SIM प्रयोग गर्दै गर्दा कल, म्यासेज र डेटा एक्सेस गरिने जोखिम बढी छ।\n\nतपाईंको कनेक्सन फेरि इन्क्रिप्ट गरिएपछि तपाईं अर्को सूचना प्राप्त गर्नु हुने छ।"</string>
+    <string name="scNullCipherIssueActionSettings" msgid="5888857706424639946">"मोबाइल नेटवर्कको सुरक्षासम्बन्धी सेटिङ"</string>
     <string name="scNullCipherIssueActionLearnMore" msgid="7896642417214757769">"थप जान्नुहोस्"</string>
+    <string name="scNullCipherIssueActionGotIt" msgid="8747796640866585787">"बुझेँ"</string>
     <string name="fcComplete" msgid="1080909484660507044">"विशेषता कोड पुरा भयो।"</string>
     <string name="fcError" msgid="5325116502080221346">"जडान समस्या वा अमान्य सुविधा कोड।"</string>
     <string name="httpErrorOk" msgid="6206751415788256357">"ठिक छ"</string>
@@ -356,8 +359,7 @@
     <string name="capability_title_canTakeScreenshot" msgid="3895812893130071930">"स्क्रिनसट लिनुहोस्"</string>
     <string name="capability_desc_canTakeScreenshot" msgid="7762297374317934052">"डिस्प्लेको स्क्रिनसट लिन सकिन्छ।"</string>
     <string name="dream_preview_title" msgid="5570751491996100804">"प्रिभ्यू, <xliff:g id="DREAM_NAME">%1$s</xliff:g>"</string>
-    <!-- no translation found for dream_accessibility_action_click (7392398629967797805) -->
-    <skip />
+    <string name="dream_accessibility_action_click" msgid="7392398629967797805">"हटाउनुहोस्"</string>
     <string name="permlab_statusBar" msgid="8798267849526214017">"स्थिति पट्टिलाई अक्षम वा संशोधित गर्नुहोस्"</string>
     <string name="permdesc_statusBar" msgid="5809162768651019642">"स्थिति पट्टि असक्षम पार्न वा प्रणाली आइकनहरू थप्न र हटाउन एपलाई अनुमति दिन्छ।"</string>
     <string name="permlab_statusBarService" msgid="2523421018081437981">"स्टाटस बार हुन दिनुहोस्"</string>
@@ -464,11 +466,11 @@
     <string name="permdesc_broadcastSticky" product="tablet" msgid="5058486069846384013">"औपचारिक प्रसारणलाई पठाउनको लागि एउटा एपलाई अनुमति दिन्छ, जुन प्रसारण समाप्त भएपछि बाँकी रहन्छ। अत्यधिक प्रयोगले धेरै मेमोरी प्रयोग गरेको कारणले ट्याब्लेटलाई ढिलो र अस्थिर बनाउन सक्छ।"</string>
     <string name="permdesc_broadcastSticky" product="tv" msgid="2338185920171000650">"एपलाई प्रसारण समाप्त भइसकेपछि पनि रहिरहने स्टिकी प्रसारणहरू पठाउने अनुमति दिन्छ। यो सुविधाको अत्यधिक प्रयोगले धेरै मेमोरी प्रयोग हुने भएकाले तपाईंको Android टिभी यन्त्र सुस्त वा अस्थिर हुन सक्छ।"</string>
     <string name="permdesc_broadcastSticky" product="default" msgid="134529339678913453">"औपचारिक प्रसारणलाई पठाउनको लागि एक एपलाई अनुमति दिन्छ, जुन प्रसारण समाप्त भएपछि बाँकी रहन्छ। अत्यधिक प्रयोगले धेरै मेमोरी प्रयोग गरेको कारणले फोनलाई ढिलो र अस्थिर बनाउन सक्छ।"</string>
-    <string name="permlab_readContacts" msgid="8776395111787429099">"तपाईँका सम्पर्कहरू पढ्नुहोस्"</string>
+    <string name="permlab_readContacts" msgid="8776395111787429099">"तपाईँका कन्ट्याक्टहरू पढ्नुहोस्"</string>
     <string name="permdesc_readContacts" product="tablet" msgid="6430093481659992692">"एपलाई तपाईंको ट्याब्लेटमा भण्डारण गरिएका कन्ट्याक्टहरूसँग सम्बन्धित डेटा पढ्ने अनुमति दिन्छ। एपहरूले कन्ट्याक्टहरू बनाउने तपाईंको ट्याब्लेटमा भण्डारण गरिएका खाताहरूमाथि पनि पहुँच प्राप्त गर्ने छन्। यसमा तपाईंले स्थापना गरेका एपहरूले बनाएका खाताहरू पर्न सक्छन्। यस अनुमतिले एपहरूलाई तपाईंको सम्पर्क ठेगानासम्बन्धी डेटा सेभ गर्न दिने भएकाले हानिकारक एपहरूले तपाईंलाई थाहै नदिइकन सम्पर्क ठेगानासम्बन्धी डेटा आदान प्रदान गर्न सक्छन्।"</string>
     <string name="permdesc_readContacts" product="tv" msgid="8400138591135554789">"एपलाई तपाईंको Android टिभी डिभाइसमा भण्डारण गरिएका सम्पर्क ठेगानासम्बन्धी डेटा पढ्न अनुमति दिन्छ। एपहरूले कन्ट्याक्टहरू बनाउने तपाईंको Android टिभी डिभाइसमा भण्डारण गरिएका खाताहरूमाथि पनि पहुँच प्राप्त गर्ने छन्। यसमा तपाईंले स्थापना गरेका एपहरूले बनाएका खाताहरू पर्न सक्छन्। यस अनुमतिले एपहरूलाई तपाईंको सम्पर्क ठेगानासम्बन्धी डेटा सेभ गर्न दिने भएकाले हानिकारक एपहरूले तपाईंलाई थाहै नदिइकन सम्पर्क ठेगानासम्बन्धी डेटा आदान प्रदान गर्न सक्छन्।"</string>
     <string name="permdesc_readContacts" product="default" msgid="4911989776203207644">"एपलाई तपाईंको फोनमा भण्डारण गरिएका कन्ट्याक्टहरूसँग सम्बन्धित डेटा पढ्ने अनुमति दिन्छ। एपहरूले कन्ट्याक्टहरू बनाउने तपाईंको फोनमा भण्डारण गरिएका खाताहरूमाथि पनि पहुँच प्राप्त गर्ने छन्। यसमा तपाईंले स्थापना गरेका एपहरूले बनाएका खाताहरू पर्न सक्छन्। यस अनुमतिले एपहरूलाई तपाईंको सम्पर्क ठेगानासम्बन्धी डेटा सेभ गर्न दिने भएकाले हानिकारक एपहरूले तपाईंलाई थाहै नदिइकन सम्पर्क ठेगानासम्बन्धी डेटा आदान प्रदान गर्न सक्छन्।"</string>
-    <string name="permlab_writeContacts" msgid="8919430536404830430">"तपाईँका सम्पर्कहरू परिवर्तन गर्नुहोस्"</string>
+    <string name="permlab_writeContacts" msgid="8919430536404830430">"तपाईँका कन्ट्याक्टहरू परिवर्तन गर्नुहोस्"</string>
     <string name="permdesc_writeContacts" product="tablet" msgid="6422419281427826181">"एपलाई तपाईंको ट्याब्लेटमा भण्डारण गरिएका सम्पर्क ठेगानासम्बन्धी डेटा परिमार्जन गर्न अनुमति दिन्छ। यो अनुमतिले एपलाई सम्पर्क ठेगानासम्बन्धी डेटा मेटाउन अनुमति दिन्छ।"</string>
     <string name="permdesc_writeContacts" product="tv" msgid="6488872735379978935">"एपलाई तपाईंको Android टिभी डिभाइसमा भण्डारण गरिएका सम्पर्क ठेगानासम्बन्धी डेटा परिमार्जन गर्न अनुमति दिन्छ। यो अनुमतिले एपलाई सम्पर्क ठेगानासम्बन्धी डेटा मेटाउन अनुमति दिन्छ।"</string>
     <string name="permdesc_writeContacts" product="default" msgid="8304795696237065281">"एपलाई तपाईंको फोनमा भण्डारण गरिएका सम्पर्क ठेगानासम्बन्धी डेटा परिमार्जन गर्न अनुमति दिन्छ। यो अनुमतिले एपलाई सम्पर्क ठेगानासम्बन्धी डेटा मेटाउन अनुमति दिन्छ।"</string>
@@ -643,14 +645,14 @@
     <string name="biometric_error_hw_unavailable" msgid="2494077380540615216">"बायोमेट्रिक हार्डवेयर उपलब्ध छैन"</string>
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"प्रमाणीकरण रद्द गरियो"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"पहिचान भएन"</string>
-    <string name="biometric_face_not_recognized" msgid="5535599455744525200">"अनुहार पहिचान गर्न सकिएन"</string>
+    <string name="biometric_face_not_recognized" msgid="5535599455744525200">"अनुहार मिलेन"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"प्रमाणीकरण रद्द गरियो"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"कुनै पनि PIN, ढाँचा वा पासवर्ड सेट गरिएको छैन"</string>
     <string name="biometric_error_generic" msgid="6784371929985434439">"प्रमाणित गर्ने क्रममा त्रुटि भयो"</string>
     <string name="screen_lock_app_setting_name" msgid="6054944352976789228">"स्क्रिन लक प्रयोग गर्नुहोस्"</string>
     <string name="screen_lock_dialog_default_subtitle" msgid="120359538048533695">"जारी राख्न आफ्नो स्क्रिन लक हाल्नुहोस्"</string>
     <string name="fingerprint_acquired_partial" msgid="4323789264604479684">"सेन्सरमा बेसरी थिच्नुहोस्"</string>
-    <string name="fingerprint_acquired_insufficient" msgid="2410176550915730974">"फिंगरप्रिन्ट पहिचान गर्न सकिएन। फेरि प्रयास गर्नुहोस्।"</string>
+    <string name="fingerprint_acquired_insufficient" msgid="2410176550915730974">"फिंगरप्रिन्ट मिलेन। फेरि प्रयास गर्नुहोस्।"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1770676120848224250">"फिंगरप्रिन्ट सेन्सर सफा गरेर फेरि प्रयास गर्नुहोस्"</string>
     <string name="fingerprint_acquired_imager_dirty_alt" msgid="9169582140486372897">"सेन्सर सफा गरेर फेरि प्रयास गर्नुहोस्"</string>
     <string name="fingerprint_acquired_too_fast" msgid="1628459767349116104">"सेन्सरमा बेसरी थिच्नुहोस्"</string>
@@ -662,9 +664,9 @@
     <string name="fingerprint_acquired_immobile" msgid="1621891895241888048">"हरेक पटक आफ्नो औँला थोरै यताउता सार्नुहोस्"</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
-    <string name="fingerprint_error_not_match" msgid="4599441812893438961">"फिंगरप्रिन्ट पहिचान गर्न सकिएन"</string>
-    <string name="fingerprint_udfps_error_not_match" msgid="8236930793223158856">"फिंगरप्रिन्ट पहिचान गर्न सकिएन"</string>
-    <string name="fingerprint_dialog_use_fingerprint_instead" msgid="5590293588784953188">"अनुहार पहिचान गर्न सकिएन। बरु फिंगरप्रिन्ट प्रयोग गर्नुहोस्।"</string>
+    <string name="fingerprint_error_not_match" msgid="4599441812893438961">"फिंगरप्रिन्ट मिलेन"</string>
+    <string name="fingerprint_udfps_error_not_match" msgid="8236930793223158856">"फिंगरप्रिन्ट मिलेन"</string>
+    <string name="fingerprint_dialog_use_fingerprint_instead" msgid="5590293588784953188">"अनुहार मिलेन। बरु फिंगरप्रिन्ट प्रयोग गर्नुहोस्।"</string>
     <string name="fingerprint_authenticated" msgid="2024862866860283100">"फिंगरप्रिन्ट प्रमाणीकरण गरियो"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="8867889115112348167">"अनुहार प्रमाणीकरण गरियो"</string>
     <string name="face_authenticated_confirmation_required" msgid="6872632732508013755">"अनुहार प्रमाणीकरण गरियो, कृपया पुष्टि गर्नुहोस् थिच्नुहोस्"</string>
@@ -714,7 +716,7 @@
     <string name="face_acquired_not_detected" msgid="1057966913397548150">"तपाईंको अनुहार देखिएन। तपाईंको फोन आफ्नो आँखाअघि राखी समात्नुहोस्।"</string>
     <string name="face_acquired_too_much_motion" msgid="8199691445085189528">"अत्यधिक हल्लियो। फोन स्थिर राख्नुहोस्।"</string>
     <string name="face_acquired_recalibrate" msgid="8724013080976469746">"कृपया आफ्नो अनुहार पुनः दर्ता गर्नुहोस्।"</string>
-    <string name="face_acquired_too_different" msgid="4505278456634706967">"अनुहार पहिचान गर्न सकिएन। फेरि प्रयास गर्नुहोस्।"</string>
+    <string name="face_acquired_too_different" msgid="4505278456634706967">"अनुहार मिलेन। फेरि प्रयास गर्नुहोस्।"</string>
     <string name="face_acquired_too_similar" msgid="8882920552674125694">"आफ्नो टाउको थोरै यताउता सार्नुहोस्"</string>
     <string name="face_acquired_pan_too_extreme" msgid="5417928604710621088">"आफ्नो फोनमा अझ सीधा हेर्नुहोस्"</string>
     <string name="face_acquired_tilt_too_extreme" msgid="5715715666540716620">"आफ्नो फोनमा अझ सीधा हेर्नुहोस्"</string>
@@ -830,14 +832,14 @@
     <string name="policylab_limitPassword" msgid="4851829918814422199">"पासवर्ड नियमहरू मिलाउनुहोस्"</string>
     <string name="policydesc_limitPassword" msgid="4105491021115793793">"स्क्रिन लक पासवर्ड र PIN हरूमा अनुमति दिइएको लम्बाइ र वर्णहरूको नियन्त्रण गर्नुहोस्।"</string>
     <string name="policylab_watchLogin" msgid="7599669460083719504">"स्क्रिन अनलक गर्न गरिएको प्रयासको अनुगमन गर्ने"</string>
-    <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"स्क्रिन अनलक गर्दा गलत पासवर्ड टाइप भएको संख्या निरीक्षण गर्नुहोस् र यदि निकै धेरै गलत पासवर्डहरू टाइप भएका छन भने ट्याब्लेट लक गर्नुहोस् वा ट्याब्लेटका सबै डेटा मेट्नुहोस्।"</string>
+    <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"स्क्रिन अनलक गर्दा कति पटक गलत पासवर्ड टाइप गरिन्छ भन्ने कुराको रेकर्ड राख्नुहोस् र धेरै पटक गलत पासवर्ड टाइप गरिएका खण्डमा ट्याबलेट लक गर्नुहोस् वा यसका सबै डेटा मेटाउनुहोस्।"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"स्क्रिन अनलक गर्दा गलत पासवर्ड टाइप गरेको सङ्ख्या निरीक्षण गर्नुहोस्, र धेरै पटक गलत पासवर्डहरू टाइप गरिएको खण्डमा आफ्नो Android टिभी यन्त्र लक गर्नुहोस् वा डिभाइसमा भएको सम्पूर्ण डेटा मेटाउनुहोस्।"</string>
     <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"स्क्रिन अनलक गर्दा कति पटक गलत पासवर्ड टाइप गरिन्छ भन्ने कुरा निगरानी गर्नुहोस् र अत्यन्तै धेरै पटक गलत पासवर्ड टाइप गरिएका खण्डमा यो इन्फोटेनमेन्ट प्रणाली लक गर्नुहोस् वा यस इन्फोटेनमेन्ट प्रणालीका सबै डेटा मेटाउनुहोस्।"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"स्क्रिन अनलक गर्दा कति पटक गलत पासवर्ड टाइप भएको छ हेर्नुहोस् र निकै धेरै पटक गलत पासवर्ड टाइप भएको भने फोन लक गर्नुहोस् वा फोनका सबै डेटा मेट्नुहोस्।"</string>
-    <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"स्क्रिन अनलक गर्दा गलत पासवर्ड टाइप संख्या अनुगमन गर्नुहोस्, र यदि निकै धेरै गलत पासवर्डहरू टाइप गरिएमा ट्याब्लेट लक गर्नुहोस् वा प्रयोगकर्ताको डेटा मेटाउनुहोस्।"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"स्क्रिन अनलक गर्दा कति पटक गलत पासवर्ड टाइप गरिन्छ भन्ने कुराको रेकर्ड राख्नुहोस् र धेरै पटक गलत पासवर्ड टाइप गरिएका खण्डमा ट्याबलेट लक गर्नुहोस् वा प्रयोगकर्ताका सबै डेटा मेटाउनुहोस्।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"स्क्रिन अनलक गर्दा गलत पासवर्ड टाइप गरेको सङ्ख्या निरीक्षण गर्नुहोस्, र धेरै पटक गलत पासवर्डहरू टाइप गरिएको खण्डमा आफ्नो Android टिभी यन्त्र लक गर्नुहोस् वा यो प्रयोगकर्ताको सम्पूर्ण डेटा मेटाउनुहोस्।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"स्क्रिन अनलक गर्दा कति पटक गलत पासवर्ड टाइप गरिन्छ भन्ने कुरा निगरानी गर्नुहोस् र अत्यन्तै धेरै पटक गलत पासवर्ड टाइप गरिएका खण्डमा यो इन्फोटेनमेन्ट प्रणाली लक गर्नुहोस् वा यस प्रोफाइलका सबै डेटा मेटाउनुहोस्।"</string>
-    <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"स्क्रिन अनलक गर्दा गलत पासवर्ड टाइप संख्या अनुगमन गर्नुहोस्, र यदि निकै धेरै गलत पासवर्डहरू टाइप गरिएमा फोन लक गर्नुहोस् वा प्रयोगकर्ताको डेटा मेटाउनुहोस्।"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"स्क्रिन अनलक गर्दा कति पटक गलत पासवर्ड टाइप गरिन्छ भन्ने कुराको रेकर्ड राख्नुहोस् र धेरै पटक गलत पासवर्ड टाइप गरिएका खण्डमा फोन लक गर्नुहोस् वा प्रयोगकर्ताका सबै डेटा मेटाउनुहोस्।"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"स्क्रिन लक परिवर्तन गर्ने"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"स्क्रिन लक परिवर्तन गर्नुहोस्।"</string>
     <string name="policylab_forceLock" msgid="7360335502968476434">"स्क्रिन लक गर्ने"</string>
@@ -1235,7 +1237,7 @@
     <string name="whichImageCaptureApplicationNamed" msgid="8820702441847612202">"%1$s मार्फत छविलाई कैंद गर्नुहोस्"</string>
     <string name="whichImageCaptureApplicationLabel" msgid="6505433734824988277">"छविलाई कैंद गर्नुहोस्"</string>
     <string name="alwaysUse" msgid="3153558199076112903">"यस कार्यको लागि पूर्वनिर्धारितबाट प्रयोग गर्नुहोस्।"</string>
-    <string name="use_a_different_app" msgid="4987790276170972776">"फरक एप प्रयोग गर्नुहोस्"</string>
+    <string name="use_a_different_app" msgid="4987790276170972776">"अर्को एप प्रयोग गर्नुहोस्"</string>
     <string name="clearDefaultHintMsg" msgid="1325866337702524936">"प्रणाली सेटिङहरूमा पूर्वनिर्धारितलाई हटाउनुहोस् &gt; एपहरू &gt; डाउनलोड।"</string>
     <string name="chooseActivity" msgid="8563390197659779956">"एउटा कार्यको चयन गर्नुहोस्"</string>
     <string name="chooseUsbActivity" msgid="2096269989990986612">"USB उपकरणको लागि एउटा एप छान्नुहोस्"</string>
@@ -1505,7 +1507,7 @@
     <string name="ime_action_previous" msgid="6548799326860401611">"अघिल्लो"</string>
     <string name="ime_action_default" msgid="8265027027659800121">"चलाउनुहोस्"</string>
     <string name="dial_number_using" msgid="6060769078933953531">\n"नम्बर डायल गर्नुहोस् <xliff:g id="NUMBER">%s</xliff:g> प्रयोग गरेर"</string>
-    <string name="create_contact_using" msgid="6200708808003692594">"सम्पर्क सिर्जना गर्नुहोस्\nयो <xliff:g id="NUMBER">%s</xliff:g> प्रयोग गरेर"</string>
+    <string name="create_contact_using" msgid="6200708808003692594">"कन्ट्याक्ट हाल्नुहोस्\nयो <xliff:g id="NUMBER">%s</xliff:g> प्रयोग गरेर"</string>
     <string name="grant_credentials_permission_message_header" msgid="5365733888842570481">"निम्न एउटा वा धेरै एपहरूले तपाईँको खातामा पहुँचको लागि अनुमति अहिले र भविष्यमा अनुरोध गर्छन्।"</string>
     <string name="grant_credentials_permission_message_footer" msgid="1886710210516246461">"के तपाईं यस अनुरोधलाई अनुमति दिन चाहनुहुन्छ?"</string>
     <string name="grant_permissions_header_text" msgid="3420736827804657201">"अनुरोध पहुँच गर्नुहोस्"</string>
@@ -1898,8 +1900,7 @@
     <string name="lock_to_app_unlock_pin" msgid="3890940811866290782">"अनपिन गर्नुअघि PIN मागियोस्"</string>
     <string name="lock_to_app_unlock_pattern" msgid="2694204070499712503">"अनपिन गर्नअघि अनलक प्याटर्न माग्नुहोस्"</string>
     <string name="lock_to_app_unlock_password" msgid="9126722403506560473">"पिन निकाल्नुअघि पासवर्ड सोध्नुहोस्"</string>
-    <!-- no translation found for package_installed_device_owner (8684974629306529138) -->
-    <skip />
+    <string name="package_installed_device_owner" msgid="8684974629306529138">"यो प्याकेज तपाईंका एड्मिनले इन्स्टल गर्नुभएको हो।\nप्रदान गरिएका अनुमतिसम्बन्धी जानकारी हेर्न सेटिङमा जानुहोस्"</string>
     <string name="package_updated_device_owner" msgid="7560272363805506941">"तपाईंका प्रशासकले अद्यावधिक गर्नुभएको"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"तपाईंका प्रशासकले मेट्नुभएको"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ठिक छ"</string>
@@ -2143,6 +2144,8 @@
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"दिनचर्या मोडको जानकारीमूलक सूचना"</string>
     <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"ब्याट्री सेभर अन गरिएको छ"</string>
     <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"ब्याट्रीको आयु बढाउन ब्याट्रीको खपत कम गरिँदै छ"</string>
+    <string name="dynamic_mode_notification_title_v2" msgid="5072385242078021152">"ब्याट्री सेभर अन छ"</string>
+    <string name="dynamic_mode_notification_summary_v2" msgid="2142444344663147938">"ब्याट्रीको आयु बढाउन ब्याट्री सेभर अन गरिएको छ"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"ब्याट्री सेभर"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"ब्याट्री सेभर अफ गरियो"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"फोनमा पर्याप्त चार्ज छ। सुविधाहरूलाई अब उप्रान्त प्रतिबन्ध लगाइँदैन।"</string>
@@ -2217,6 +2220,8 @@
     <string name="miniresolver_switch_to_work" msgid="1042640606122638596">"कामसम्बन्धी एप प्रयोग गर्ने हो?"</string>
     <string name="miniresolver_call_information" msgid="6739417525304184083">"तपाईंको सङ्गठनले तपाईंलाई कामसम्बन्धी एपहरूमार्फत मात्र कल गर्ने अनुमति दिएको छ"</string>
     <string name="miniresolver_sms_information" msgid="4311292661329483088">"तपाईंको सङ्गठनले तपाईंलाई कामसम्बन्धी एपहरूमार्फत मात्र म्यासेज पठाउने अनुमति दिएको छ"</string>
+    <string name="miniresolver_private_space_phone_information" msgid="4469511223312488570">"तपाईं आफ्नो व्यक्तिगत फोन एपबाट मात्र फोन कल गर्न सक्नुहुन्छ। व्यक्तिगत फोन एपमार्फत गरिएका कलहरू तपाईंको व्यक्तिगत कल हिस्ट्रीमा राखिने छन्।"</string>
+    <string name="miniresolver_private_space_messages_information" msgid="111285656327622118">"तपाईं आफ्नो व्यक्तिगत Messages एपबाट मात्र SMS म्यासेजहरू पठाउन सक्नुहुन्छ।"</string>
     <string name="miniresolver_use_personal_browser" msgid="776072682871133308">"व्यक्तिगत ब्राउजर प्रयोग गर्नुहोस्"</string>
     <string name="miniresolver_use_work_browser" msgid="543575306251952994">"कार्य ब्राउजर प्रयोग गर्नुहोस्"</string>
     <string name="miniresolver_call" msgid="6386870060423480765">"कल गर्नुहोस्"</string>
@@ -2396,8 +2401,11 @@
     <string name="profile_label_work_3" msgid="4834572253956798917">"कार्य प्रोफाइल ३"</string>
     <string name="profile_label_test" msgid="9168641926186071947">"परीक्षण"</string>
     <string name="profile_label_communal" msgid="8743921499944800427">"सामुदायिक"</string>
-    <!-- no translation found for redacted_notification_message (1520587845842228816) -->
-    <skip />
+    <string name="accessibility_label_managed_profile" msgid="3366526886209832641">"कार्य प्रोफाइल"</string>
+    <string name="accessibility_label_private_profile" msgid="1436459319135548969">"निजी स्पेस"</string>
+    <string name="accessibility_label_clone_profile" msgid="7579118375042398784">"क्लोन"</string>
+    <string name="accessibility_label_communal_profile" msgid="1437173163111334791">"सामुदायिक"</string>
+    <string name="redacted_notification_message" msgid="1520587845842228816">"संवेदनशील सूचनासम्बन्धी सामग्री लुकाइएको छ"</string>
     <string name="redacted_notification_action_title" msgid="6942924973335920935"></string>
     <string name="screen_not_shared_sensitive_content" msgid="7058419185079565001">"स्क्रिन सेयर गर्दा सुरक्षाका लागि एपमा भएको सामग्री लुकाइएको छ"</string>
     <string name="satellite_notification_title" msgid="4026338973463121526">"स्याटलाइटमा स्वतः कनेक्ट गरियो"</string>
@@ -2405,4 +2413,22 @@
     <string name="satellite_notification_open_message" msgid="4149234979688273729">"Messages खोल्नुहोस्"</string>
     <string name="satellite_notification_how_it_works" msgid="3132069321977520519">"यसले काम गर्ने तरिका"</string>
     <string name="unarchival_session_app_label" msgid="6811856981546348205">"विचाराधीन..."</string>
+    <!-- no translation found for fingerprint_dangling_notification_title (7362075195588639989) -->
+    <skip />
+    <!-- no translation found for fingerprint_dangling_notification_msg_1 (6261149111900787302) -->
+    <skip />
+    <!-- no translation found for fingerprint_dangling_notification_msg_2 (7688302770424064884) -->
+    <skip />
+    <!-- no translation found for fingerprint_dangling_notification_msg_all_deleted_1 (2927018569542316055) -->
+    <skip />
+    <!-- no translation found for fingerprint_dangling_notification_msg_all_deleted_2 (6897989352716156176) -->
+    <skip />
+    <!-- no translation found for face_dangling_notification_title (947852541060975473) -->
+    <skip />
+    <!-- no translation found for face_dangling_notification_msg (8806849376915541655) -->
+    <skip />
+    <!-- no translation found for biometric_dangling_notification_action_set_up (8246885009807817961) -->
+    <skip />
+    <!-- no translation found for biometric_dangling_notification_action_not_now (8095249216864443491) -->
+    <skip />
 </resources>

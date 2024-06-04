@@ -20,7 +20,7 @@ import static android.Manifest.permission.BIND_DREAM_SERVICE;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
-import static android.service.dreams.Flags.dreamTracksFocus;
+import static android.service.dreams.Flags.dreamHandlesBeingObscured;
 
 import static com.android.server.wm.ActivityInterceptorCallback.DREAM_MANAGER_ORDERED_ID;
 
@@ -45,6 +45,7 @@ import android.database.ContentObserver;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.net.Uri;
 import android.os.BatteryManager;
+import android.os.BatteryManagerInternal;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -118,6 +119,7 @@ public final class DreamManagerService extends SystemService {
     private final DreamController mController;
     private final PowerManager mPowerManager;
     private final PowerManagerInternal mPowerManagerInternal;
+    private final BatteryManagerInternal mBatteryManagerInternal;
     private final PowerManager.WakeLock mDozeWakeLock;
     private final ActivityTaskManagerInternal mAtmInternal;
     private final PackageManagerInternal mPmInternal;
@@ -186,7 +188,11 @@ public final class DreamManagerService extends SystemService {
     private final BroadcastReceiver mChargingReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            mIsCharging = (BatteryManager.ACTION_CHARGING.equals(intent.getAction()));
+            if (Flags.useBatteryChangedBroadcast()) {
+                mIsCharging = mBatteryManagerInternal.isPowered(BatteryManager.BATTERY_PLUGGED_ANY);
+            } else {
+                mIsCharging = (BatteryManager.ACTION_CHARGING.equals(intent.getAction()));
+            }
         }
     };
 
@@ -251,6 +257,12 @@ public final class DreamManagerService extends SystemService {
                 com.android.internal.R.bool.config_keepDreamingWhenUnplugging);
         mDreamsDisabledByAmbientModeSuppressionConfig = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_dreamsDisabledByAmbientModeSuppressionConfig);
+
+        if (Flags.useBatteryChangedBroadcast()) {
+            mBatteryManagerInternal = getLocalService(BatteryManagerInternal.class);
+        } else {
+            mBatteryManagerInternal = null;
+        }
     }
 
     @Override
@@ -279,9 +291,15 @@ public final class DreamManagerService extends SystemService {
 
             mContext.registerReceiver(
                     mDockStateReceiver, new IntentFilter(Intent.ACTION_DOCK_EVENT));
+
             IntentFilter chargingIntentFilter = new IntentFilter();
-            chargingIntentFilter.addAction(BatteryManager.ACTION_CHARGING);
-            chargingIntentFilter.addAction(BatteryManager.ACTION_DISCHARGING);
+            if (Flags.useBatteryChangedBroadcast()) {
+                chargingIntentFilter.addAction(Intent.ACTION_BATTERY_CHANGED);
+                chargingIntentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
+            } else {
+                chargingIntentFilter.addAction(BatteryManager.ACTION_CHARGING);
+                chargingIntentFilter.addAction(BatteryManager.ACTION_DISCHARGING);
+            }
             mContext.registerReceiver(mChargingReceiver, chargingIntentFilter);
 
             mSettingsObserver = new SettingsObserver(mHandler);
@@ -410,7 +428,7 @@ public final class DreamManagerService extends SystemService {
             // Can't start dreaming if we are already dreaming and the dream has focus. If we are
             // dreaming but the dream does not have focus, then the dream can be brought to the
             // front so it does have focus.
-            if (isScreenOn && isDreamingInternal() && dreamHasFocus()) {
+            if (isScreenOn && isDreamingInternal() && dreamIsFrontmost()) {
                 return false;
             }
 
@@ -445,9 +463,10 @@ public final class DreamManagerService extends SystemService {
         }
     }
 
-    private boolean dreamHasFocus() {
-        // Dreams always had focus before they were able to track it.
-        return !dreamTracksFocus() || mController.dreamHasFocus();
+    private boolean dreamIsFrontmost() {
+        // Dreams were always considered frontmost before they began tracking whether they are
+        // obscured.
+        return !dreamHandlesBeingObscured() || mController.dreamIsFrontmost();
     }
 
     protected void requestStartDreamFromShell() {
@@ -455,7 +474,7 @@ public final class DreamManagerService extends SystemService {
     }
 
     private void requestDreamInternal() {
-        if (isDreamingInternal() && !dreamHasFocus() && mController.bringDreamToFront()) {
+        if (isDreamingInternal() && !dreamIsFrontmost() && mController.bringDreamToFront()) {
             return;
         }
 
@@ -1141,10 +1160,16 @@ public final class DreamManagerService extends SystemService {
         }
 
         @Override
-        public void onDreamFocusChanged(boolean hasFocus) {
+        public void setDreamIsObscured(boolean isObscured) {
+            if (!dreamHandlesBeingObscured()) {
+                return;
+            }
+
+            checkPermission(android.Manifest.permission.WRITE_DREAM_STATE);
+
             final long ident = Binder.clearCallingIdentity();
             try {
-                mController.setDreamHasFocus(hasFocus);
+                mHandler.post(() -> mController.setDreamIsObscured(isObscured));
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }

@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -33,9 +32,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.scene.SceneScope
 import com.android.compose.animation.scene.SceneTransitionLayout
 import com.android.compose.modifiers.thenIf
+import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.keyguard.domain.interactor.KeyguardClockInteractor
 import com.android.systemui.keyguard.ui.composable.blueprint.ClockScenes.largeClockScene
 import com.android.systemui.keyguard.ui.composable.blueprint.ClockScenes.smallClockScene
@@ -61,9 +62,9 @@ constructor(
     fun DefaultClockLayout(
         modifier: Modifier = Modifier,
     ) {
-        val currentClockLayout by clockViewModel.currentClockLayout.collectAsState()
+        val currentClockLayout by clockViewModel.currentClockLayout.collectAsStateWithLifecycle()
         val hasCustomPositionUpdatedAnimation by
-            clockViewModel.hasCustomPositionUpdatedAnimation.collectAsState()
+            clockViewModel.hasCustomPositionUpdatedAnimation.collectAsStateWithLifecycle()
         val currentScene =
             when (currentClockLayout) {
                 KeyguardClockViewModel.ClockLayout.SPLIT_SHADE_LARGE_CLOCK ->
@@ -79,7 +80,7 @@ constructor(
             }
 
         SceneTransitionLayout(
-            modifier = modifier,
+            modifier = modifier.sysuiResTag("keyguard_clock_container"),
             currentScene = currentScene,
             onChangeScene = {},
             transitions = ClockTransition.defaultClockTransitions,
@@ -125,14 +126,14 @@ constructor(
                     onTopChanged = burnIn.onSmartspaceTopChanged,
                 )
             }
-            with(mediaCarouselSection) { MediaCarousel() }
+            with(mediaCarouselSection) { KeyguardMediaCarousel() }
         }
     }
 
     @Composable
     private fun SceneScope.LargeClockWithSmartSpace(shouldOffSetClockToOneHalf: Boolean = false) {
         val burnIn = rememberBurnIn(clockInteractor)
-        val isLargeClockVisible by clockViewModel.isLargeClockVisible.collectAsState()
+        val isLargeClockVisible by clockViewModel.isLargeClockVisible.collectAsStateWithLifecycle()
 
         LaunchedEffect(isLargeClockVisible) {
             if (isLargeClockVisible) {
@@ -169,8 +170,8 @@ constructor(
     @Composable
     private fun SceneScope.WeatherLargeClockWithSmartSpace(modifier: Modifier = Modifier) {
         val burnIn = rememberBurnIn(clockInteractor)
-        val isLargeClockVisible by clockViewModel.isLargeClockVisible.collectAsState()
-        val currentClockState = clockViewModel.currentClock.collectAsState()
+        val isLargeClockVisible by clockViewModel.isLargeClockVisible.collectAsStateWithLifecycle()
+        val currentClockState = clockViewModel.currentClock.collectAsStateWithLifecycle()
 
         LaunchedEffect(isLargeClockVisible) {
             if (isLargeClockVisible) {

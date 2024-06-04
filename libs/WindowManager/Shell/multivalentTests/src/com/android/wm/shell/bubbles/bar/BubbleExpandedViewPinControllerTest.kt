@@ -31,7 +31,6 @@ import com.android.internal.protolog.common.ProtoLog
 import com.android.wm.shell.R
 import com.android.wm.shell.bubbles.BubblePositioner
 import com.android.wm.shell.bubbles.DeviceConfig
-import com.android.wm.shell.bubbles.bar.BubbleExpandedViewPinController.Companion.DROP_TARGET_SCALE
 import com.android.wm.shell.common.bubbles.BaseBubblePinController
 import com.android.wm.shell.common.bubbles.BaseBubblePinController.Companion.DROP_TARGET_ALPHA_IN_DURATION
 import com.android.wm.shell.common.bubbles.BaseBubblePinController.Companion.DROP_TARGET_ALPHA_OUT_DURATION
@@ -105,18 +104,21 @@ class BubbleExpandedViewPinControllerTest {
     }
 
     @Test
-    fun onDragUpdate_stayOnSameSide() {
+    fun drag_stayOnSameSide() {
         runOnMainSync {
             controller.onDragStart(initialLocationOnLeft = false)
             controller.onDragUpdate(pointOnRight.x, pointOnRight.y)
+            controller.onDragEnd()
         }
         waitForAnimateIn()
         assertThat(dropTargetView).isNull()
         assertThat(testListener.locationChanges).isEmpty()
+        assertThat(testListener.locationReleases).containsExactly(BubbleBarLocation.RIGHT)
     }
 
     @Test
-    fun onDragUpdate_toLeft() {
+    fun drag_toLeft() {
+        // Drag to left, but don't finish
         runOnMainSync {
             controller.onDragStart(initialLocationOnLeft = false)
             controller.onDragUpdate(pointOnLeft.x, pointOnLeft.y)
@@ -132,10 +134,16 @@ class BubbleExpandedViewPinControllerTest {
             .isEqualTo(expectedDropTargetBounds.height())
 
         assertThat(testListener.locationChanges).containsExactly(BubbleBarLocation.LEFT)
+        assertThat(testListener.locationReleases).isEmpty()
+
+        // Finish the drag
+        runOnMainSync { controller.onDragEnd() }
+        assertThat(testListener.locationReleases).containsExactly(BubbleBarLocation.LEFT)
     }
 
     @Test
-    fun onDragUpdate_toLeftAndBackToRight() {
+    fun drag_toLeftAndBackToRight() {
+        // Drag to left
         runOnMainSync {
             controller.onDragStart(initialLocationOnLeft = false)
             controller.onDragUpdate(pointOnLeft.x, pointOnLeft.y)
@@ -143,6 +151,7 @@ class BubbleExpandedViewPinControllerTest {
         waitForAnimateIn()
         assertThat(dropTargetView).isNotNull()
 
+        // Drag to right
         runOnMainSync { controller.onDragUpdate(pointOnRight.x, pointOnRight.y) }
         // We have to wait for existing drop target to animate out and new to animate in
         waitForAnimateOut()
@@ -158,10 +167,15 @@ class BubbleExpandedViewPinControllerTest {
 
         assertThat(testListener.locationChanges)
             .containsExactly(BubbleBarLocation.LEFT, BubbleBarLocation.RIGHT)
+        assertThat(testListener.locationReleases).isEmpty()
+
+        // Release the view
+        runOnMainSync { controller.onDragEnd() }
+        assertThat(testListener.locationReleases).containsExactly(BubbleBarLocation.RIGHT)
     }
 
     @Test
-    fun onDragUpdate_toLeftInExclusionRect() {
+    fun drag_toLeftInExclusionRect() {
         runOnMainSync {
             controller.onDragStart(initialLocationOnLeft = false)
             // Exclusion rect is around the bottom center area of the screen
@@ -170,6 +184,10 @@ class BubbleExpandedViewPinControllerTest {
         waitForAnimateIn()
         assertThat(dropTargetView).isNull()
         assertThat(testListener.locationChanges).isEmpty()
+        assertThat(testListener.locationReleases).isEmpty()
+
+        runOnMainSync { controller.onDragEnd() }
+        assertThat(testListener.locationReleases).containsExactly(BubbleBarLocation.RIGHT)
     }
 
     @Test
@@ -229,15 +247,8 @@ class BubbleExpandedViewPinControllerTest {
     private val dropTargetView: View?
         get() = container.findViewById(R.id.bubble_bar_drop_target)
 
-    private fun getExpectedDropTargetBounds(onLeft: Boolean): Rect {
-        val rect = Rect()
-        positioner.getBubbleBarExpandedViewBounds(onLeft, false /* isOveflowExpanded */, rect)
-        // Scale the rect to expected size, but keep the center point the same
-        val centerX = rect.centerX()
-        val centerY = rect.centerY()
-        rect.scale(DROP_TARGET_SCALE)
-        rect.offset(centerX - rect.centerX(), centerY - rect.centerY())
-        return rect
+    private fun getExpectedDropTargetBounds(onLeft: Boolean): Rect = Rect().also {
+        positioner.getBubbleBarExpandedViewBounds(onLeft, false /* isOveflowExpanded */, it)
     }
 
     private fun runOnMainSync(runnable: Runnable) {
@@ -256,8 +267,13 @@ class BubbleExpandedViewPinControllerTest {
 
     internal class TestLocationChangeListener : BaseBubblePinController.LocationChangeListener {
         val locationChanges = mutableListOf<BubbleBarLocation>()
+        val locationReleases = mutableListOf<BubbleBarLocation>()
         override fun onChange(location: BubbleBarLocation) {
             locationChanges.add(location)
+        }
+
+        override fun onRelease(location: BubbleBarLocation) {
+            locationReleases.add(location)
         }
     }
 }

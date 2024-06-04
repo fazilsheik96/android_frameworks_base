@@ -17,6 +17,7 @@
 package com.android.systemui.qs.tileimpl
 
 import android.content.Context
+import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.service.quicksettings.Tile
 import android.testing.AndroidTestingRunner
@@ -472,6 +473,67 @@ class QSTileViewImplTest : SysuiTestCase() {
         // THEN the view binder does not bind the view and no effect is initialized
         assertThat(tileView.isLongPressEffectBound).isFalse()
         assertThat(tileView.isLongPressEffectInitialized).isFalse()
+    }
+
+    @Test
+    fun onPrepareForLaunch_paddingForLaunchAnimationIsConfigured() {
+        val startingWidth = 100
+        val startingHeight = 50
+        val deltaWidth = (QSTileViewImpl.LONG_PRESS_EFFECT_WIDTH_SCALE - 1f) * startingWidth
+        val deltaHeight = (QSTileViewImpl.LONG_PRESS_EFFECT_HEIGHT_SCALE - 1f) * startingHeight
+
+        // GIVEN that long-press effect properties are initialized
+        tileView.initializeLongPressProperties(startingHeight, startingWidth)
+
+        // WHEN the tile is preparing for the launch animation
+        tileView.prepareForLaunch()
+
+        // THE animation padding corresponds to the tile's growth due to the effect
+        val padding = tileView.getPaddingForLaunchAnimation()
+        assertThat(padding).isEqualTo(
+            Rect(
+                -deltaWidth.toInt() / 2,
+                -deltaHeight.toInt() / 2,
+                deltaWidth.toInt() / 2,
+                deltaHeight.toInt() / 2,
+            )
+        )
+    }
+
+    @Test
+    fun onActivityLaunchAnimationEnd_onFreshTile_longPressPropertiesAreReset() {
+        // WHEN an activity launch animation ends on a fresh tile
+        tileView.onActivityLaunchAnimationEnd()
+
+        // THEN the tile's long-press effect properties are reset by default
+        assertThat(tileView.haveLongPressPropertiesBeenReset).isTrue()
+    }
+
+    @Test
+    fun onUpdateLongPressEffectProperties_duringLongPressEffect_propertiesAreNotReset() {
+        // GIVEN a state that supports long-press
+        val state = QSTile.State()
+        tileView.changeState(state)
+
+        // WHEN the long-press effect is updating the properties
+        tileView.updateLongPressEffectProperties(1f)
+
+        // THEN the tile's long-press effect properties haven't reset
+        assertThat(tileView.haveLongPressPropertiesBeenReset).isFalse()
+    }
+
+    @Test
+    fun onActivityLaunchAnimationEnd_afterLongPressEffect_longPressPropertiesAreReset() {
+        // GIVEN a state that supports long-press and the long-press effect updating
+        val state = QSTile.State()
+        tileView.changeState(state)
+        tileView.updateLongPressEffectProperties(1f)
+
+        // WHEN an activity launch animation ends on a fresh tile
+        tileView.onActivityLaunchAnimationEnd()
+
+        // THEN the tile's long-press effect properties are reset
+        assertThat(tileView.haveLongPressPropertiesBeenReset).isTrue()
     }
 
     class FakeTileView(

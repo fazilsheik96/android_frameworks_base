@@ -1570,8 +1570,6 @@ public class SplitControllerTest {
         mSetFlagRule.enableFlags(Flags.FLAG_ACTIVITY_WINDOW_INFO_FLAG);
 
         final boolean isEmbedded = true;
-        final Rect activityBounds = mActivity.getResources().getConfiguration().windowConfiguration
-                .getBounds();
         final Rect taskBounds = new Rect(0, 0, 1000, 2000);
         final Rect activityStackBounds = new Rect(0, 0, 500, 2000);
         doReturn(isEmbedded).when(mActivityWindowInfo).isEmbedded();
@@ -1579,7 +1577,7 @@ public class SplitControllerTest {
         doReturn(activityStackBounds).when(mActivityWindowInfo).getTaskFragmentBounds();
 
         final EmbeddedActivityWindowInfo expected = new EmbeddedActivityWindowInfo(mActivity,
-                isEmbedded, activityBounds, taskBounds, activityStackBounds);
+                isEmbedded, taskBounds, activityStackBounds);
         assertEquals(expected, mSplitController.getEmbeddedActivityWindowInfo(mActivity));
     }
 
@@ -1619,6 +1617,48 @@ public class SplitControllerTest {
                 mActivityWindowInfo);
 
         verify(mEmbeddedActivityWindowInfoCallback, never()).accept(any());
+    }
+
+    @Test
+    public void testTaskFragmentParentInfoChanged() {
+        // Making a split
+        final Activity secondaryActivity = createMockActivity();
+        addSplitTaskFragments(mActivity, secondaryActivity, false /* clearTop */);
+
+        // Updates the parent info.
+        final TaskContainer taskContainer = mSplitController.getTaskContainer(TASK_ID);
+        final Configuration configuration = new Configuration();
+        final TaskFragmentParentInfo originalInfo = new TaskFragmentParentInfo(configuration,
+                DEFAULT_DISPLAY, true /* visible */, false /* hasDirectActivity */,
+                null /* decorSurface */);
+        mSplitController.onTaskFragmentParentInfoChanged(mock(WindowContainerTransaction.class),
+                TASK_ID, originalInfo);
+        assertTrue(taskContainer.isVisible());
+
+        // Making a public configuration change while the Task is invisible.
+        configuration.densityDpi += 100;
+        final TaskFragmentParentInfo invisibleInfo = new TaskFragmentParentInfo(configuration,
+                DEFAULT_DISPLAY, false /* visible */, false /* hasDirectActivity */,
+                null /* decorSurface */);
+        mSplitController.onTaskFragmentParentInfoChanged(mock(WindowContainerTransaction.class),
+                TASK_ID, invisibleInfo);
+
+        // Ensure the TaskContainer is inivisible, but the configuration is not updated.
+        assertFalse(taskContainer.isVisible());
+        assertTrue(taskContainer.getTaskFragmentParentInfo().getConfiguration().diffPublicOnly(
+                configuration) > 0);
+
+        // Updates when Task to become visible
+        final TaskFragmentParentInfo visibleInfo = new TaskFragmentParentInfo(configuration,
+                DEFAULT_DISPLAY, true /* visible */, false /* hasDirectActivity */,
+                null /* decorSurface */);
+        mSplitController.onTaskFragmentParentInfoChanged(mock(WindowContainerTransaction.class),
+                TASK_ID, visibleInfo);
+
+        // Ensure the Task is visible and configuration is updated.
+        assertTrue(taskContainer.isVisible());
+        assertFalse(taskContainer.getTaskFragmentParentInfo().getConfiguration().diffPublicOnly(
+                configuration) > 0);
     }
 
     /** Creates a mock activity in the organizer process. */

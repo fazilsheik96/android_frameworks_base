@@ -135,6 +135,7 @@ class SceneContainerStartableTest : SysuiTestCase() {
                 ObservableTransitionState.Transition(
                     fromScene = Scenes.Gone,
                     toScene = Scenes.Shade,
+                    currentScene = flowOf(Scenes.Shade),
                     progress = flowOf(0.5f),
                     isInitiatedByUserInput = false,
                     isUserInputOngoing = flowOf(false),
@@ -150,6 +151,7 @@ class SceneContainerStartableTest : SysuiTestCase() {
                 ObservableTransitionState.Transition(
                     fromScene = Scenes.Shade,
                     toScene = Scenes.Gone,
+                    currentScene = flowOf(Scenes.Gone),
                     progress = flowOf(0.5f),
                     isInitiatedByUserInput = false,
                     isUserInputOngoing = flowOf(false),
@@ -392,6 +394,7 @@ class SceneContainerStartableTest : SysuiTestCase() {
                     Scenes.Gone,
                     Scenes.Lockscreen,
                     Scenes.Bouncer,
+                    Scenes.Gone,
                     Scenes.Shade,
                     Scenes.QuickSettings,
                 )
@@ -434,12 +437,12 @@ class SceneContainerStartableTest : SysuiTestCase() {
             runCurrent()
             assertThat(
                     sysUiState.flags and
-                        QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING_OCCLUDED != 0
+                        QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING_OCCLUDED != 0L
                 )
                 .isTrue()
             assertThat(
                     sysUiState.flags and
-                        QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING != 0
+                        QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING != 0L
                 )
                 .isFalse()
 
@@ -447,12 +450,12 @@ class SceneContainerStartableTest : SysuiTestCase() {
             runCurrent()
             assertThat(
                     sysUiState.flags and
-                        QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING_OCCLUDED != 0
+                        QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING_OCCLUDED != 0L
                 )
                 .isFalse()
             assertThat(
                     sysUiState.flags and
-                        QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING != 0
+                        QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING != 0L
                 )
                 .isTrue()
         }
@@ -520,6 +523,7 @@ class SceneContainerStartableTest : SysuiTestCase() {
                 ObservableTransitionState.Transition(
                     fromScene = Scenes.Gone,
                     toScene = Scenes.Lockscreen,
+                    currentScene = flowOf(Scenes.Lockscreen),
                     progress = flowOf(0.1f),
                     isInitiatedByUserInput = false,
                     isUserInputOngoing = flowOf(false),
@@ -870,6 +874,7 @@ class SceneContainerStartableTest : SysuiTestCase() {
                 ObservableTransitionState.Transition(
                     fromScene = Scenes.Gone,
                     toScene = Scenes.Shade,
+                    currentScene = flowOf(Scenes.Shade),
                     progress = flowOf(0.5f),
                     isInitiatedByUserInput = false,
                     isUserInputOngoing = flowOf(false),
@@ -888,6 +893,7 @@ class SceneContainerStartableTest : SysuiTestCase() {
                 ObservableTransitionState.Transition(
                     fromScene = Scenes.Shade,
                     toScene = Scenes.Gone,
+                    currentScene = flowOf(Scenes.Gone),
                     progress = flowOf(0.5f),
                     isInitiatedByUserInput = false,
                     isUserInputOngoing = flowOf(false),
@@ -1202,6 +1208,7 @@ class SceneContainerStartableTest : SysuiTestCase() {
                 ObservableTransitionState.Transition(
                     fromScene = Scenes.Bouncer,
                     toScene = Scenes.Lockscreen,
+                    currentScene = flowOf(Scenes.Bouncer),
                     progress = flowOf(-0.4f),
                     isInitiatedByUserInput = true,
                     isUserInputOngoing = flowOf(true),
@@ -1224,6 +1231,7 @@ class SceneContainerStartableTest : SysuiTestCase() {
                 ObservableTransitionState.Transition(
                     fromScene = Scenes.Lockscreen,
                     toScene = Scenes.Bouncer,
+                    currentScene = flowOf(Scenes.Bouncer),
                     progress = flowOf(0.9f),
                     isInitiatedByUserInput = true,
                     isUserInputOngoing = flowOf(false),
@@ -1273,6 +1281,7 @@ class SceneContainerStartableTest : SysuiTestCase() {
             ObservableTransitionState.Transition(
                 fromScene = fromScene,
                 toScene = toScene,
+                currentScene = flowOf(fromScene),
                 progress = flowOf(0.5f),
                 isInitiatedByUserInput = true,
                 isUserInputOngoing = flowOf(true),
@@ -1282,7 +1291,7 @@ class SceneContainerStartableTest : SysuiTestCase() {
 
         transitionStateFlow.value =
             ObservableTransitionState.Idle(
-                scene = toScene,
+                currentScene = toScene,
             )
         runCurrent()
         verifyAfterTransition?.invoke()

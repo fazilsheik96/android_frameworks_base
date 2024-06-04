@@ -33,7 +33,6 @@ import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.keyguard.MigrateClocksToBlueprint
 import com.android.systemui.keyguard.data.repository.KeyguardRepository
 import com.android.systemui.keyguard.shared.model.BiometricUnlockModel
-import com.android.systemui.keyguard.shared.model.BiometricUnlockSource
 import com.android.systemui.keyguard.shared.model.CameraLaunchSourceModel
 import com.android.systemui.keyguard.shared.model.DozeStateModel
 import com.android.systemui.keyguard.shared.model.DozeStateModel.Companion.isDozeOff
@@ -64,10 +63,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.combineTransform
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -90,6 +89,7 @@ constructor(
     keyguardTransitionInteractor: KeyguardTransitionInteractor,
     sceneInteractorProvider: Provider<SceneInteractor>,
     private val fromGoneTransitionInteractor: Provider<FromGoneTransitionInteractor>,
+    private val fromLockscreenTransitionInteractor: Provider<FromLockscreenTransitionInteractor>,
     sharedNotificationContainerInteractor: Provider<SharedNotificationContainerInteractor>,
     @Application applicationScope: CoroutineScope,
 ) {
@@ -98,6 +98,7 @@ constructor(
 
     /** Bounds of the notification container. */
     val notificationContainerBounds: StateFlow<NotificationContainerBounds> by lazy {
+        SceneContainerFlag.assertInLegacyMode()
         combine(
                 _notificationPlaceholderBounds,
                 sharedNotificationContainerInteractor.get().configurationBasedDimensions,
@@ -116,6 +117,7 @@ constructor(
     }
 
     fun setNotificationContainerBounds(position: NotificationContainerBounds) {
+        SceneContainerFlag.assertInLegacyMode()
         _notificationPlaceholderBounds.value = position
     }
 
@@ -179,13 +181,12 @@ constructor(
                 isDreaming && isDozeOff(dozeTransitionModel.to)
             }
             .sample(powerInteractor.isAwake) { isAbleToDream, isAwake -> isAbleToDream && isAwake }
-            .flatMapLatest { isAbleToDream ->
-                flow {
-                    delay(50)
-                    emit(isAbleToDream)
-                }
-            }
-            .distinctUntilChanged()
+            .debounce(50L)
+            .stateIn(
+                scope = applicationScope,
+                started = SharingStarted.WhileSubscribed(),
+                initialValue = false,
+            )
 
     /** Whether the keyguard is showing or not. */
     @Deprecated("Use KeyguardTransitionInteractor + KeyguardState")
@@ -229,18 +230,24 @@ constructor(
     @JvmField val primaryBouncerShowing: Flow<Boolean> = bouncerRepository.primaryBouncerShow
 
     /** Whether the alternate bouncer is showing or not. */
-    val alternateBouncerShowing: Flow<Boolean> = bouncerRepository.alternateBouncerVisible
+    val alternateBouncerShowing: Flow<Boolean> =
+        bouncerRepository.alternateBouncerVisible.sample(isAbleToDream) {
+            alternateBouncerVisible,
+            isAbleToDream ->
+            if (isAbleToDream) {
+                // If the alternate bouncer will show over a dream, it is likely that the dream has
+                // requested a dismissal, which will stop the dream. By delaying this slightly, the
+                // DREAMING->LOCKSCREEN transition will now happen first, followed by
+                // LOCKSCREEN->ALTERNATE_BOUNCER.
+                delay(600L)
+            }
+            alternateBouncerVisible
+        }
 
     /** Observable for the [StatusBarState] */
     val statusBarState: Flow<StatusBarState> = repository.statusBarState
 
-    /** Source of the most recent biometric unlock, such as fingerprint or face. */
-    val biometricUnlockSource: Flow<BiometricUnlockSource?> = repository.biometricUnlockSource
-
-    /**
-     * Observable for [BiometricUnlockModel] when biometrics like face or any fingerprint (rear,
-     * side, under display) is used to unlock the device.
-     */
+    /** Observable for [BiometricUnlockModel] when biometrics are used to unlock the device. */
     val biometricUnlockState: Flow<BiometricUnlockModel> = repository.biometricUnlockState
 
     /** Keyguard is present and is not occluded. */
@@ -307,24 +314,38 @@ constructor(
         configurationInteractor
             .dimensionPixelSize(R.dimen.keyguard_translate_distance_on_swipe_up)
             .flatMapLatest { translationDistance ->
-                combine(
+                combineTransform(
                     shadeRepository.legacyShadeExpansion.onStart { emit(0f) },
                     keyguardTransitionInteractor.transitionValue(GONE).onStart { emit(0f) },
                 ) { legacyShadeExpansion, goneValue ->
-                    if (goneValue == 1f || legacyShadeExpansion == 0f) {
+                    val isLegacyShadeInResetPosition =
+                        legacyShadeExpansion == 0f || legacyShadeExpansion == 1f
+                    if (goneValue == 1f || (goneValue == 0f && isLegacyShadeInResetPosition)) {
                         // Reset the translation value
-                        0f
-                    } else {
-                        // On swipe up, translate the keyguard to reveal the bouncer
-                        MathUtils.lerp(
-                            translationDistance,
-                            0,
-                            Interpolators.FAST_OUT_LINEAR_IN.getInterpolation(legacyShadeExpansion)
+                        emit(0f)
+                    } else if (!isLegacyShadeInResetPosition) {
+                        // On swipe up, translate the keyguard to reveal the bouncer, OR a GONE
+                        // transition is running, which means this is a swipe to dismiss. Values of
+                        // 0f and 1f need to be ignored in the legacy shade expansion. These can
+                        // flip arbitrarily as the legacy shade is reset, and would cause the
+                        // translation value to jump around unexpectedly.
+                        emit(
+                            MathUtils.lerp(
+                                translationDistance,
+                                0,
+                                Interpolators.FAST_OUT_LINEAR_IN.getInterpolation(
+                                    legacyShadeExpansion
+                                ),
+                            )
                         )
                     }
                 }
             }
-            .distinctUntilChanged()
+            .stateIn(
+                scope = applicationScope,
+                started = SharingStarted.WhileSubscribed(),
+                initialValue = 0f,
+            )
 
     val clockShouldBeCentered: Flow<Boolean> = repository.clockShouldBeCentered
 
@@ -415,6 +436,11 @@ constructor(
     /** Temporary shim, until [KeyguardWmStateRefactor] is enabled */
     fun showKeyguard() {
         fromGoneTransitionInteractor.get().showKeyguard()
+    }
+
+    /** Temporary shim, until [KeyguardWmStateRefactor] is enabled */
+    fun dismissKeyguard() {
+        fromLockscreenTransitionInteractor.get().dismissKeyguard()
     }
 
     companion object {

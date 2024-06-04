@@ -339,6 +339,7 @@ import android.app.admin.ManagedProfileProvisioningParams;
 import android.app.admin.ManagedSubscriptionsPolicy;
 import android.app.admin.NetworkEvent;
 import android.app.admin.PackagePolicy;
+import android.app.admin.PackageSetPolicyValue;
 import android.app.admin.ParcelableGranteeMap;
 import android.app.admin.ParcelableResource;
 import android.app.admin.PasswordMetrics;
@@ -350,7 +351,6 @@ import android.app.admin.PreferentialNetworkServiceConfig;
 import android.app.admin.SecurityLog;
 import android.app.admin.SecurityLog.SecurityEvent;
 import android.app.admin.StartInstallingUpdateCallback;
-import android.app.admin.StringSetPolicyValue;
 import android.app.admin.SystemUpdateInfo;
 import android.app.admin.SystemUpdatePolicy;
 import android.app.admin.UnsafeStateException;
@@ -455,10 +455,10 @@ import android.security.IKeyChainAliasCallback;
 import android.security.IKeyChainService;
 import android.security.KeyChain;
 import android.security.KeyChain.KeyChainConnection;
-import android.security.KeyStore;
 import android.security.keymaster.KeymasterCertificateChain;
 import android.security.keystore.AttestationUtils;
 import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.security.keystore.ParcelableKeyGenParameterSpec;
 import android.stats.devicepolicy.DevicePolicyEnums;
 import android.telecom.TelecomManager;
@@ -665,15 +665,6 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
             DELEGATION_SECURITY_LOGGING,
             DELEGATION_CERT_SELECTION,
     });
-
-    /**
-     * System property whose value indicates whether the device is fully owned by an organization:
-     * it can be either a device owner device, or a device with an organization-owned managed
-     * profile.
-     *
-     * <p>The state is stored as a Boolean string.
-     */
-    private static final String PROPERTY_ORGANIZATION_OWNED = "ro.organization_owned";
 
     private static final int STATUS_BAR_DISABLE_MASK =
             StatusBarManager.DISABLE_EXPAND |
@@ -1994,11 +1985,6 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
             CryptoTestHelper.runAndLogSelfTest();
         }
 
-        public String[] getPersonalAppsForSuspension(@UserIdInt int userId) {
-            return PersonalAppsSuspensionHelper.forUser(mContext, userId)
-                    .getPersonalAppsForSuspension();
-        }
-
         public long systemCurrentTimeMillis() {
             return System.currentTimeMillis();
         }
@@ -2356,7 +2342,6 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
     void loadOwners() {
         synchronized (getLockObject()) {
             mOwners.load();
-            setDeviceOwnershipSystemPropertyLocked();
             if (mOwners.hasDeviceOwner()) {
                 setGlobalSettingDeviceOwnerType(
                         mOwners.getDeviceOwnerType(mOwners.getDeviceOwnerPackageName()));
@@ -2720,27 +2705,6 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                 + defaultRestrictions);
     }
 
-    private void setDeviceOwnershipSystemPropertyLocked() {
-        final boolean deviceProvisioned =
-                mInjector.settingsGlobalGetInt(Settings.Global.DEVICE_PROVISIONED, 0) != 0;
-        final boolean hasDeviceOwner = mOwners.hasDeviceOwner();
-        final boolean hasOrgOwnedProfile = isOrganizationOwnedDeviceWithManagedProfile();
-        // If the device is not provisioned and there is currently no management, do not set the
-        // read-only system property yet, since device owner / org-owned profile may still be
-        // provisioned.
-        if (!hasDeviceOwner && !hasOrgOwnedProfile && !deviceProvisioned) {
-            return;
-        }
-        final String value = Boolean.toString(hasDeviceOwner || hasOrgOwnedProfile);
-        final String currentVal = mInjector.systemPropertiesGet(PROPERTY_ORGANIZATION_OWNED, null);
-        if (TextUtils.isEmpty(currentVal)) {
-            Slogf.i(LOG_TAG, "Set ro.organization_owned property to " + value);
-            mInjector.systemPropertiesSet(PROPERTY_ORGANIZATION_OWNED, value);
-        } else if (!value.equals(currentVal)) {
-            Slogf.w(LOG_TAG, "Cannot change existing ro.organization_owned to " + value);
-        }
-    }
-
     private void maybeStartSecurityLogMonitorOnActivityManagerReady() {
         if (!mInjector.securityLogIsLoggingEnabled()) {
             return;
@@ -2754,6 +2718,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                     mDevicePolicyEngine.getResolvedPolicy(
                             PolicyDefinition.SECURITY_LOGGING, UserHandle.USER_ALL));
             setLoggingConfiguration(securityLoggingEnabled, auditLoggingEnabled);
+            mInjector.runCryptoSelfTest();
         } else {
             synchronized (getLockObject()) {
                 mSecurityLogMonitor.start(getSecurityLoggingEnabledUser());
@@ -6279,7 +6244,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
             try (KeyChainConnection keyChainConnection =
                          KeyChain.bindAsUser(mContext, caller.getUserHandle())) {
                 IKeyChainService keyChain = keyChainConnection.getService();
-                if (!keyChain.installKeyPair(privKey, cert, chain, alias, KeyStore.UID_SELF)) {
+                if (!keyChain.installKeyPair(privKey, cert, chain, alias, KeyProperties.UID_SELF)) {
                     logInstallKeyPairFailure(caller, isCredentialManagementApp);
                     return false;
                 }
@@ -6614,7 +6579,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
         }
         // As the caller will be granted access to the key, ensure no UID was specified, as
         // it will not have the desired effect.
-        if (keySpec.getUid() != KeyStore.UID_SELF) {
+        if (keySpec.getUid() != KeyProperties.UID_SELF) {
             Slogf.e(LOG_TAG, "Only the caller can be granted access to the generated keypair.");
             logGenerateKeyPairFailure(caller, isCredentialManagementApp);
             return false;
@@ -9447,7 +9412,6 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
 
             mOwners.setDeviceOwner(admin, userId);
             mOwners.writeDeviceOwner();
-            setDeviceOwnershipSystemPropertyLocked();
 
             //TODO(b/180371154): when provisionFullyManagedDevice is used in tests, remove this
             // hard-coded default value setting.
@@ -12110,7 +12074,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                 mDevicePolicyEngine.setLocalPolicy(
                         PolicyDefinition.PERMITTED_INPUT_METHODS,
                         admin,
-                        new StringSetPolicyValue(new HashSet<>(packageList)),
+                        new PackageSetPolicyValue(new HashSet<>(packageList)),
                         userId);
             }
         }
@@ -15209,10 +15173,8 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
             if (statusBarService != null) {
                 int flags1 = disabled ? STATUS_BAR_DISABLE_MASK : StatusBarManager.DISABLE_NONE;
                 int flags2 = disabled ? STATUS_BAR_DISABLE2_MASK : StatusBarManager.DISABLE2_NONE;
-                StatusBarManager.DisableInfo info = new StatusBarManager.DisableInfo(flags1,
-                        flags2);
-                statusBarService.disableForUser(info, mToken, mContext.getPackageName(), userId,
-                        "setStatusBarDisabledInternal");
+                statusBarService.disableForUser(flags1, mToken, mContext.getPackageName(), userId);
+                statusBarService.disable2ForUser(flags2, mToken, mContext.getPackageName(), userId);
                 return true;
             }
         } catch (RemoteException e) {
@@ -15303,8 +15265,6 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
     private class SetupContentObserver extends ContentObserver {
         private final Uri mUserSetupComplete = Settings.Secure.getUriFor(
                 Settings.Secure.USER_SETUP_COMPLETE);
-        private final Uri mDeviceProvisioned = Settings.Global.getUriFor(
-                Settings.Global.DEVICE_PROVISIONED);
         private final Uri mPaired = Settings.Secure.getUriFor(Settings.Secure.DEVICE_PAIRED);
         private final Uri mDefaultImeChanged = Settings.Secure.getUriFor(
                 Settings.Secure.DEFAULT_INPUT_METHOD);
@@ -15318,7 +15278,6 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
 
         void register() {
             mInjector.registerContentObserver(mUserSetupComplete, false, this, UserHandle.USER_ALL);
-            mInjector.registerContentObserver(mDeviceProvisioned, false, this, UserHandle.USER_ALL);
             if (mIsWatch) {
                 mInjector.registerContentObserver(mPaired, false, this, UserHandle.USER_ALL);
             }
@@ -15334,12 +15293,6 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
         public void onChange(boolean selfChange, Uri uri, int userId) {
             if (mUserSetupComplete.equals(uri) || (mIsWatch && mPaired.equals(uri))) {
                 updateUserSetupCompleteAndPaired();
-            } else if (mDeviceProvisioned.equals(uri)) {
-                synchronized (getLockObject()) {
-                    // Set PROPERTY_DEVICE_OWNER_PRESENT, for the SUW case where setting the property
-                    // is delayed until device is marked as provisioned.
-                    setDeviceOwnershipSystemPropertyLocked();
-                }
             } else if (mDefaultImeChanged.equals(uri)) {
                 synchronized (getLockObject()) {
                     if (mUserIdsWithPendingChangesByOwner.contains(userId)) {
@@ -20404,12 +20357,12 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
             mDevicePolicyEngine.setGlobalPolicy(
                     PolicyDefinition.USER_CONTROLLED_DISABLED_PACKAGES,
                     enforcingAdmin,
-                    new StringSetPolicyValue(packages));
+                    new PackageSetPolicyValue(packages));
         } else {
             mDevicePolicyEngine.setLocalPolicy(
                     PolicyDefinition.USER_CONTROLLED_DISABLED_PACKAGES,
                     enforcingAdmin,
-                    new StringSetPolicyValue(packages),
+                    new PackageSetPolicyValue(packages),
                     caller.getUserId());
         }
     }
@@ -21651,8 +21604,12 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                                 == HEADLESS_DEVICE_OWNER_MODE_SINGLE_USER;
             }
 
-            if (Flags.headlessSingleUserFixes() && isSingleUserMode && !mInjector.isChangeEnabled(
-                    PROVISION_SINGLE_USER_MODE, deviceAdmin.getPackageName(), caller.getUserId())) {
+            if (Flags.headlessSingleMinTargetSdk()
+                    && mInjector.userManagerIsHeadlessSystemUserMode()
+                    && isSingleUserMode
+                    && !mInjector.isChangeEnabled(
+                            PROVISION_SINGLE_USER_MODE, deviceAdmin.getPackageName(),
+                    caller.getUserId())) {
                 throw new IllegalStateException("Device admin is not targeting Android V.");
             }
 
@@ -21670,7 +21627,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
             setLocale(provisioningParams.getLocale());
 
             int deviceOwnerUserId = Flags.headlessDeviceOwnerSingleUserEnabled()
-                    && isSingleUserMode
+                    && isSingleUserMode && mInjector.userManagerIsHeadlessSystemUserMode()
                     ? mUserManagerInternal.getMainUserId() : UserHandle.USER_SYSTEM;
 
             if (!removeNonRequiredAppsForManagedDevice(
@@ -24087,7 +24044,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                         mDevicePolicyEngine.setLocalPolicy(
                                 PolicyDefinition.PERMITTED_INPUT_METHODS,
                                 enforcingAdmin,
-                                new StringSetPolicyValue(
+                                new PackageSetPolicyValue(
                                         new HashSet<>(admin.permittedInputMethods)),
                                 admin.getUserHandle().getIdentifier());
                     }
@@ -24096,7 +24053,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                         mDevicePolicyEngine.setLocalPolicy(
                                 PolicyDefinition.PERMITTED_INPUT_METHODS,
                                 enforcingAdmin,
-                                new StringSetPolicyValue(
+                                new PackageSetPolicyValue(
                                         new HashSet<>(admin.getParentActiveAdmin()
                                                 .permittedInputMethods)),
                                 getProfileParentId(admin.getUserHandle().getIdentifier()));
@@ -24152,12 +24109,14 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                         mDevicePolicyEngine.setGlobalPolicy(
                                 PolicyDefinition.USER_CONTROLLED_DISABLED_PACKAGES,
                                 enforcingAdmin,
-                                new StringSetPolicyValue(new HashSet<>(admin.protectedPackages)));
+                                new PackageSetPolicyValue(
+                                        new HashSet<>(admin.protectedPackages)));
                     } else {
                         mDevicePolicyEngine.setLocalPolicy(
                                 PolicyDefinition.USER_CONTROLLED_DISABLED_PACKAGES,
                                 enforcingAdmin,
-                                new StringSetPolicyValue(new HashSet<>(admin.protectedPackages)),
+                                new PackageSetPolicyValue(
+                                        new HashSet<>(admin.protectedPackages)),
                                 admin.getUserHandle().getIdentifier());
                     }
                 }

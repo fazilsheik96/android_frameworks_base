@@ -17,6 +17,7 @@
 package com.android.systemui.shade
 
 import android.content.Context
+import android.graphics.Rect
 import android.os.PowerManager
 import android.os.SystemClock
 import android.view.GestureDetector
@@ -39,6 +40,7 @@ import com.android.systemui.ambient.touch.dagger.AmbientTouchComponent
 import com.android.systemui.communal.dagger.Communal
 import com.android.systemui.communal.domain.interactor.CommunalInteractor
 import com.android.systemui.communal.ui.compose.CommunalContainer
+import com.android.systemui.communal.ui.compose.CommunalContent
 import com.android.systemui.communal.ui.viewmodel.CommunalViewModel
 import com.android.systemui.communal.util.CommunalColors
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
@@ -46,12 +48,12 @@ import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInterac
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.res.R
+import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.scene.shared.model.SceneDataSourceDelegator
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
-import com.android.systemui.statusbar.phone.SystemUIDialogFactory
-import com.android.systemui.util.kotlin.BooleanFlowOperators.and
+import com.android.systemui.util.kotlin.BooleanFlowOperators.allOf
+import com.android.systemui.util.kotlin.BooleanFlowOperators.anyOf
 import com.android.systemui.util.kotlin.BooleanFlowOperators.not
-import com.android.systemui.util.kotlin.BooleanFlowOperators.or
 import com.android.systemui.util.kotlin.collectFlow
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -67,13 +69,12 @@ class GlanceableHubContainerController
 constructor(
     private val communalInteractor: CommunalInteractor,
     private val communalViewModel: CommunalViewModel,
-    private val dialogFactory: SystemUIDialogFactory,
-    private val keyguardTransitionInteractor: KeyguardTransitionInteractor,
     private val keyguardInteractor: KeyguardInteractor,
     private val shadeInteractor: ShadeInteractor,
     private val powerManager: PowerManager,
     private val communalColors: CommunalColors,
     private val ambientTouchComponentFactory: AmbientTouchComponent.Factory,
+    private val communalContent: CommunalContent,
     @Communal private val dataSourceDelegator: SceneDataSourceDelegator
 ) : LifecycleOwner {
     /** The container view for the hub. This will not be initialized until [initView] is called. */
@@ -101,12 +102,9 @@ constructor(
     private var rightEdgeSwipeRegionWidth: Int = 0
 
     /**
-     * True if we are currently tracking a gesture for opening the hub that started in the edge
-     * swipe region.
+     * True if we are currently tracking a touch intercepted by the hub, either because the hub is
+     * open or being opened.
      */
-    private var isTrackingOpenGesture = false
-
-    /** True if we are currently tracking a touch on the hub while it's open. */
     private var isTrackingHubTouch = false
 
     /**
@@ -125,15 +123,9 @@ constructor(
     private var anyBouncerShowing = false
 
     /**
-     * True if the shade is fully expanded and the user is not interacting with it anymore, meaning
-     * the hub should not receive any touch input.
+     * True if the shade is fully expanded, meaning the hub should not receive any touch input.
      *
-     * We need to not pause the touch handling lifecycle as soon as the shade opens because if the
-     * user swipes down, then back up without lifting their finger, the lifecycle will be paused
-     * then resumed, and resuming force-stops all active touch sessions. This means the shade will
-     * not receive the end of the gesture and will be stuck open.
-     *
-     * Based on [ShadeInteractor.isAnyFullyExpanded] and [ShadeInteractor.isUserInteracting].
+     * Tracks [ShadeInteractor.isAnyFullyExpanded].
      */
     private var shadeShowing = false
 
@@ -147,12 +139,12 @@ constructor(
 
     /** Returns a flow that tracks whether communal hub is available. */
     fun communalAvailable(): Flow<Boolean> =
-        or(communalInteractor.isCommunalAvailable, communalInteractor.editModeOpen)
+        anyOf(communalInteractor.isCommunalAvailable, communalInteractor.editModeOpen)
 
     /**
      * Creates the container view containing the glanceable hub UI.
      *
-     * @throws RuntimeException if [isEnabled] is false or the view is already initialized
+     * @throws RuntimeException if the view is already initialized
      */
     fun initView(
         context: Context,
@@ -182,7 +174,7 @@ constructor(
                                         viewModel = communalViewModel,
                                         colors = communalColors,
                                         dataSourceDelegator = dataSourceDelegator,
-                                        dialogFactory = dialogFactory,
+                                        content = communalContent,
                                     )
                                 }
                             }
@@ -196,6 +188,7 @@ constructor(
     /** Override for testing. */
     @VisibleForTesting
     internal fun initView(containerView: View): View {
+        SceneContainerFlag.assertInLegacyMode()
         if (communalContainerView != null) {
             throw RuntimeException("Communal view has already been initialized")
         }
@@ -215,28 +208,63 @@ constructor(
                 R.dimen.communal_right_edge_swipe_region_width
             )
 
+        val topEdgeSwipeRegionWidth =
+            containerView.resources.getDimensionPixelSize(
+                R.dimen.communal_top_edge_swipe_region_height
+            )
+        val bottomEdgeSwipeRegionWidth =
+            containerView.resources.getDimensionPixelSize(
+                R.dimen.communal_bottom_edge_swipe_region_height
+            )
+
+        // BouncerSwipeTouchHandler has a larger gesture area than we want, set an exclusion area so
+        // the gesture area doesn't overlap with widgets.
+        // TODO(b/323035776): adjust gesture area for portrait mode
+        containerView.repeatWhenAttached {
+            // Run when the touch handling lifecycle is RESUMED, meaning the hub is visible and not
+            // occluded.
+            lifecycleRegistry.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                val exclusionRect =
+                    Rect(
+                        0,
+                        topEdgeSwipeRegionWidth,
+                        containerView.right,
+                        containerView.bottom - bottomEdgeSwipeRegionWidth
+                    )
+
+                containerView.systemGestureExclusionRects = listOf(exclusionRect)
+            }
+        }
+
+        // Listen to bouncer visibility directly as these flows become true as soon as any portion
+        // of the bouncers are visible when the transition starts. The keyguard transition state
+        // only changes once transitions are fully finished, which would mean touches during a
+        // transition to the bouncer would be incorrectly intercepted by the hub.
         collectFlow(
             containerView,
-            keyguardTransitionInteractor.isFinishedInStateWhere(KeyguardState::isBouncerState),
+            anyOf(
+                keyguardInteractor.primaryBouncerShowing,
+                keyguardInteractor.alternateBouncerShowing
+            ),
             {
                 anyBouncerShowing = it
-                updateLifecycleState()
+                updateTouchHandlingState()
             }
         )
         collectFlow(
             containerView,
-            communalInteractor.isCommunalShowing,
+            communalInteractor.isCommunalVisible,
             {
                 hubShowing = it
-                updateLifecycleState()
+                updateTouchHandlingState()
             }
         )
         collectFlow(
             containerView,
-            and(shadeInteractor.isAnyFullyExpanded, not(shadeInteractor.isUserInteracting)),
+            allOf(shadeInteractor.isAnyFullyExpanded, not(shadeInteractor.isUserInteracting)),
             {
                 shadeShowing = it
-                updateLifecycleState()
+                updateTouchHandlingState()
             }
         )
         collectFlow(containerView, keyguardInteractor.isDreaming, { isDreaming = it })
@@ -249,18 +277,28 @@ constructor(
     /**
      * Updates the lifecycle stored by the [lifecycleRegistry] to control when the [touchMonitor]
      * should listen for and intercept top and bottom swipes.
+     *
+     * Also clears gesture exclusion zones when the hub is occluded or gone.
      */
-    private fun updateLifecycleState() {
+    private fun updateTouchHandlingState() {
         val shouldInterceptGestures = hubShowing && !(shadeShowing || anyBouncerShowing)
         if (shouldInterceptGestures) {
             lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         } else {
+            // Hub is either occluded or no longer showing, turn off touch handling.
             lifecycleRegistry.currentState = Lifecycle.State.STARTED
+
+            // Clear exclusion rects if the hub is not showing or is covered, so we don't interfere
+            // with back gestures when the bouncer or shade. We do this here instead of with
+            // repeatOnLifecycle as repeatOnLifecycle does not run when going from RESUMED back to
+            // STARTED, only when going from CREATED to STARTED.
+            communalContainerView!!.systemGestureExclusionRects = emptyList()
         }
     }
 
     /** Removes the container view from its parent. */
     fun disposeView() {
+        SceneContainerFlag.assertInLegacyMode()
         communalContainerView?.let {
             (it.parent as ViewGroup).removeView(it)
             lifecycleRegistry.currentState = Lifecycle.State.CREATED
@@ -278,71 +316,30 @@ constructor(
      * to be fully in control of its own touch handling.
      */
     fun onTouchEvent(ev: MotionEvent): Boolean {
+        SceneContainerFlag.assertInLegacyMode()
         return communalContainerView?.let { handleTouchEventOnCommunalView(it, ev) } ?: false
     }
 
     private fun handleTouchEventOnCommunalView(view: View, ev: MotionEvent): Boolean {
-        // If the hub is fully visible, send all touch events to it, other than top and bottom edge
-        // swipes.
-        return if (hubShowing) {
-            handleHubOpenTouch(view, ev)
-        } else {
-            handleHubClosedTouch(view, ev)
-        }
-    }
-
-    private fun handleHubOpenTouch(view: View, ev: MotionEvent): Boolean {
         val isDown = ev.actionMasked == MotionEvent.ACTION_DOWN
         val isUp = ev.actionMasked == MotionEvent.ACTION_UP
         val isCancel = ev.actionMasked == MotionEvent.ACTION_CANCEL
 
         val hubOccluded = anyBouncerShowing || shadeShowing
-
-        if (isDown && !hubOccluded) {
-            // Only intercept down events if the hub isn't occluded by the bouncer or
-            // notification shade.
-            isTrackingHubTouch = true
-        }
-
-        if (isTrackingHubTouch) {
-            // Tracking a touch on the hub UI itself.
-            if (isUp || isCancel) {
-                isTrackingHubTouch = false
-            }
-            dispatchTouchEvent(view, ev)
-            // Return true regardless of dispatch result as some touches at the start of a
-            // gesture
-            // may return false from dispatchTouchEvent.
-            return true
-        }
-
-        return false
-    }
-
-    private fun handleHubClosedTouch(view: View, ev: MotionEvent): Boolean {
-        val isDown = ev.actionMasked == MotionEvent.ACTION_DOWN
-        val isUp = ev.actionMasked == MotionEvent.ACTION_UP
-        val isCancel = ev.actionMasked == MotionEvent.ACTION_CANCEL
-
-        val hubOccluded = anyBouncerShowing || shadeShowing
-
-        if (rightEdgeSwipeRegionWidth == 0) {
-            // If the edge region width has not been read yet for whatever reason, don't bother
-            // intercepting touches to open the hub.
-            return false
-        }
 
         if (isDown && !hubOccluded) {
             val x = ev.rawX
             val inOpeningSwipeRegion: Boolean = x >= view.width - rightEdgeSwipeRegionWidth
-            if (inOpeningSwipeRegion) {
-                isTrackingOpenGesture = true
+            if (inOpeningSwipeRegion || hubShowing) {
+                // Steal touch events when the hub is open, or if the touch started in the opening
+                // gesture region.
+                isTrackingHubTouch = true
             }
         }
 
-        if (isTrackingOpenGesture) {
+        if (isTrackingHubTouch) {
             if (isUp || isCancel) {
-                isTrackingOpenGesture = false
+                isTrackingHubTouch = false
             }
             dispatchTouchEvent(view, ev)
             // Return true regardless of dispatch result as some touches at the start of a gesture

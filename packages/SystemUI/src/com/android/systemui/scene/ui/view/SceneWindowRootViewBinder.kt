@@ -182,12 +182,14 @@ object SceneWindowRootViewBinder {
                         right >= getDisplayWidth(context) -> CutoutLocation.RIGHT
                         else -> CutoutLocation.CENTER
                     }
+                val viewDisplayCutout = it?.displayCutout
                 DisplayCutout(
                     left,
                     top,
                     right,
                     bottom,
                     location,
+                    viewDisplayCutout,
                 )
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), DisplayCutout())
@@ -196,7 +198,7 @@ object SceneWindowRootViewBinder {
     private fun getDisplayWidth(context: Context): Dp {
         val point = Point()
         checkNotNull(context.display).getRealSize(point)
-        return point.x.dp
+        return point.x.toDp(context)
     }
 
     // TODO(b/298525212): remove once Compose exposes window inset bounds.

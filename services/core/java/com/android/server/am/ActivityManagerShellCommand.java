@@ -115,8 +115,10 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.DebugUtils;
 import android.util.DisplayMetrics;
+import android.util.SparseArray;
 import android.util.TeeWriter;
 import android.util.proto.ProtoOutputStream;
+import android.view.Choreographer;
 import android.view.Display;
 import android.window.SplashScreen;
 
@@ -128,6 +130,7 @@ import com.android.server.am.nano.Capabilities;
 import com.android.server.am.nano.Capability;
 import com.android.server.am.nano.FrameworkCapability;
 import com.android.server.am.nano.VMCapability;
+import com.android.server.am.nano.VMInfo;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.utils.Slogf;
@@ -241,6 +244,23 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 case "start":
                 case "start-activity":
                     return runStartActivity(pw);
+                case "start-in-vsync":
+                    final ProgressWaiter waiter = new ProgressWaiter(0);
+                    final int[] startResult = new int[1];
+                    startResult[0] = -1;
+                    mInternal.mUiHandler.runWithScissors(
+                            () -> Choreographer.getInstance().postFrameCallback(frameTimeNanos -> {
+                                try {
+                                    startResult[0] = runStartActivity(pw);
+                                    waiter.onFinished(0, null /* extras */);
+                                } catch (Exception ex) {
+                                    getErrPrintWriter().println(
+                                            "Error: unable to start activity, " + ex);
+                                }
+                            }),
+                            USER_OPERATION_TIMEOUT_MS / 2);
+                    waiter.waitForFinish(USER_OPERATION_TIMEOUT_MS);
+                    return startResult[0];
                 case "startservice":
                 case "start-service":
                     return runStartService(pw, false);
@@ -257,9 +277,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 case "compact":
                     return runCompact(pw);
                 case "freeze":
-                    return runFreeze(pw);
+                    return runFreeze(pw, true);
                 case "unfreeze":
-                    return runUnfreeze(pw);
+                    return runFreeze(pw, false);
                 case "instrument":
                     getOutPrintWriter().println("Error: must be invoked through 'am instrument'.");
                     return -1;
@@ -281,6 +301,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runClearWatchHeap(pw);
                 case "clear-start-info":
                     return runClearStartInfo(pw);
+                case "start-info-detailed-monitoring":
+                    return runStartInfoDetailedMonitoring(pw);
                 case "clear-exit-info":
                     return runClearExitInfo(pw);
                 case "bug-report":
@@ -439,6 +461,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 return -1;
             }
         }
+        String vmName = System.getProperty("java.vm.name", "?");
+        String vmVersion = System.getProperty("java.vm.version", "?");
 
         if (outputAsProtobuf) {
             Capabilities capabilities = new Capabilities();
@@ -465,6 +489,11 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 capabilities.frameworkCapabilities[i] = cap;
             }
 
+            VMInfo vmInfo = new VMInfo();
+            vmInfo.name = vmName;
+            vmInfo.version = vmVersion;
+            capabilities.vmInfo = vmInfo;
+
             try {
                 getRawOutputStream().write(Capabilities.toByteArray(capabilities));
             } catch (IOException e) {
@@ -484,6 +513,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             for (String capability : Debug.getFeatureList()) {
                 pw.println("framework:" + capability);
             }
+            pw.println("vm_name:" + vmName);
+            pw.println("vm_version:" + vmVersion);
         }
         return 0;
     }
@@ -1183,45 +1214,27 @@ final class ActivityManagerShellCommand extends ShellCommand {
     }
 
     @NeverCompile
-    int runFreeze(PrintWriter pw) throws RemoteException {
+    int runFreeze(PrintWriter pw, boolean freeze) throws RemoteException {
         String freezerOpt = getNextOption();
         boolean isSticky = false;
-        if (freezerOpt != null) {
-            isSticky = freezerOpt.equals("--sticky");
-        }
-        ProcessRecord app = getProcessFromShell();
-        if (app == null) {
-            getErrPrintWriter().println("Error: could not find process");
-            return -1;
-        }
-        pw.println("Freezing pid: " + app.mPid + " sticky=" + isSticky);
-        synchronized (mInternal) {
-            synchronized (mInternal.mProcLock) {
-                app.mOptRecord.setFreezeSticky(isSticky);
-                mInternal.mOomAdjuster.mCachedAppOptimizer.forceFreezeAppAsyncLSP(app);
-            }
-        }
-        return 0;
-    }
 
-    @NeverCompile
-    int runUnfreeze(PrintWriter pw) throws RemoteException {
-        String freezerOpt = getNextOption();
-        boolean isSticky = false;
         if (freezerOpt != null) {
             isSticky = freezerOpt.equals("--sticky");
         }
-        ProcessRecord app = getProcessFromShell();
-        if (app == null) {
-            getErrPrintWriter().println("Error: could not find process");
+        ProcessRecord proc = getProcessFromShell();
+        if (proc == null) {
             return -1;
         }
-        pw.println("Unfreezing pid: " + app.mPid);
+        pw.print(freeze ? "Freezing" : "Unfreezing");
+        pw.print(" process " + proc.processName);
+        pw.println(" (" + proc.mPid + ") sticky=" + isSticky);
         synchronized (mInternal) {
             synchronized (mInternal.mProcLock) {
-                synchronized (mInternal.mOomAdjuster.mCachedAppOptimizer.mFreezerLock) {
-                    app.mOptRecord.setFreezeSticky(isSticky);
-                    mInternal.mOomAdjuster.mCachedAppOptimizer.unfreezeAppInternalLSP(app, 0,
+                proc.mOptRecord.setFreezeSticky(isSticky);
+                if (freeze) {
+                    mInternal.mOomAdjuster.mCachedAppOptimizer.forceFreezeAppAsyncLSP(proc);
+                } else {
+                    mInternal.mOomAdjuster.mCachedAppOptimizer.unfreezeAppInternalLSP(proc, 0,
                             true);
                 }
             }
@@ -1230,43 +1243,42 @@ final class ActivityManagerShellCommand extends ShellCommand {
     }
 
     /**
-     * Parses from the shell the process name and user id if provided and provides the corresponding
-     * {@link ProcessRecord)} If no user is provided, it will fallback to current user.
-     * Example usage: {@code <processname> --user current} or {@code <processname>}
-     * @return process record of process, null if none found.
+     * Parses from the shell the pid or process name and provides the corresponding
+     * {@link ProcessRecord}.
+     * Example usage: {@code <processname>} or {@code <pid>}
+     * @return process record of process, null if none or more than one found.
      * @throws RemoteException
      */
     @NeverCompile
     ProcessRecord getProcessFromShell() throws RemoteException {
-        ProcessRecord app;
-        String processName = getNextArgRequired();
-        synchronized (mInternal.mProcLock) {
-            // Default to current user
-            int userId = getUserIdFromShellOrFallback();
-            final int uid =
-                    mInternal.getPackageManagerInternal().getPackageUid(processName, 0, userId);
-            app = mInternal.getProcessRecordLocked(processName, uid);
+        ProcessRecord proc = null;
+        String process = getNextArgRequired();
+        try {
+            int pid = Integer.parseInt(process);
+            synchronized (mInternal.mPidsSelfLocked) {
+                proc = mInternal.mPidsSelfLocked.get(pid);
+            }
+        } catch (NumberFormatException e) {
+            // Fallback to process name if it's not a valid pid
         }
-        return app;
-    }
 
-    /**
-     * @return User id from command line provided in the form of
-     *  {@code --user <userid|current|all>} and if the argument is not found it will fallback
-     *  to current user.
-     * @throws RemoteException
-     */
-    @NeverCompile
-    int getUserIdFromShellOrFallback() throws RemoteException {
-        int userId = mInterface.getCurrentUserId();
-        String userOpt = getNextOption();
-        if (userOpt != null && "--user".equals(userOpt)) {
-            int inputUserId = UserHandle.parseUserArg(getNextArgRequired());
-            if (inputUserId != UserHandle.USER_CURRENT) {
-                userId = inputUserId;
+        if (proc == null) {
+            synchronized (mInternal.mProcLock) {
+                ArrayMap<String, SparseArray<ProcessRecord>> all =
+                        mInternal.mProcessList.getProcessNamesLOSP().getMap();
+                SparseArray<ProcessRecord> procs = all.get(process);
+                if (procs == null || procs.size() == 0) {
+                    getErrPrintWriter().println("Error: could not find process");
+                    return null;
+                } else if (procs.size() > 1) {
+                    getErrPrintWriter().println("Error: more than one processes found");
+                    return null;
+                }
+                proc = procs.valueAt(0);
             }
         }
-        return userId;
+
+        return proc;
     }
 
     int runDumpHeap(PrintWriter pw) throws RemoteException {
@@ -1395,12 +1407,12 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 "runClearStartInfo()");
         String opt;
         int userId = UserHandle.USER_CURRENT;
-        String packageName = null;
         while ((opt = getNextOption()) != null) {
             if (opt.equals("--user")) {
                 userId = UserHandle.parseUserArg(getNextArgRequired());
             } else {
-                packageName = opt;
+                getErrPrintWriter().println("Error: Unknown option: " + opt);
+                return -1;
             }
         }
         if (userId == UserHandle.USER_CURRENT) {
@@ -1411,21 +1423,19 @@ final class ActivityManagerShellCommand extends ShellCommand {
             userId = user.id;
         }
         mInternal.mProcessList.getAppStartInfoTracker()
-                .clearHistoryProcessStartInfo(packageName, userId);
+                .clearHistoryProcessStartInfo(getNextArg(), userId);
         return 0;
     }
 
-    int runClearExitInfo(PrintWriter pw) throws RemoteException {
-        mInternal.enforceCallingPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS,
-                "runClearExitInfo()");
+    int runStartInfoDetailedMonitoring(PrintWriter pw) throws RemoteException {
         String opt;
         int userId = UserHandle.USER_CURRENT;
-        String packageName = null;
         while ((opt = getNextOption()) != null) {
             if (opt.equals("--user")) {
                 userId = UserHandle.parseUserArg(getNextArgRequired());
             } else {
-                packageName = opt;
+                getErrPrintWriter().println("Error: Unknown option: " + opt);
+                return -1;
             }
         }
         if (userId == UserHandle.USER_CURRENT) {
@@ -1435,7 +1445,33 @@ final class ActivityManagerShellCommand extends ShellCommand {
             }
             userId = user.id;
         }
-        mInternal.mProcessList.mAppExitInfoTracker.clearHistoryProcessExitInfo(packageName, userId);
+        mInternal.mProcessList.getAppStartInfoTracker()
+                .configureDetailedMonitoring(pw, getNextArg(), userId);
+        return 0;
+    }
+
+    int runClearExitInfo(PrintWriter pw) throws RemoteException {
+        mInternal.enforceCallingPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS,
+                "runClearExitInfo()");
+        String opt;
+        int userId = UserHandle.USER_CURRENT;
+        while ((opt = getNextOption()) != null) {
+            if (opt.equals("--user")) {
+                userId = UserHandle.parseUserArg(getNextArgRequired());
+            } else {
+                getErrPrintWriter().println("Error: Unknown option: " + opt);
+                return -1;
+            }
+        }
+        if (userId == UserHandle.USER_CURRENT) {
+            UserInfo user = mInterface.getCurrentUser();
+            if (user == null) {
+                return -1;
+            }
+            userId = user.id;
+        }
+        mInternal.mProcessList.mAppExitInfoTracker.clearHistoryProcessExitInfo(getNextArg(),
+                userId);
         return 0;
     }
 
@@ -4236,6 +4272,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --activityType <ACTIVITY_TYPE>: The activity type to launch the activity as.");
             pw.println("      --display <DISPLAY_ID>: The display to launch the activity into.");
             pw.println("      --splashscreen-icon: Show the splash screen icon on launch.");
+            pw.println("  start-in-vsync");
+            pw.println("      Start an Activity with vsync aligned. See `start-activity` for the");
+            pw.println("      possible options.");
             pw.println("  start-service [--user <USER_ID> | current] <INTENT>");
             pw.println("      Start a Service.  Options are:");
             pw.println("      --user <USER_ID> | current: Specify which user to run as; if not");
@@ -4259,24 +4298,26 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --allow-background-activity-starts: The receiver may start activities");
             pw.println("          even if in the background.");
             pw.println("      --async: Send without waiting for the completion of the receiver.");
-            pw.println("  compact [some|full] <process_name> [--user <USER_ID>]");
-            pw.println("      Perform a single process compaction.");
+            pw.println("  compact {some|full} <PROCESS>");
+            pw.println("      Perform a single process compaction. The given <PROCESS> argument");
+            pw.println("          may be either a process name or pid.");
             pw.println("      some: execute file compaction.");
             pw.println("      full: execute anon + file compaction.");
-            pw.println("      system: system compaction.");
             pw.println("  compact system");
             pw.println("      Perform a full system compaction.");
-            pw.println("  compact native [some|full] <pid>");
+            pw.println("  compact native {some|full} <pid>");
             pw.println("      Perform a native compaction for process with <pid>.");
             pw.println("      some: execute file compaction.");
             pw.println("      full: execute anon + file compaction.");
-            pw.println("  freeze [--sticky] <processname> [--user <USER_ID>]");
-            pw.println("      Freeze a process.");
-            pw.println("        --sticky: persists the frozen state for the process lifetime or");
+            pw.println("  freeze [--sticky] <PROCESS>");
+            pw.println("      Freeze a process. The given <PROCESS> argument");
+            pw.println("          may be either a process name or pid.  Options are:");
+            pw.println("      --sticky: persists the frozen state for the process lifetime or");
             pw.println("                  until an unfreeze is triggered via shell");
-            pw.println("  unfreeze [--sticky] <processname> [--user <USER_ID>]");
-            pw.println("      Unfreeze a process.");
-            pw.println("        --sticky: persists the unfrozen state for the process lifetime or");
+            pw.println("  unfreeze [--sticky] <PROCESS>");
+            pw.println("      Unfreeze a process. The given <PROCESS> argument");
+            pw.println("          may be either a process name or pid.  Options are:");
+            pw.println("      --sticky: persists the unfrozen state for the process lifetime or");
             pw.println("                  until a freeze is triggered via shell");
             pw.println("  instrument [-r] [-e <NAME> <VALUE>] [-p <FILE>] [-w]");
             pw.println("          [--user <USER_ID> | current]");
@@ -4356,10 +4397,15 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      above <HEAP-LIMIT> then a heap dump is collected for the user to report.");
             pw.println("  clear-watch-heap");
             pw.println("      Clear the previously set-watch-heap.");
-            pw.println("  clear-start-info [--user <USER_ID> | all | current] [package]");
-            pw.println("      Clear the process start-info for given package");
-            pw.println("  clear-exit-info [--user <USER_ID> | all | current] [package]");
-            pw.println("      Clear the process exit-info for given package");
+            pw.println("  clear-start-info [--user <USER_ID> | all | current] <PACKAGE>");
+            pw.println("      Clear process start-info for the given package.");
+            pw.println("      Clear start-info for all packages if no package is provided.");
+            pw.println("  start-info-detailed-monitoring [--user <USER_ID> | all | current] <PACKAGE>");
+            pw.println("      Enable application start info detailed monitoring for the given package.");
+            pw.println("      Disable if no package is supplied.");
+            pw.println("  clear-exit-info [--user <USER_ID> | all | current] <PACKAGE>");
+            pw.println("      Clear process exit-info for the given package.");
+            pw.println("      Clear exit-info for all packages if no package is provided.");
             pw.println("  bug-report [--progress | --telephony]");
             pw.println("      Request bug report generation; will launch a notification");
             pw.println("        when done to select where it should be delivered. Options are:");
@@ -4500,10 +4546,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("           1: crop_windows");
             pw.println("           2: resizeable");
             pw.println("           3: resizeable_and_pipable");
-            pw.println("       resize <TASK_ID> <LEFT,TOP,RIGHT,BOTTOM>");
-            pw.println("           Makes sure <TASK_ID> is in a stack with the specified bounds.");
-            pw.println("           Forces the task to be resizeable and creates a stack if no existing stack");
-            pw.println("           has the specified bounds.");
+            pw.println("       resize <TASK_ID> <LEFT> <TOP> <RIGHT> <BOTTOM>");
+            pw.println("           The task is resized only if it is in multi-window windowing");
+            pw.println("           mode or freeform windowing mode.");
             pw.println("  update-appinfo <USER_ID> <PACKAGE_NAME> [<PACKAGE_NAME>...]");
             pw.println("      Update the ApplicationInfo objects of the listed packages for <USER_ID>");
             pw.println("      without restarting any processes.");

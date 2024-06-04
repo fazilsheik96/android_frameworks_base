@@ -1735,7 +1735,7 @@
     <string name="keyboard_layout_default_label">Default</string>
 
     <!-- Special access > Title for managing turn screen on settings. [CHAR LIMIT=50] -->
-    <string name="turn_screen_on_title">Turn screen on</string>
+    <string name="turn_screen_on_title">Screen turn-on control</string>
     <!-- Label for a setting which controls whether an app can turn the screen on [CHAR LIMIT=45] -->
     <string name="allow_turn_screen_on">Allow turning the screen on</string>
     <!-- Description for a setting which controls whether an app can turn the screen on [CHAR LIMIT=NONE] -->
@@ -1768,4 +1768,7 @@
     <string name="feminine">Feminine</string>
     <!-- List entry in developer settings to set the grammatical gender to Masculine [CHAR LIMIT=30]-->
     <string name="masculine">Masculine</string>
+
+    <!-- The name of the screen for seeing and installing system updates. [CHAR LIMIT=40]-->
+    <string name="system_update_settings_list_item_title">System Updates</string>
 </resources>

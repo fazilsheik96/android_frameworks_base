@@ -60,14 +60,14 @@ import com.android.systemui.statusbar.phone.NotificationIconAreaController;
 import com.android.systemui.statusbar.phone.NotificationIconContainer;
 import com.android.systemui.statusbar.phone.PhoneStatusBarView;
 import com.android.systemui.statusbar.phone.StatusBarHideIconsForBouncerManager;
-import com.android.systemui.statusbar.phone.StatusBarIconController;
-import com.android.systemui.statusbar.phone.StatusBarIconController.DarkIconManager;
 import com.android.systemui.statusbar.phone.StatusBarLocation;
 import com.android.systemui.statusbar.phone.StatusBarLocationPublisher;
 import com.android.systemui.statusbar.phone.fragment.dagger.StatusBarFragmentComponent;
 import com.android.systemui.statusbar.phone.fragment.dagger.StatusBarFragmentComponent.Startable;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallController;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallListener;
+import com.android.systemui.statusbar.phone.ui.DarkIconManager;
+import com.android.systemui.statusbar.phone.ui.StatusBarIconController;
 import com.android.systemui.statusbar.pipeline.shared.ui.binder.CollapsedStatusBarViewBinder;
 import com.android.systemui.statusbar.pipeline.shared.ui.binder.StatusBarVisibilityChangeListener;
 import com.android.systemui.statusbar.pipeline.shared.ui.viewmodel.CollapsedStatusBarViewModel;
@@ -79,10 +79,6 @@ import com.android.systemui.util.CarrierConfigTracker.CarrierConfigChangedListen
 import com.android.systemui.util.CarrierConfigTracker.DefaultDataSubscriptionChangedListener;
 import com.android.systemui.util.settings.SecureSettings;
 
-import kotlin.Unit;
-
-import kotlinx.coroutines.DisposableHandle;
-
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -92,6 +88,10 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
+
+import kotlin.Unit;
+
+import kotlinx.coroutines.DisposableHandle;
 
 /**
  * Contains the collapsed status bar and handles hiding/showing based on disable flags
@@ -119,7 +119,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     private MultiSourceMinAlphaController mEndSideAlphaController;
     private LinearLayout mEndSideContent;
     private View mClockView;
-    private View mOngoingCallChip;
+    private View mOngoingActivityChip;
     private View mNotificationIconAreaInner;
     // Visibilities come in from external system callers via disable flags, but we also sometimes
     // modify the visibilities internally. We need to store both so that we don't accidentally
@@ -143,7 +143,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     private final CollapsedStatusBarViewModel mCollapsedStatusBarViewModel;
     private final CollapsedStatusBarViewBinder mCollapsedStatusBarViewBinder;
     private final StatusBarHideIconsForBouncerManager mStatusBarHideIconsForBouncerManager;
-    private final StatusBarIconController.DarkIconManager.Factory mDarkIconManagerFactory;
+    private final DarkIconManager.Factory mDarkIconManagerFactory;
     private final SecureSettings mSecureSettings;
     private final Executor mMainExecutor;
     private final DumpManager mDumpManager;
@@ -345,7 +345,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
         mEndSideContent = mStatusBar.findViewById(R.id.status_bar_end_side_content);
         mEndSideAlphaController = new MultiSourceMinAlphaController(mEndSideContent);
         mClockView = mStatusBar.findViewById(R.id.clock);
-        mOngoingCallChip = mStatusBar.findViewById(R.id.ongoing_call_chip);
+        mOngoingActivityChip = mStatusBar.findViewById(R.id.ongoing_activity_chip);
         showEndSideContent(false);
         showClock(false);
         initOperatorName();
@@ -594,9 +594,9 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
         // so if the icons are disabled then the call chip should be, too.)
         boolean showOngoingCallChip = hasOngoingCall && !disableNotifications;
         if (showOngoingCallChip) {
-            showOngoingCallChip(animate);
+            showOngoingActivityChip(animate);
         } else {
-            hideOngoingCallChip(animate);
+            hideOngoingActivityChip(animate);
         }
         mOngoingCallController.notifyChipVisibilityChanged(showOngoingCallChip);
     }
@@ -688,14 +688,19 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
         animateShow(mClockView, animate);
     }
 
-    /** Hides the ongoing call chip. */
-    public void hideOngoingCallChip(boolean animate) {
-        animateHiddenState(mOngoingCallChip, View.GONE, animate);
+    /** Hides the ongoing activity chip. */
+    private void hideOngoingActivityChip(boolean animate) {
+        animateHiddenState(mOngoingActivityChip, View.GONE, animate);
     }
 
-    /** Displays the ongoing call chip. */
-    public void showOngoingCallChip(boolean animate) {
-        animateShow(mOngoingCallChip, animate);
+    /**
+     * Displays the ongoing activity chip.
+     *
+     * For now, this chip will only ever contain the ongoing call information, but after b/332662551
+     * feature is implemented, it will support different kinds of ongoing activities.
+     */
+    private void showOngoingActivityChip(boolean animate) {
+        animateShow(mOngoingActivityChip, animate);
     }
 
     /**
@@ -803,7 +808,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
 
     private void initOngoingCallChip() {
         mOngoingCallController.addCallback(mOngoingCallListener);
-        mOngoingCallController.setChipView(mOngoingCallChip);
+        mOngoingCallController.setChipView(mOngoingActivityChip);
     }
 
     @Override

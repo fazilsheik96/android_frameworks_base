@@ -1736,6 +1736,24 @@ public final class Settings {
             "android.settings.NETWORK_OPERATOR_SETTINGS";
 
     /**
+     * Activity Action: Show settings for selecting the network provider.
+     * <p>
+     * In some cases, a matching Activity may not be provided, so ensure you
+     * safeguard against this.
+     * <p>
+     * Access to this preference can be customized via Settings' app.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_NETWORK_PROVIDER_SETTINGS =
+            "android.settings.NETWORK_PROVIDER_SETTINGS";
+
+    /**
      * Activity Action: Show settings for selection of 2G/3G.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -5114,13 +5132,6 @@ public final class Settings {
         public static final String SCREEN_BRIGHTNESS = "screen_brightness";
 
         /**
-         * The screen backlight brightness between 0.0f and 1.0f.
-         * @hide
-         */
-        @Readable
-        public static final String SCREEN_BRIGHTNESS_FLOAT = "screen_brightness_float";
-
-        /**
          * Control whether to enable automatic brightness mode.
          */
         @Readable
@@ -6264,7 +6275,6 @@ public final class Settings {
             PUBLIC_SETTINGS.add(DIM_SCREEN);
             PUBLIC_SETTINGS.add(SCREEN_OFF_TIMEOUT);
             PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS);
-            PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS_FLOAT);
             PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS_MODE);
             PUBLIC_SETTINGS.add(MODE_RINGER_STREAMS_AFFECTED);
             PUBLIC_SETTINGS.add(MUTE_STREAMS_AFFECTED);
@@ -8512,7 +8522,8 @@ public final class Settings {
 
         /**
          * Setting specifying the accessibility services, accessibility shortcut targets,
-         * or features to be toggled via the accessibility button in the navigation bar.
+         * or features to be toggled via the accessibility button in the navigation bar,
+         * or the floating accessibility button.
          *
          * <p> This is a colon-separated string list which contains the flattened
          * {@link ComponentName} and the class name of a system class implementing a supported
@@ -8524,7 +8535,7 @@ public final class Settings {
 
         /**
          * Setting specifying the accessibility services, shortcut targets or features
-         * to be toggled via the floating accessibility menu
+         * to be toggled via the gesture shortcut
          *
          * <p> This is a colon-separated string list which contains the flattened
          * {@link ComponentName} and the class name of a system class
@@ -8532,8 +8543,8 @@ public final class Settings {
          * @hide
          */
         @Readable
-        public static final String ACCESSIBILITY_FLOATING_MENU_TARGETS =
-                "accessibility_floating_menu_targets";
+        public static final String ACCESSIBILITY_GESTURE_TARGETS =
+                "accessibility_gesture_targets";
 
         /**
          * Setting specifying the accessibility services, accessibility shortcut targets,
@@ -11171,6 +11182,35 @@ public final class Settings {
          */
         public static final String VISUAL_QUERY_ACCESSIBILITY_DETECTION_ENABLED =
                 "visual_query_accessibility_detection_enabled";
+
+        /**
+         * Timeout to be used for unbinding to the configured remote
+         * {@link android.service.ondeviceintelligence.OnDeviceIntelligenceService} if there are no
+         * requests in the queue. A value of -1 represents to never unbind.
+         *
+         * @hide
+         */
+        public static final String ON_DEVICE_INTELLIGENCE_UNBIND_TIMEOUT_MS =
+                "on_device_intelligence_unbind_timeout_ms";
+
+
+        /**
+         * Timeout that represents maximum idle time before which a callback should be populated.
+         *
+         * @hide
+         */
+        public static final String ON_DEVICE_INTELLIGENCE_IDLE_TIMEOUT_MS =
+                "on_device_intelligence_idle_timeout_ms";
+
+        /**
+         * Timeout to be used for unbinding to the configured remote
+         * {@link android.service.ondeviceintelligence.OnDeviceSandboxedInferenceService} if there
+         * are no requests in the queue. A value of -1 represents to never unbind.
+         *
+         * @hide
+         */
+        public static final String ON_DEVICE_INFERENCE_UNBIND_TIMEOUT_MS =
+                "on_device_inference_unbind_timeout_ms";
 
         /**
          * Control whether Night display is currently activated.
@@ -14919,6 +14959,17 @@ public final class Settings {
          */
         @Readable
         public static final String DROPBOX_TAG_PREFIX = "dropbox:";
+
+        /**
+         * Lines of kernel logs to include with system crash/ANR/etc. reports, as a
+         * prefix of the dropbox tag of the report type. For example,
+         * "kernel_logs_for_system_server_anr" controls the lines of kernel logs
+         * captured with system server ANR reports. 0 to disable.
+         *
+         * @hide
+         */
+        @Readable
+        public static final String ERROR_KERNEL_LOG_PREFIX = "kernel_logs_for_";
 
         /**
          * Lines of logcat to include with system crash/ANR/etc. reports, as a

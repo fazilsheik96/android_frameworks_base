@@ -44,8 +44,7 @@ import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.activityembedding.ActivityEmbeddingController;
 import com.android.wm.shell.common.split.SplitScreenUtils;
 import com.android.wm.shell.desktopmode.DesktopTasksController;
-import com.android.wm.shell.desktopmode.DesktopModeStatus;
-import com.android.wm.shell.desktopmode.DesktopTasksController;
+import com.android.wm.shell.shared.DesktopModeStatus;
 import com.android.wm.shell.keyguard.KeyguardTransitionHandler;
 import com.android.wm.shell.pip.PipTransitionController;
 import com.android.wm.shell.protolog.ShellProtoLogGroup;
@@ -428,7 +427,8 @@ public class DefaultMixedHandler implements MixedTransitionHandler,
                     ProtoLog.w(ShellProtoLogGroup.WM_SHELL_TRANSITIONS,
                             "Converting mixed transition into a keyguard transition");
                     // Consume the original mixed transition
-                    onTransitionConsumed(transition, false, null);
+                    mActiveTransitions.remove(mixed);
+                    mixed.onTransitionConsumed(transition, false, null);
                     return true;
                 } else {
                     // Keyguard handler cannot handle it, process through original mixed
@@ -565,22 +565,23 @@ public class DefaultMixedHandler implements MixedTransitionHandler,
 
     /** Use to when split use intent to enter, check if this enter transition should be mixed or
      * not.*/
-    public boolean shouldSplitEnterMixed(PendingIntent intent) {
+    public boolean isIntentInPip(PendingIntent intent) {
         // Check if this intent package is same as pip one or not, if true we want let the pip
         // task enter split.
         if (mPipHandler != null) {
-            return mPipHandler.isInPipPackage(SplitScreenUtils.getPackageName(intent.getIntent()));
+            return mPipHandler
+                    .isPackageActiveInPip(SplitScreenUtils.getPackageName(intent.getIntent()));
         }
         return false;
     }
 
     /** Use to when split use taskId to enter, check if this enter transition should be mixed or
      * not.*/
-    public boolean shouldSplitEnterMixed(int taskId, ShellTaskOrganizer shellTaskOrganizer) {
+    public boolean isTaskInPip(int taskId, ShellTaskOrganizer shellTaskOrganizer) {
         // Check if this intent package is same as pip one or not, if true we want let the pip
         // task enter split.
         if (mPipHandler != null) {
-            return mPipHandler.isInPipPackage(
+            return mPipHandler.isPackageActiveInPip(
                     SplitScreenUtils.getPackageName(taskId, shellTaskOrganizer));
         }
         return false;

@@ -25,6 +25,7 @@ import static com.android.app.animation.Interpolators.EMPHASIZED_DECELERATE;
 import static com.android.keyguard.KeyguardClockSwitch.LARGE;
 import static com.android.keyguard.KeyguardClockSwitch.SMALL;
 import static com.android.systemui.Flags.predictiveBackAnimateShade;
+import static com.android.systemui.Flags.shadeCollapseActivityLaunchFix;
 import static com.android.systemui.Flags.smartspaceRelocateToBottom;
 import static com.android.systemui.classifier.Classifier.BOUNCER_UNLOCK;
 import static com.android.systemui.classifier.Classifier.GENERIC;
@@ -142,6 +143,7 @@ import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor;
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor;
 import com.android.systemui.keyguard.domain.interactor.NaturalScrollingSettingObserver;
 import com.android.systemui.keyguard.shared.ComposeLockscreen;
+import com.android.systemui.keyguard.shared.model.Edge;
 import com.android.systemui.keyguard.shared.model.TransitionState;
 import com.android.systemui.keyguard.shared.model.TransitionStep;
 import com.android.systemui.keyguard.ui.binder.KeyguardLongPressViewBinder;
@@ -171,6 +173,7 @@ import com.android.systemui.power.domain.interactor.PowerInteractor;
 import com.android.systemui.power.shared.model.WakefulnessModel;
 import com.android.systemui.res.R;
 import com.android.systemui.scene.shared.flag.SceneContainerFlag;
+import com.android.systemui.scene.shared.model.Scenes;
 import com.android.systemui.shade.data.repository.FlingInfo;
 import com.android.systemui.shade.data.repository.ShadeRepository;
 import com.android.systemui.shade.domain.interactor.ShadeAnimationInteractor;
@@ -246,6 +249,7 @@ import kotlin.Unit;
 
 import kotlinx.coroutines.CoroutineDispatcher;
 import kotlinx.coroutines.flow.Flow;
+import kotlinx.coroutines.flow.StateFlow;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -624,6 +628,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     private int mDreamingToLockscreenTransitionTranslationY;
     private int mLockscreenToDreamingTransitionTranslationY;
     private int mGoneToDreamingTransitionTranslationY;
+    private boolean mForceFlingAnimationForTest = false;
     private final SplitShadeStateController mSplitShadeStateController;
     private final Runnable mFlingCollapseRunnable = () -> fling(0, false /* expand */,
             mNextCollapseSpeedUpFactor, false /* expandBecauseOfFalsing */);
@@ -1135,8 +1140,12 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 controller.setup(mNotificationContainerParent));
 
         // Dreaming->Lockscreen
-        collectFlow(mView, mKeyguardTransitionInteractor.transition(DREAMING, LOCKSCREEN),
-                mDreamingToLockscreenTransition, mMainDispatcher);
+        collectFlow(
+                mView,
+                mKeyguardTransitionInteractor.transition(
+                        Edge.Companion.create(DREAMING, LOCKSCREEN)),
+                mDreamingToLockscreenTransition,
+                mMainDispatcher);
         collectFlow(mView, mDreamingToLockscreenTransitionViewModel.getLockscreenAlpha(),
                 setDreamLockscreenTransitionAlpha(mNotificationStackScrollLayoutController),
                 mMainDispatcher);
@@ -1146,7 +1155,8 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
         // Gone -> Dreaming hosted in lockscreen
         collectFlow(mView, mKeyguardTransitionInteractor
-                        .transition(GONE, DREAMING_LOCKSCREEN_HOSTED),
+                        .transition(Edge.Companion.create(Scenes.Gone, DREAMING_LOCKSCREEN_HOSTED),
+                                Edge.Companion.create(GONE, DREAMING_LOCKSCREEN_HOSTED)),
                 mGoneToDreamingLockscreenHostedTransition, mMainDispatcher);
         collectFlow(mView, mGoneToDreamingLockscreenHostedTransitionViewModel.getLockscreenAlpha(),
                 setTransitionAlpha(mNotificationStackScrollLayoutController),
@@ -1154,16 +1164,17 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
         // Lockscreen -> Dreaming hosted in lockscreen
         collectFlow(mView, mKeyguardTransitionInteractor
-                        .transition(LOCKSCREEN, DREAMING_LOCKSCREEN_HOSTED),
+                        .transition(Edge.Companion.create(LOCKSCREEN, DREAMING_LOCKSCREEN_HOSTED)),
                 mLockscreenToDreamingLockscreenHostedTransition, mMainDispatcher);
 
         // Dreaming hosted in lockscreen -> Lockscreen
         collectFlow(mView, mKeyguardTransitionInteractor
-                        .transition(DREAMING_LOCKSCREEN_HOSTED, LOCKSCREEN),
+                        .transition(Edge.Companion.create(DREAMING_LOCKSCREEN_HOSTED, LOCKSCREEN)),
                 mDreamingLockscreenHostedToLockscreenTransition, mMainDispatcher);
 
         // Occluded->Lockscreen
-        collectFlow(mView, mKeyguardTransitionInteractor.transition(OCCLUDED, LOCKSCREEN),
+        collectFlow(mView, mKeyguardTransitionInteractor.transition(
+                Edge.Companion.create(OCCLUDED, LOCKSCREEN)),
                 mOccludedToLockscreenTransition, mMainDispatcher);
         if (!MigrateClocksToBlueprint.isEnabled()) {
             collectFlow(mView, mOccludedToLockscreenTransitionViewModel.getLockscreenAlpha(),
@@ -1174,7 +1185,8 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         }
 
         // Lockscreen->Dreaming
-        collectFlow(mView, mKeyguardTransitionInteractor.transition(LOCKSCREEN, DREAMING),
+        collectFlow(mView, mKeyguardTransitionInteractor.transition(
+                Edge.Companion.create(LOCKSCREEN, DREAMING)),
                 mLockscreenToDreamingTransition, mMainDispatcher);
         if (!MigrateClocksToBlueprint.isEnabled()) {
             collectFlow(mView, mLockscreenToDreamingTransitionViewModel.getLockscreenAlpha(),
@@ -1186,7 +1198,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 setTransitionY(mNotificationStackScrollLayoutController), mMainDispatcher);
 
         // Gone->Dreaming
-        collectFlow(mView, mKeyguardTransitionInteractor.transition(GONE, DREAMING),
+        collectFlow(mView, mKeyguardTransitionInteractor.transition(
+                Edge.Companion.create(Scenes.Gone, DREAMING),
+                        Edge.Companion.create(GONE, DREAMING)),
                 mGoneToDreamingTransition, mMainDispatcher);
         if (!MigrateClocksToBlueprint.isEnabled()) {
             collectFlow(mView, mGoneToDreamingTransitionViewModel.getLockscreenAlpha(),
@@ -1197,7 +1211,8 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 setTransitionY(mNotificationStackScrollLayoutController), mMainDispatcher);
 
         // Lockscreen->Occluded
-        collectFlow(mView, mKeyguardTransitionInteractor.transition(LOCKSCREEN, OCCLUDED),
+        collectFlow(mView, mKeyguardTransitionInteractor.transition(
+                Edge.Companion.create(LOCKSCREEN, OCCLUDED)),
                 mLockscreenToOccludedTransition, mMainDispatcher);
         if (!MigrateClocksToBlueprint.isEnabled()) {
             collectFlow(mView, mLockscreenToOccludedTransitionViewModel.getLockscreenAlpha(),
@@ -2228,8 +2243,16 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 }
             }
         });
+        if (!mScrimController.isScreenOn() && !mForceFlingAnimationForTest) {
+            animator.setDuration(1);
+        }
         setAnimator(animator);
         animator.start();
+    }
+
+    @VisibleForTesting
+    void setForceFlingAnimationForTest(boolean force) {
+        mForceFlingAnimationForTest = force;
     }
 
     @VisibleForTesting
@@ -4003,7 +4026,12 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 mExpandLatencyTracking = false;
             }
             float maxPanelHeight = getMaxPanelTransitionDistance();
-            if (mHeightAnimator == null) {
+            if (mHeightAnimator == null && !MigrateClocksToBlueprint.isEnabled()) {
+                // MigrateClocksToBlueprint - There is an edge case where swiping up slightly,
+                // and then swiping down will trigger overscroll logic. Even without this flag
+                // enabled, the notifications can then run into UDFPS. At this point it is
+                // safer to remove overscroll for this one case to prevent overlap.
+
                 // Split shade has its own overscroll logic
                 if (isTracking()) {
                     float overExpansionPixels = Math.max(0, h - maxPanelHeight);
@@ -4067,6 +4095,11 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     }
 
     @Override
+    public StateFlow<Float> getUdfpsTransitionToFullShadeProgress() {
+        return mShadeRepository.getUdfpsTransitionToFullShadeProgress();
+    }
+
+    @Override
     public Flow<Float> getLegacyPanelExpansion() {
         return  mShadeRepository.getLegacyShadeExpansion();
     }
@@ -4103,7 +4136,11 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
     @Override
     public boolean canBeCollapsed() {
-        return !isFullyCollapsed() && !isTracking() && !isClosing();
+        return !isFullyCollapsed() && !isTracking() && !isClosing()
+                // Don't try to collapse if on keyguard, as the expansion fraction is 1 in this
+                // case.
+                && !(shadeCollapseActivityLaunchFix() && mExpandedFraction == 1f
+                && mBarState == KEYGUARD);
     }
 
     public void instantCollapse() {

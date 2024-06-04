@@ -1776,7 +1776,7 @@ public final class DisplayPowerControllerTest {
         float brightness = 0.277f;
         when(mHolder.displayPowerState.getColorFadeLevel()).thenReturn(1.0f);
         when(mHolder.automaticBrightnessController
-                .getAutomaticScreenBrightnessBasedOnLastObservedLux(any(BrightnessEvent.class)))
+                .getAutomaticScreenBrightnessBasedOnLastUsedLux(any(BrightnessEvent.class)))
                 .thenReturn(brightness);
         when(mHolder.hbmController.getCurrentBrightnessMax())
                 .thenReturn(PowerManager.BRIGHTNESS_MAX);
@@ -1790,6 +1790,7 @@ public final class DisplayPowerControllerTest {
         verify(mHolder.animator).animateTo(eq(brightness),
                 /* linearSecondTarget= */ anyFloat(), /* rate= */ anyFloat(),
                 /* ignoreAnimationLimits= */ anyBoolean());
+        verify(mHolder.brightnessSetting).setBrightness(brightness);
     }
 
     @Test
@@ -1840,7 +1841,7 @@ public final class DisplayPowerControllerTest {
         float brightness = 0.277f;
         when(mHolder.displayPowerState.getColorFadeLevel()).thenReturn(1.0f);
         when(mHolder.automaticBrightnessController
-                .getAutomaticScreenBrightnessBasedOnLastObservedLux(any(BrightnessEvent.class)))
+                .getAutomaticScreenBrightnessBasedOnLastUsedLux(any(BrightnessEvent.class)))
                 .thenReturn(brightness);
         when(mHolder.hbmController.getCurrentBrightnessMax())
                 .thenReturn(PowerManager.BRIGHTNESS_MAX);
