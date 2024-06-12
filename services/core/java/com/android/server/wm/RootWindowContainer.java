@@ -1701,7 +1701,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     /**
-     * Check if home activity start should be allowed on a display.
+     * Check if home activity start should be allowed on a {@link TaskDisplayArea}.
      *
      * @param homeInfo           {@code ActivityInfo} of the home activity that is going to be
      *                           launched.
@@ -1722,6 +1722,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 mService.getProcessController(homeInfo.processName, homeInfo.applicationInfo.uid);
         if (!allowInstrumenting && app != null && app.isInstrumenting()) {
             // Don't do this if the home app is currently being instrumented.
+            return false;
+        }
+
+        if (taskDisplayArea != null && !taskDisplayArea.canHostHomeTask()) {
             return false;
         }
 

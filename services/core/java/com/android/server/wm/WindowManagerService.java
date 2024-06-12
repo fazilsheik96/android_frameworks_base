@@ -786,7 +786,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     boolean mHardKeyboardAvailable;
     WindowManagerInternal.OnHardKeyboardStatusChangeListener mHardKeyboardStatusChangeListener;
-
+    WindowManagerInternal.OnImeRequestedChangedListener mOnImeRequestedChangedListener;
     @Nullable ImeTargetChangeListener mImeTargetChangeListener;
 
     SettingsObserver mSettingsObserver;
@@ -1530,7 +1530,7 @@ public class WindowManagerService extends IWindowManager.Stub
             InputChannel outInputChannel, InsetsState outInsetsState,
             InsetsSourceControl.Array outActiveControls, Rect outAttachedFrame,
             float[] outSizeCompatScale) {
-        outActiveControls.set(null);
+        outActiveControls.set(null, false /* copyControls */);
         int[] appOp = new int[1];
         final boolean isRoundedCornerOverlay = (attrs.privateFlags
                 & PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY) != 0;
@@ -1933,7 +1933,7 @@ public class WindowManagerService extends IWindowManager.Stub
             displayContent.getInsetsStateController().updateAboveInsetsState(
                     false /* notifyInsetsChanged */);
 
-            outInsetsState.set(win.getCompatInsetsState(), true /* copySources */);
+            win.fillInsetsState(outInsetsState, true /* copySources */);
             getInsetsSourceControls(win, outActiveControls);
 
             if (win.mLayoutAttached) {
@@ -2323,7 +2323,7 @@ public class WindowManagerService extends IWindowManager.Stub
             InsetsState outInsetsState, InsetsSourceControl.Array outActiveControls,
             Bundle outBundle, WindowRelayoutResult outRelayoutResult) {
         if (outActiveControls != null) {
-            outActiveControls.set(null);
+            outActiveControls.set(null, false /* copyControls */);
         }
         int result = 0;
         boolean configChanged = false;
@@ -2651,9 +2651,6 @@ public class WindowManagerService extends IWindowManager.Stub
             if (displayPolicy.areSystemBarsForcedConsumedLw()) {
                 result |= WindowManagerGlobal.RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS;
             }
-            if (!win.isGoneForLayout()) {
-                win.mResizedWhileGone = false;
-            }
 
             if (outFrames != null && outMergedConfiguration != null) {
                 final boolean shouldReportActivityWindowInfo;
@@ -2686,7 +2683,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
 
             if (outInsetsState != null) {
-                outInsetsState.set(win.getCompatInsetsState(), true /* copySources */);
+                win.fillInsetsState(outInsetsState, true /* copySources */);
             }
 
             ProtoLog.v(WM_DEBUG_FOCUS, "Relayout of %s: focusMayChange=%b",
@@ -2749,25 +2746,14 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private void getInsetsSourceControls(WindowState win, InsetsSourceControl.Array outArray) {
-        final InsetsSourceControl[] controls =
-                win.getDisplayContent().getInsetsStateController().getControlsForDispatch(win);
-        if (controls != null) {
-            final int length = controls.length;
-            final InsetsSourceControl[] outControls = new InsetsSourceControl[length];
-            for (int i = 0; i < length; i++) {
-                // We will leave the critical section before returning the leash to the client,
-                // so we need to copy the leash to prevent others release the one that we are
-                // about to return.
-                if (controls[i] != null) {
-                    // This source control is an extra copy if the client is not local. By setting
-                    // PARCELABLE_WRITE_RETURN_VALUE, the leash will be released at the end of
-                    // SurfaceControl.writeToParcel.
-                    outControls[i] = new InsetsSourceControl(controls[i]);
-                    outControls[i].setParcelableFlags(PARCELABLE_WRITE_RETURN_VALUE);
-                }
-            }
-            outArray.set(outControls);
-        }
+        // We will leave the critical section before returning the leash to the client,
+        // so we need to copy the leash to prevent others release the one that we are
+        // about to return.
+        win.fillInsetsSourceControls(outArray, true /* copyControls */);
+        // This source control is an extra copy if the client is not local. By setting
+        // PARCELABLE_WRITE_RETURN_VALUE, the leash will be released at the end of
+        // SurfaceControl.writeToParcel.
+        outArray.setParcelableFlags(PARCELABLE_WRITE_RETURN_VALUE);
     }
 
     private void tryStartExitingAnimation(WindowState win, WindowStateAnimator winAnimator) {
@@ -8173,6 +8159,27 @@ public class WindowManagerService extends IWindowManager.Stub
                     getInputTargetFromWindowTokenLocked(imeTargetWindowToken);
                 if (imeTarget != null) {
                     imeTarget.getDisplayContent().updateImeInputAndControlTarget(imeTarget);
+
+                    if (android.view.inputmethod.Flags.refactorInsetsController()) {
+                        // In case of a virtual display that may not show the IME, reset the
+                        // inputTarget of all other displays
+                        WindowState imeWindowState = imeTarget.getWindowState();
+                        if (imeWindowState != null) {
+                            InsetsControlTarget fallback =
+                                    imeTarget.getDisplayContent().getImeHostOrFallback(
+                                            imeWindowState);
+                            if (imeWindowState != fallback) {
+                                // fallback should be the RemoteInsetsControlTarget of the
+                                // default display
+                                int currentDisplayId = imeTarget.getDisplayContent().getDisplayId();
+                                mRoot.forAllDisplays(display -> {
+                                    if (display.getDisplayId() != currentDisplayId) {
+                                        display.setImeInputTarget(null);
+                                    }
+                                });
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -8189,6 +8196,14 @@ public class WindowManagerService extends IWindowManager.Stub
                 OnHardKeyboardStatusChangeListener listener) {
             synchronized (mGlobalLock) {
                 mHardKeyboardStatusChangeListener = listener;
+            }
+        }
+
+        @Override
+        public void setOnImeRequestedChangedListener(
+                OnImeRequestedChangedListener listener) {
+            synchronized (mGlobalLock) {
+                mOnImeRequestedChangedListener = listener;
             }
         }
 
