@@ -409,6 +409,13 @@ public class OomAdjuster {
     protected final ArraySet<ProcessRecord> mProcessesInCycle = new ArraySet<>();
 
     /**
+     * List of processes that we want to batch for LMKD to adjust their respective
+     * OOM scores.
+     */
+    @GuardedBy("mService")
+    protected final ArrayList<ProcessRecord> mProcsToOomAdj = new ArrayList<ProcessRecord>();
+
+    /**
      * Flag to mark if there is an ongoing oomAdjUpdate: potentially the oomAdjUpdate
      * could be called recursively because of the indirect calls during the update;
      * however the oomAdjUpdate itself doesn't support recursion - in this case we'd
@@ -1315,7 +1322,7 @@ public class OomAdjuster {
             if (!app.isKilledByAm() && app.getThread() != null) {
                 // We don't need to apply the update for the process which didn't get computed
                 if (state.getCompletedAdjSeq() == mAdjSeq) {
-                    applyOomAdjLSP(app, doingAll, now, nowElapsed, oomAdjReason);
+                    applyOomAdjLSP(app, doingAll, now, nowElapsed, oomAdjReason, true);
                 }
 
                 if (app.isPendingFinishAttach()) {
@@ -1415,6 +1422,11 @@ public class OomAdjuster {
                     numTrimming++;
                 }
             }
+        }
+
+        if (!mProcsToOomAdj.isEmpty()) {
+            ProcessList.batchSetOomAdj(mProcsToOomAdj);
+            mProcsToOomAdj.clear();
         }
 
         if (proactiveKillsEnabled                               // Proactive kills enabled?
@@ -3358,10 +3370,16 @@ public class OomAdjuster {
         mCachedAppOptimizer.onWakefulnessChanged(wakefulness);
     }
 
+    @GuardedBy({"mService", "mProcLock"})
+    protected boolean applyOomAdjLSP(ProcessRecord app, boolean doingAll, long now,
+            long nowElapsed, @OomAdjReason int oomAdjReason) {
+        return applyOomAdjLSP(app, doingAll, now, nowElapsed, oomAdjReason, false);
+    }
+
     /** Applies the computed oomadj, procstate and sched group values and freezes them in set* */
     @GuardedBy({"mService", "mProcLock"})
     protected boolean applyOomAdjLSP(ProcessRecord app, boolean doingAll, long now,
-            long nowElapsed, @OomAdjReason int oomAdjReson) {
+            long nowElapsed, @OomAdjReason int oomAdjReson, boolean isBatchingOomAdj) {
         boolean success = true;
         final ProcessStateRecord state = app.mState;
         final UidRecord uidRec = app.getUidRecord();
@@ -3422,7 +3440,12 @@ public class OomAdjuster {
                     }
                 }
             }
-            ProcessList.setOomAdj(app.getPid(), app.uid, app.mState.getCurAdj());
+            if (isBatchingOomAdj && mConstants.ENABLE_BATCHING_OOM_ADJ) {
+                mProcsToOomAdj.add(app);
+            } else {
+                ProcessList.setOomAdj(app.getPid(), app.uid, app.mState.getCurAdj());
+            }
+
             if (DEBUG_SWITCH || DEBUG_OOM_ADJ || mService.mCurOomAdjUid == app.info.uid) {
                 String msg = "Set " + app.getPid() + " " + app.processName + " adj "
                         + state.getCurAdj() + ": " + state.getAdjType();
