@@ -1694,6 +1694,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final int BIND_APPLICATION_TIMEOUT_HARD_MSG = 83;
     static final int SERVICE_FGS_TIMEOUT_MSG = 84;
     static final int SERVICE_FGS_CRASH_TIMEOUT_MSG = 85;
+    static final int FOLLOW_UP_OOMADJUSTER_UPDATE_MSG = 86;
 
     static final int FIRST_BROADCAST_QUEUE_MSG = 200;
 
@@ -2066,6 +2067,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 } break;
                 case SERVICE_FGS_CRASH_TIMEOUT_MSG: {
                     mServices.onFgsCrashTimeout((ServiceRecord) msg.obj);
+                } break;
+                case FOLLOW_UP_OOMADJUSTER_UPDATE_MSG: {
+                    handleFollowUpOomAdjusterUpdate();
                 } break;
             }
         }
@@ -5197,6 +5201,15 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         mAnrHelper.appNotResponding(app, TimeoutRecord.forAppStart(anrMessage));
+    }
+
+    private void handleFollowUpOomAdjusterUpdate() {
+        // Remove any existing duplicate messages on the handler here while no lock is being held.
+        // If another follow up update is needed, it will be scheduled by OomAdjuster.
+        mHandler.removeMessages(FOLLOW_UP_OOMADJUSTER_UPDATE_MSG);
+        synchronized (this) {
+            mOomAdjuster.updateOomAdjFollowUpTargetsLocked();
+        }
     }
 
     /**
@@ -10326,6 +10339,19 @@ public class ActivityManagerService extends IActivityManager.Stub
         addStartInfoTimestampInternal(key, timestampNs, userId, callingUid);
     }
 
+    @Override
+    public void reportStartInfoViewTimestamps(long renderThreadDrawStartTimeNs,
+            long framePresentedTimeNs) {
+        int callingUid = Binder.getCallingUid();
+        int userId = UserHandle.getUserId(callingUid);
+        addStartInfoTimestampInternal(
+                ApplicationStartInfo.START_TIMESTAMP_INITIAL_RENDERTHREAD_FRAME,
+                renderThreadDrawStartTimeNs, userId, callingUid);
+        addStartInfoTimestampInternal(
+                ApplicationStartInfo.START_TIMESTAMP_SURFACEFLINGER_COMPOSITION_COMPLETE,
+                framePresentedTimeNs, userId, callingUid);
+    }
+
     private void addStartInfoTimestampInternal(int key, long timestampNs, int userId, int uid) {
         mProcessList.getAppStartInfoTracker().addTimestampToStart(
                 Settings.getPackageNameForUid(mContext, uid),
@@ -14740,7 +14766,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             final StringBuilder sb = new StringBuilder("registerReceiver: ");
             sb.append(Binder.getCallingUid()); sb.append('/');
             sb.append(receiverId == null ? "null" : receiverId); sb.append('/');
-            final int actionsCount = filter.countActions();
+            final int actionsCount = filter.safeCountActions();
             if (actionsCount > 0) {
                 for (int i = 0; i < actionsCount; ++i) {
                     sb.append(filter.getAction(i));
