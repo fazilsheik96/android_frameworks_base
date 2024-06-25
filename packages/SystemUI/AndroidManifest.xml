@@ -1113,8 +1113,8 @@
 
         <activity android:name="com.android.systemui.keyboard.shortcut.ui.view.ShortcutHelperActivity"
             android:exported="false"
+            android:showForAllUsers="true"
             android:theme="@style/ShortcutHelperTheme"
-            android:excludeFromRecents="true"
-            android:finishOnCloseSystemDialogs="true" />
+            android:excludeFromRecents="true" />
     </application>
 </manifest>

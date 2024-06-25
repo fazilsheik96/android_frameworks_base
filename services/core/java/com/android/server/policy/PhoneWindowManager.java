@@ -486,7 +486,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     boolean mBootMessageNeedsHiding;
     volatile boolean mBootAnimationDismissable;
-    private KeyguardServiceDelegate mKeyguardDelegate;
+    @VisibleForTesting KeyguardServiceDelegate mKeyguardDelegate;
     private boolean mKeyguardBound;
     final DrawnListener mKeyguardDrawnCallback = new DrawnListener() {
         @Override
@@ -6542,6 +6542,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public void setSwitchingUser(boolean switching) {
         mKeyguardDelegate.setSwitchingUser(switching);
+        if (switching) {
+            dismissKeyboardShortcutsMenu();
+        }
     }
 
     @Override

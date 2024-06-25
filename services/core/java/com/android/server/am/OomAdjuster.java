@@ -532,7 +532,8 @@ public class OomAdjuster {
                 // Skip setting the process group for system_server, keep it as default.
                 return true;
             }
-            if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            final boolean traceEnabled = Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+            if (traceEnabled) {
                 Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "setProcessGroup "
                         + msg.obj + " to " + group);
             }
@@ -547,7 +548,9 @@ public class OomAdjuster {
                     Slog.w(TAG, "Failed setting process group of " + pid + " to " + group, e);
                 }
             } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+                if (traceEnabled) {
+                    Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+                }
             }
             return true;
         });

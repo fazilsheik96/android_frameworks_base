@@ -801,7 +801,8 @@ public final class ActiveServices {
         this.mFGSLogger = new ForegroundServiceTypeLoggerModule();
         this.mActiveServiceAnrTimer = new ProcessAnrTimer(service,
                 ActivityManagerService.SERVICE_TIMEOUT_MSG,
-                "SERVICE_TIMEOUT");
+                "SERVICE_TIMEOUT",
+                new AnrTimer.Args().freeze(true));
         this.mShortFGSAnrTimer = new ServiceAnrTimer(service,
                 ActivityManagerService.SERVICE_SHORT_FGS_ANR_TIMEOUT_MSG,
                 "SHORT_FGS_TIMEOUT");
@@ -7834,7 +7835,7 @@ public final class ActiveServices {
                     }
                 }
                 if (timeout != null && mAm.mProcessList.isInLruListLOSP(proc)) {
-                    mActiveServiceAnrTimer.accept(proc);
+                    final AutoCloseable timer = mActiveServiceAnrTimer.accept(proc);
                     Slog.w(TAG, "Timeout executing service: " + timeout);
                     StringWriter sw = new StringWriter();
                     PrintWriter pw = new FastPrintWriter(sw, false, 1024);
@@ -7847,7 +7848,7 @@ public final class ActiveServices {
                             LAST_ANR_LIFETIME_DURATION_MSECS);
                     long waitedMillis = now - timeout.executingStart;
                     timeoutRecord = TimeoutRecord.forServiceExec(timeout.shortInstanceName,
-                            waitedMillis);
+                            waitedMillis).setExpiredTimer(timer);
                 } else {
                     mActiveServiceAnrTimer.discard(proc);
                     final long delay = psr.shouldExecServicesFg()
@@ -7950,6 +7951,11 @@ public final class ActiveServices {
 
         ProcessAnrTimer(ActivityManagerService am, int msg, String label) {
             super(Objects.requireNonNull(am).mHandler, msg, label);
+        }
+
+        ProcessAnrTimer(ActivityManagerService am, int msg, String label,
+                @NonNull AnrTimer.Args args) {
+            super(Objects.requireNonNull(am).mHandler, msg, label, args);
         }
 
         @Override
