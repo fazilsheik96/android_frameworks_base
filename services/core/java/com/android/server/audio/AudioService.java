@@ -10409,7 +10409,7 @@ public class AudioService extends IAudioService.Stub
         try {
             if (!permissionOverridesCheck && mHardeningEnforcer.blockFocusMethod(uid,
                     HardeningEnforcer.METHOD_AUDIO_MANAGER_REQUEST_AUDIO_FOCUS,
-                    clientId, durationHint, callingPackageName)) {
+                    clientId, durationHint, callingPackageName, attributionTag, sdk)) {
                 final String reason = "Audio focus request blocked by hardening";
                 Log.w(TAG, reason);
                 mmi.set(MediaMetrics.Property.EARLY_RETURN, reason).record();
@@ -10421,7 +10421,7 @@ public class AudioService extends IAudioService.Stub
 
         mmi.record();
         return mMediaFocusControl.requestAudioFocus(aa, durationHint, cb, fd,
-                clientId, callingPackageName, attributionTag, flags, sdk,
+                clientId, callingPackageName, flags, sdk,
                 forceFocusDuckingForAccessibility(aa, durationHint, uid), -1 /*testUid, ignored*/,
                 permissionOverridesCheck);
     }
@@ -10439,7 +10439,7 @@ public class AudioService extends IAudioService.Stub
             return AudioManager.AUDIOFOCUS_REQUEST_FAILED;
         }
         return mMediaFocusControl.requestAudioFocus(aa, durationHint, cb, fd,
-                clientId, callingPackageName, null, flags,
+                clientId, callingPackageName, flags,
                 sdk, false /*forceDuck*/, fakeUid, true /*permissionOverridesCheck*/);
     }
 
