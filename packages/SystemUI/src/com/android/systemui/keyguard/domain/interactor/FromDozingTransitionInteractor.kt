@@ -22,12 +22,14 @@ import com.android.systemui.communal.domain.interactor.CommunalInteractor
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.deviceentry.data.repository.DeviceEntryRepository
 import com.android.systemui.keyguard.KeyguardWmStateRefactor
 import com.android.systemui.keyguard.data.repository.KeyguardTransitionRepository
 import com.android.systemui.keyguard.shared.model.BiometricUnlockMode.Companion.isWakeAndUnlock
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.power.domain.interactor.PowerInteractor
 import com.android.systemui.util.kotlin.Utils.Companion.sample
+import com.android.systemui.util.kotlin.sample
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineDispatcher
@@ -46,10 +48,11 @@ constructor(
     @Background private val scope: CoroutineScope,
     @Background bgDispatcher: CoroutineDispatcher,
     @Main mainDispatcher: CoroutineDispatcher,
-    private val keyguardInteractor: KeyguardInteractor,
+    keyguardInteractor: KeyguardInteractor,
     powerInteractor: PowerInteractor,
     private val communalInteractor: CommunalInteractor,
     keyguardOcclusionInteractor: KeyguardOcclusionInteractor,
+    val deviceEntryRepository: DeviceEntryRepository,
 ) :
     TransitionInteractor(
         fromState = KeyguardState.DOZING,
@@ -58,10 +61,12 @@ constructor(
         bgDispatcher = bgDispatcher,
         powerInteractor = powerInteractor,
         keyguardOcclusionInteractor = keyguardOcclusionInteractor,
+        keyguardInteractor = keyguardInteractor,
     ) {
 
     override fun start() {
         listenForDozingToAny()
+        listenForDozingToGoneViaBiometrics()
         listenForWakeFromDozing()
         listenForTransitionToCamera(scope, keyguardInteractor)
     }
@@ -74,6 +79,35 @@ constructor(
             isKeyguardDismissible && !isKeyguardShowing
         }
 
+    private fun listenForDozingToGoneViaBiometrics() {
+        if (KeyguardWmStateRefactor.isEnabled) {
+            return
+        }
+
+        // This is separate from `listenForDozingToAny` because any delay on wake and unlock will
+        // cause a noticeable issue with animations
+        scope.launch {
+            powerInteractor.isAwake
+                .filterRelevantKeyguardStateAnd { isAwake -> isAwake }
+                .sample(
+                    keyguardInteractor.biometricUnlockState,
+                    ::Pair,
+                )
+                .collect {
+                    (
+                        _,
+                        biometricUnlockState,
+                    ) ->
+                    if (isWakeAndUnlock(biometricUnlockState.mode)) {
+                        startTransitionTo(
+                            KeyguardState.GONE,
+                            ownerReason = "biometric wake and unlock",
+                        )
+                    }
+                }
+        }
+    }
+
     private fun listenForDozingToAny() {
         if (KeyguardWmStateRefactor.isEnabled) {
             return
@@ -84,7 +118,6 @@ constructor(
                 .debounce(50L)
                 .filterRelevantKeyguardStateAnd { isAwake -> isAwake }
                 .sample(
-                    keyguardInteractor.biometricUnlockState,
                     keyguardInteractor.isKeyguardOccluded,
                     communalInteractor.isIdleOnCommunal,
                     canTransitionToGoneOnWake,
@@ -93,13 +126,12 @@ constructor(
                 .collect {
                     (
                         _,
-                        biometricUnlockState,
                         occluded,
                         isIdleOnCommunal,
                         canTransitionToGoneOnWake,
                         primaryBouncerShowing) ->
                     startTransitionTo(
-                        if (isWakeAndUnlock(biometricUnlockState.mode)) {
+                        if (!deviceEntryRepository.isLockscreenEnabled()) {
                             KeyguardState.GONE
                         } else if (canTransitionToGoneOnWake) {
                             KeyguardState.GONE
@@ -145,7 +177,12 @@ constructor(
                             !isWakeAndUnlock(biometricUnlockState.mode)
                     ) {
                         startTransitionTo(
-                            if (canDismissLockscreen) {
+                            if (!KeyguardWmStateRefactor.isEnabled && canDismissLockscreen) {
+                                KeyguardState.GONE
+                            } else if (
+                                KeyguardWmStateRefactor.isEnabled &&
+                                    !deviceEntryRepository.isLockscreenEnabled()
+                            ) {
                                 KeyguardState.GONE
                             } else if (primaryBouncerShowing) {
                                 KeyguardState.PRIMARY_BOUNCER
@@ -153,7 +190,8 @@ constructor(
                                 KeyguardState.GLANCEABLE_HUB
                             } else {
                                 KeyguardState.LOCKSCREEN
-                            }
+                            },
+                            ownerReason = "waking from dozing"
                         )
                     }
                 }

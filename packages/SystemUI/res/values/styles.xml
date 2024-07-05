@@ -157,11 +157,6 @@
         <item name="android:letterSpacing">0.01</item>
     </style>
 
-    <style name="TextAppearance.QS.SecurityFooter" parent="@style/TextAppearance.QS.Status">
-        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
-        <item name="android:textColor">?attr/onSurface</item>
-    </style>
-
     <style name="TextAppearance.QS.Status.Carriers" />
 
     <style name="TextAppearance.QS.Status.Carriers.NoCarrierText">
@@ -351,8 +346,11 @@
         <item name="android:textSize">16sp</item>
     </style>
 
-    <style name="AuthCredentialPanelStyle">
+    <style name="AuthNonCredentialPanelStyle">
         <item name="android:background">?androidprv:attr/materialColorSurfaceBright</item>
+    </style>
+
+    <style name="AuthCredentialPanelStyle" parent="AuthNonCredentialPanelStyle">
         <item name="android:clickable">true</item>
         <item name="android:clipToOutline">true</item>
         <item name="android:importantForAccessibility">no</item>
@@ -380,6 +378,12 @@
         <item name="android:minWidth">48dp</item>
         <item name="android:paddingLeft">0dp</item>
         <item name="android:paddingRight">12dp</item>
+        <item name="android:textColor">?androidprv:attr/materialColorPrimary</item>
+    </style>
+
+    <style name="AuthCredentialNegativeButtonStyle" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
+        <item name="android:background">@color/transparent</item>
         <item name="android:textColor">?androidprv:attr/materialColorPrimary</item>
     </style>
 
@@ -529,10 +533,6 @@
 
     <style name="Animation.BrightnessDialog">
         <item name="android:windowExitAnimation">@anim/instant_fade_out</item>
-    </style>
-
-    <style name="Theme.SystemUI.ContrastDialog" parent="@android:style/Theme.DeviceDefault.Dialog">
-        <item name="android:windowBackground">@android:color/transparent</item>
     </style>
 
     <style name="Theme.SystemUI.QuickSettings.Dialog" parent="@style/Theme.SystemUI.Dialog.QuickSettings">
@@ -1267,6 +1267,7 @@
         <item name="android:lineHeight">32sp</item>
         <item name="android:gravity">center</item>
         <item name="android:textAlignment">center</item>
+        <item name="android:hyphenationFrequency">full</item>
     </style>
 
     <style name="TextAppearance.Dialog.Body" parent="@android:style/TextAppearance.DeviceDefault.Medium">
@@ -1673,6 +1674,10 @@
 
     <style name="Theme.SystemUI.Dialog.StickyKeys" parent="@style/Theme.SystemUI.Dialog">
         <item name="android:colorBackground">@color/transparent</item>
+    </style>
+
+    <style name="ShortcutHelperBottomSheet" parent="@style/Widget.Material3.BottomSheet">
+        <item name="backgroundTint">?colorSurfaceContainer</item>
     </style>
 
     <style name="ShortcutHelperAnimation" parent="@android:style/Animation.Activity">

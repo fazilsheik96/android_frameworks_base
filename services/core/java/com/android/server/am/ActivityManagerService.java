@@ -40,6 +40,8 @@ import static android.app.ActivityManager.PROCESS_STATE_TOP;
 import static android.app.ActivityManager.RESTRICTION_LEVEL_FORCE_STOPPED;
 import static android.app.ActivityManager.RESTRICTION_REASON_DEFAULT;
 import static android.app.ActivityManager.RESTRICTION_REASON_USAGE;
+import static android.app.ActivityManager.RESTRICTION_SOURCE_SYSTEM;
+import static android.app.ActivityManager.RESTRICTION_SOURCE_USER;
 import static android.app.ActivityManager.StopUserOnSwitch;
 import static android.app.ActivityManager.UidFrozenStateChangedCallback.UID_FROZEN_STATE_FROZEN;
 import static android.app.ActivityManager.UidFrozenStateChangedCallback.UID_FROZEN_STATE_UNFROZEN;
@@ -135,7 +137,6 @@ import static android.util.FeatureFlagUtils.SETTINGS_ENABLE_MONITOR_PHANTOM_PROC
 import static android.view.Display.INVALID_DISPLAY;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
-import static com.android.internal.util.FrameworkStatsLog.UNSAFE_INTENT_EVENT_REPORTED__EVENT_TYPE__INTERNAL_NON_EXPORTED_COMPONENT_MATCH;
 import static com.android.internal.util.FrameworkStatsLog.UNSAFE_INTENT_EVENT_REPORTED__EVENT_TYPE__NEW_MUTABLE_IMPLICIT_PENDING_INTENT_RETRIEVED;
 import static com.android.sdksandbox.flags.Flags.sdkSandboxInstrumentationInfo;
 import static com.android.server.am.ActiveServices.FGS_SAW_RESTRICTIONS;
@@ -266,9 +267,7 @@ import android.app.usage.UsageStatsManagerInternal;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetManagerInternal;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.EnabledAfter;
 import android.compat.annotation.EnabledSince;
-import android.compat.annotation.Overridable;
 import android.content.AttributionSource;
 import android.content.AutofillOptions;
 import android.content.BroadcastReceiver;
@@ -307,6 +306,7 @@ import android.content.pm.ServiceInfo;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.TestUtilityService;
 import android.content.pm.UserInfo;
+import android.content.pm.UserProperties;
 import android.content.pm.VersionedPackage;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
@@ -372,6 +372,8 @@ import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.server.ServerProtoEnums;
 import android.sysprop.InitProperties;
+import android.system.Os;
+import android.system.OsConstants;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.text.style.SuggestionSpan;
@@ -466,7 +468,7 @@ import com.android.server.net.NetworkManagementInternal;
 import com.android.server.os.NativeTombstoneManager;
 import com.android.server.pm.Computer;
 import com.android.server.pm.Installer;
-import com.android.server.pm.PackageManagerServiceUtils;
+import com.android.server.pm.SaferIntentUtils;
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.pkg.AndroidPackage;
@@ -671,18 +673,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     @ChangeId
     @EnabledSince(targetSdkVersion = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private static final long DYNAMIC_RECEIVER_EXPLICIT_EXPORT_REQUIRED = 161145287L;
-
-    /**
-     * Apps targeting Android U and above will need to export components in order to invoke them
-     * through implicit intents.
-     *
-     * If a component is not exported and invoked, it will be removed from the list of receivers.
-     * This applies specifically to activities and broadcasts.
-     */
-    @ChangeId
-    @Overridable
-    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.TIRAMISU)
-    public static final long IMPLICIT_INTENTS_ONLY_MATCH_EXPORTED_COMPONENTS = 229362273;
 
     /**
      * The maximum number of bytes that {@link #setProcessStateSummary} accepts.
@@ -1011,6 +1001,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         final int pid = app.getPid();
         synchronized (mPidsSelfLocked) {
             mPidsSelfLocked.doAddInternal(pid, app);
+            ProcessFreezerManager freezer = ProcessFreezerManager.getInstance();
+            if (freezer != null && freezer.useFreezerManager()) {
+                freezer.addPidLocked(app);
+            }
         }
         synchronized (sActiveProcessInfoSelfLocked) {
             if (app.processInfo != null) {
@@ -1036,6 +1030,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         final boolean removed;
         synchronized (mPidsSelfLocked) {
             removed = mPidsSelfLocked.doRemoveInternal(pid, app);
+            ProcessFreezerManager freezer = ProcessFreezerManager.getInstance();
+            if (freezer != null && freezer.useFreezerManager()) {
+                freezer.removePidLocked(pid, app);
+                freezer.startUnfreeze(app.processName, ProcessFreezerManager.REMOVE_PROCESS_UNFREEZE);
+            }
         }
         if (removed) {
             synchronized (sActiveProcessInfoSelfLocked) {
@@ -1696,6 +1695,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final int BIND_APPLICATION_TIMEOUT_HARD_MSG = 83;
     static final int SERVICE_FGS_TIMEOUT_MSG = 84;
     static final int SERVICE_FGS_CRASH_TIMEOUT_MSG = 85;
+    static final int FOLLOW_UP_OOMADJUSTER_UPDATE_MSG = 86;
 
     static final int FIRST_BROADCAST_QUEUE_MSG = 200;
 
@@ -2068,6 +2068,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 } break;
                 case SERVICE_FGS_CRASH_TIMEOUT_MSG: {
                     mServices.onFgsCrashTimeout((ServiceRecord) msg.obj);
+                } break;
+                case FOLLOW_UP_OOMADJUSTER_UPDATE_MSG: {
+                    handleFollowUpOomAdjusterUpdate();
                 } break;
             }
         }
@@ -4016,11 +4019,28 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 + packageName + ": " + e);
                     }
                     if (mUserController.isUserRunning(user, userRunningFlags)) {
+
+                        String description;
+                        if (reason == null) {
+                            description = "from pid " + callingPid;
+
+                            // Add the name of the process if it's available
+                            final ProcessRecord callerApp;
+                            synchronized (mPidsSelfLocked) {
+                                callerApp = mPidsSelfLocked.get(callingPid);
+                            }
+                            if (callerApp != null) {
+                                description += " (" + callerApp.processName + ")";
+                            }
+                        } else {
+                            description = reason;
+                        }
+
                         forceStopPackageLocked(packageName, UserHandle.getAppId(pkgUid),
                                 false /* callerWillRestart */, false /* purgeCache */,
                                 true /* doIt */, false /* evenPersistent */,
-                                false /* uninstalling */, true /* packageStateStopped */, user,
-                                reason == null ? ("from pid " + callingPid) : reason);
+                                false /* uninstalling */, true /* packageStateStopped */,
+                                user, description);
                         finishForceStopPackageLocked(packageName, pkgUid);
                     }
                 }
@@ -5184,6 +5204,15 @@ public class ActivityManagerService extends IActivityManager.Stub
         mAnrHelper.appNotResponding(app, TimeoutRecord.forAppStart(anrMessage));
     }
 
+    private void handleFollowUpOomAdjusterUpdate() {
+        // Remove any existing duplicate messages on the handler here while no lock is being held.
+        // If another follow up update is needed, it will be scheduled by OomAdjuster.
+        mHandler.removeMessages(FOLLOW_UP_OOMADJUSTER_UPDATE_MSG);
+        synchronized (this) {
+            mOomAdjuster.updateOomAdjFollowUpTargetsLocked();
+        }
+    }
+
     /**
      * @return The last part of the string of an intent's action.
      */
@@ -5233,7 +5262,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (android.app.Flags.appRestrictionsApi() && wasForceStopped) {
             noteAppRestrictionEnabled(app.info.packageName, app.uid,
                     RESTRICTION_LEVEL_FORCE_STOPPED, false,
-                    RESTRICTION_REASON_USAGE, "unknown", 0L);
+                    RESTRICTION_REASON_USAGE, "unknown", RESTRICTION_SOURCE_USER, 0L);
         }
 
         if (!sendBroadcast) {
@@ -5640,9 +5669,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                                         packageName, UserHandle.of(userId));
                         String resolvedType = resolvedTypes == null
                                 || i >= resolvedTypes.length ? null : resolvedTypes[i];
-                        ActivityManagerUtils.logUnsafeIntentEvent(
+                        SaferIntentUtils.reportUnsafeIntentEvent(
                                 UNSAFE_INTENT_EVENT_REPORTED__EVENT_TYPE__NEW_MUTABLE_IMPLICIT_PENDING_INTENT_RETRIEVED,
-                                owningUid, intent, resolvedType, isChangeEnabled);
+                                owningUid, Process.INVALID_PID,
+                                intent, resolvedType, isChangeEnabled);
                         if (isChangeEnabled) {
                             String msg = packageName + ": Targeting U+ (version "
                                     + Build.VERSION_CODES.UPSIDE_DOWN_CAKE + " and above) disallows"
@@ -5681,32 +5711,30 @@ public class ActivityManagerService extends IActivityManager.Stub
             // security checking for it above.
             userId = UserHandle.USER_CURRENT;
         }
-        try {
-            if (owningUid != 0 && owningUid != SYSTEM_UID) {
-                final int uid = AppGlobals.getPackageManager().getPackageUid(packageName,
-                        MATCH_DEBUG_TRIAGED_MISSING, UserHandle.getUserId(owningUid));
-                if (!UserHandle.isSameApp(owningUid, uid)) {
-                    String msg = "Permission Denial: getIntentSender() from pid="
-                            + Binder.getCallingPid()
-                            + ", uid=" + owningUid
-                            + ", (need uid=" + uid + ")"
-                            + " is not allowed to send as package " + packageName;
-                    Slog.w(TAG, msg);
-                    throw new SecurityException(msg);
-                }
-            }
 
-            if (type == ActivityManager.INTENT_SENDER_ACTIVITY_RESULT) {
-                return mAtmInternal.getIntentSender(type, packageName, featureId, owningUid,
-                        userId, token, resultWho, requestCode, intents, resolvedTypes, flags,
-                        bOptions);
+        if (owningUid != 0 && owningUid != SYSTEM_UID) {
+            if (!getPackageManagerInternal().isSameApp(
+                    packageName,
+                    MATCH_DEBUG_TRIAGED_MISSING,
+                    owningUid,
+                    UserHandle.getUserId(owningUid))) {
+                String msg = "Permission Denial: getIntentSender() from pid="
+                        + Binder.getCallingPid()
+                        + ", uid=" + owningUid
+                        + " is not allowed to send as package " + packageName;
+                Slog.w(TAG, msg);
+                throw new SecurityException(msg);
             }
-            return mPendingIntentController.getIntentSender(type, packageName, featureId,
-                    owningUid, userId, token, resultWho, requestCode, intents, resolvedTypes,
-                    flags, bOptions);
-        } catch (RemoteException e) {
-            throw new SecurityException(e);
         }
+
+        if (type == ActivityManager.INTENT_SENDER_ACTIVITY_RESULT) {
+            return mAtmInternal.getIntentSender(type, packageName, featureId, owningUid,
+                    userId, token, resultWho, requestCode, intents, resolvedTypes, flags,
+                    bOptions);
+        }
+        return mPendingIntentController.getIntentSender(type, packageName, featureId,
+                owningUid, userId, token, resultWho, requestCode, intents, resolvedTypes,
+                flags, bOptions);
     }
 
     @Override
@@ -5904,7 +5932,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         intent, matchFlags, uid, userId));
             case ActivityManager.INTENT_SENDER_BROADCAST:
                 return new ParceledListSlice<>(mPackageManagerInt.queryIntentReceivers(
-                        intent, resolvedType, matchFlags, uid, userId, false));
+                        intent, resolvedType, matchFlags, uid, Process.INVALID_PID, userId, false));
             default: // ActivityManager.INTENT_SENDER_ACTIVITY_RESULT
                 throw new IllegalStateException("Unsupported intent sender type: " + res.key.type);
         }
@@ -6116,44 +6144,45 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         synchronized (mProcLock) {
-            synchronized (mPidsSelfLocked) {
-                int newestTimeIndex = -1;
-                long newestTime = Long.MIN_VALUE;
-                for (int i = 0; i < pids.length; i++) {
-                    ProcessRecord pr = mPidsSelfLocked.get(pids[i]);
-                    if (pr != null) {
-                        final long pendingTopTime =
-                                mPendingStartActivityUids.getPendingTopPidTime(pr.uid, pids[i]);
-                        if (pendingTopTime != PendingStartActivityUids.INVALID_TIME) {
-                            // The uid in mPendingStartActivityUids gets the TOP process state.
-                            states[i] = PROCESS_STATE_TOP;
-                            if (scores != null) {
-                                // The uid in mPendingStartActivityUids gets a better score.
-                                scores[i] = ProcessList.FOREGROUND_APP_ADJ - 1;
-                            }
-                            if (pendingTopTime > newestTime) {
-                                newestTimeIndex = i;
-                                newestTime = pendingTopTime;
-                            }
-                        } else {
-                            states[i] = pr.mState.getCurProcState();
-                            if (scores != null) {
-                                scores[i] = pr.mState.getCurAdj();
-                            }
+            int newestTimeIndex = -1;
+            long newestTime = Long.MIN_VALUE;
+            for (int i = 0; i < pids.length; i++) {
+                final ProcessRecord pr;
+                synchronized (mPidsSelfLocked) {
+                    pr = mPidsSelfLocked.get(pids[i]);
+                }
+                if (pr != null) {
+                    final long pendingTopTime =
+                            mPendingStartActivityUids.getPendingTopPidTime(pr.uid, pids[i]);
+                    if (pendingTopTime != PendingStartActivityUids.INVALID_TIME) {
+                        // The uid in mPendingStartActivityUids gets the TOP process state.
+                        states[i] = PROCESS_STATE_TOP;
+                        if (scores != null) {
+                            // The uid in mPendingStartActivityUids gets a better score.
+                            scores[i] = ProcessList.FOREGROUND_APP_ADJ - 1;
+                        }
+                        if (pendingTopTime > newestTime) {
+                            newestTimeIndex = i;
+                            newestTime = pendingTopTime;
                         }
                     } else {
-                        states[i] = PROCESS_STATE_NONEXISTENT;
+                        states[i] = pr.mState.getCurProcState();
                         if (scores != null) {
-                            scores[i] = ProcessList.INVALID_ADJ;
+                            scores[i] = pr.mState.getCurAdj();
                         }
                     }
-                }
-                // The uid with the newest timestamp in mPendingStartActivityUids gets the best
-                // score.
-                if (newestTimeIndex != -1) {
+                } else {
+                    states[i] = PROCESS_STATE_NONEXISTENT;
                     if (scores != null) {
-                        scores[newestTimeIndex] = ProcessList.FOREGROUND_APP_ADJ - 2;
+                        scores[i] = ProcessList.INVALID_ADJ;
                     }
+                }
+            }
+            // The uid with the newest timestamp in mPendingStartActivityUids gets the best
+            // score.
+            if (newestTimeIndex != -1) {
+                if (scores != null) {
+                    scores[newestTimeIndex] = ProcessList.FOREGROUND_APP_ADJ - 2;
                 }
             }
         }
@@ -9611,14 +9640,13 @@ public class ActivityManagerService extends IActivityManager.Stub
      * @param callback The binder used to communicate the violations.
      */
     @Override
-    public void registerStrictModeCallback(IBinder callback) {
+    public synchronized void registerStrictModeCallback(IBinder callback) {
         int callingPid = Binder.getCallingPid();
         mStrictModeCallbacks.put(callingPid,
                 IUnsafeIntentStrictModeCallback.Stub.asInterface(callback));
         try {
-            callback.linkToDeath(new DeathRecipient() {
-                @Override
-                public void binderDied() {
+            callback.linkToDeath(() -> {
+                synchronized (ActivityManagerService.this) {
                     mStrictModeCallbacks.remove(callingPid);
                 }
             }, 0);
@@ -10004,6 +10032,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             sb.append("ErrorId: ").append(errorId.toString()).append("\n");
         }
         sb.append("Build: ").append(Build.FINGERPRINT).append("\n");
+
+        // If device is not using 4KB pages, add the PageSize
+        long pageSize = Os.sysconf(OsConstants._SC_PAGESIZE);
+        if (pageSize != 4096) {
+            sb.append("PageSize: ").append(pageSize).append("\n");
+        }
+
         if (Debug.isDebuggerConnected()) {
             sb.append("Debugger: Connected\n");
         }
@@ -10305,6 +10340,19 @@ public class ActivityManagerService extends IActivityManager.Stub
         addStartInfoTimestampInternal(key, timestampNs, userId, callingUid);
     }
 
+    @Override
+    public void reportStartInfoViewTimestamps(long renderThreadDrawStartTimeNs,
+            long framePresentedTimeNs) {
+        int callingUid = Binder.getCallingUid();
+        int userId = UserHandle.getUserId(callingUid);
+        addStartInfoTimestampInternal(
+                ApplicationStartInfo.START_TIMESTAMP_INITIAL_RENDERTHREAD_FRAME,
+                renderThreadDrawStartTimeNs, userId, callingUid);
+        addStartInfoTimestampInternal(
+                ApplicationStartInfo.START_TIMESTAMP_SURFACEFLINGER_COMPOSITION_COMPLETE,
+                framePresentedTimeNs, userId, callingUid);
+    }
+
     private void addStartInfoTimestampInternal(int key, long timestampNs, int userId, int uid) {
         mProcessList.getAppStartInfoTracker().addTimestampToStart(
                 Settings.getPackageNameForUid(mContext, uid),
@@ -10390,7 +10438,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         command.add("/system/bin/logcat");
         command.add("-v");
         // This adds a timestamp and thread info to each log line.
-        command.add("threadtime");
+        // Also change the timestamps to use UTC time.
+        command.add("threadtime,UTC");
         for (String buffer : buffers) {
             command.add("-b");
             command.add(buffer);
@@ -10521,11 +10570,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     public void onShellCommand(FileDescriptor in, FileDescriptor out,
             FileDescriptor err, String[] args, ShellCallback callback,
             ResultReceiver resultReceiver) {
-        final int callingUid = Binder.getCallingUid();
-        if (callingUid != ROOT_UID && callingUid != Process.SHELL_UID) {
-            resultReceiver.send(-1, null);
-            throw new SecurityException("Shell commands are only callable by root or shell");
-        }
         (new ActivityManagerShellCommand(this, false)).exec(
                 this, in, out, err, args, callback, resultReceiver);
     }
@@ -13813,64 +13857,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     /**
-     * Filters out non-exported components in a given list of broadcast filters
-     * @param intent the original intent
-     * @param callingUid the calling UID
-     * @param query the list of broadcast filters
-     * @param platformCompat the instance of platform compat
-     */
-    private void filterNonExportedComponents(Intent intent, int callingUid, int callingPid,
-            List query, PlatformCompat platformCompat, String callerPackage, String resolvedType) {
-        if (query == null
-                || intent.getPackage() != null
-                || intent.getComponent() != null
-                || ActivityManager.canAccessUnexportedComponents(callingUid)) {
-            return;
-        }
-        IUnsafeIntentStrictModeCallback callback = mStrictModeCallbacks.get(callingPid);
-        for (int i = query.size() - 1; i >= 0; i--) {
-            String componentInfo;
-            ResolveInfo resolveInfo;
-            BroadcastFilter broadcastFilter;
-            if (query.get(i) instanceof ResolveInfo) {
-                resolveInfo = (ResolveInfo) query.get(i);
-                if (resolveInfo.getComponentInfo().exported) {
-                    continue;
-                }
-                componentInfo = resolveInfo.getComponentInfo()
-                        .getComponentName().flattenToShortString();
-            } else if (query.get(i) instanceof BroadcastFilter) {
-                broadcastFilter = (BroadcastFilter) query.get(i);
-                if (broadcastFilter.exported) {
-                    continue;
-                }
-                componentInfo = broadcastFilter.packageName;
-            } else {
-                continue;
-            }
-            if (callback != null) {
-                mHandler.post(() -> {
-                    try {
-                        callback.onImplicitIntentMatchedInternalComponent(intent.cloneFilter());
-                    } catch (RemoteException e) {
-                        mStrictModeCallbacks.remove(callingPid);
-                    }
-                });
-            }
-            boolean hasToBeExportedToMatch = platformCompat.isChangeEnabledByUid(
-                    ActivityManagerService.IMPLICIT_INTENTS_ONLY_MATCH_EXPORTED_COMPONENTS,
-                    callingUid);
-            ActivityManagerUtils.logUnsafeIntentEvent(
-                    UNSAFE_INTENT_EVENT_REPORTED__EVENT_TYPE__INTERNAL_NON_EXPORTED_COMPONENT_MATCH,
-                    callingUid, intent, resolvedType, hasToBeExportedToMatch);
-            if (!hasToBeExportedToMatch) {
-                return;
-            }
-            query.remove(i);
-        }
-    }
-
-    /**
      * Main code for cleaning up a process when it has gone away.  This is
      * called both as a result of the process dying, or directly when stopping
      * a process when running in single process mode.
@@ -14507,7 +14493,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     if (wasStopped) {
                         noteAppRestrictionEnabled(app.packageName, app.uid,
                                 RESTRICTION_LEVEL_FORCE_STOPPED, false,
-                                RESTRICTION_REASON_DEFAULT, "restore", 0L);
+                                RESTRICTION_REASON_DEFAULT, "restore",
+                                RESTRICTION_SOURCE_SYSTEM, 0L);
                     }
                 } catch (NameNotFoundException e) {
                     Slog.w(TAG, "No such package", e);
@@ -14780,7 +14767,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             final StringBuilder sb = new StringBuilder("registerReceiver: ");
             sb.append(Binder.getCallingUid()); sb.append('/');
             sb.append(receiverId == null ? "null" : receiverId); sb.append('/');
-            final int actionsCount = filter.countActions();
+            final int actionsCount = filter.safeCountActions();
             if (actionsCount > 0) {
                 for (int i = 0; i < actionsCount; ++i) {
                     sb.append(filter.getAction(i));
@@ -15204,8 +15191,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         mProcessList.sendPackageBroadcastLocked(cmd, packages, userId);
     }
 
-    private List<ResolveInfo> collectReceiverComponents(Intent intent, String resolvedType,
-            int callingUid, int[] users, int[] broadcastAllowList) {
+    private List<ResolveInfo> collectReceiverComponents(
+            Intent intent, String resolvedType, int callingUid, int callingPid,
+            int[] users, int[] broadcastAllowList) {
         // TODO: come back and remove this assumption to triage all broadcasts
         long pmFlags = STOCK_PM_FLAGS | MATCH_DEBUG_TRIAGED_MISSING;
 
@@ -15220,7 +15208,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 continue;
             }
             List<ResolveInfo> newReceivers = mPackageManagerInt.queryIntentReceivers(
-                    intent, resolvedType, pmFlags, callingUid, user, true /* forSend */);
+                    intent, resolvedType, pmFlags, callingUid, callingPid, user, /* forSend */true);
             if (user != UserHandle.USER_SYSTEM && newReceivers != null) {
                 // If this is not the system user, we need to check for
                 // any receivers that should be filtered out.
@@ -15238,7 +15226,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     final ResolveInfo ri = newReceivers.get(i);
                     final Resolution<ResolveInfo> resolution =
                             mComponentAliasResolver.resolveReceiver(intent, ri, resolvedType,
-                                    pmFlags, user, callingUid, true /* forSend */);
+                                    pmFlags, user, callingUid, callingPid);
                     if (resolution == null) {
                         // It was an alias, but the target was not found.
                         newReceivers.remove(i);
@@ -15441,15 +15429,50 @@ public class ActivityManagerService extends IActivityManager.Stub
             BackgroundStartPrivileges backgroundStartPrivileges,
             @Nullable int[] broadcastAllowList,
             @Nullable BiFunction<Integer, Bundle, Bundle> filterExtrasForReceiver) {
-        final int cookie = BroadcastQueue.traceBegin("broadcastIntentLockedTraced");
-        final int res = broadcastIntentLockedTraced(callerApp, callerPackage, callerFeatureId,
-                intent, resolvedType, resultToApp, resultTo, resultCode, resultData, resultExtras,
-                requiredPermissions, excludedPermissions, excludedPackages, appOp,
-                BroadcastOptions.fromBundleNullable(bOptions), ordered, sticky,
-                callingPid, callingUid, realCallingUid, realCallingPid, userId,
-                backgroundStartPrivileges, broadcastAllowList, filterExtrasForReceiver);
-        BroadcastQueue.traceEnd(cookie);
-        return res;
+        final int cookie = traceBroadcastIntentBegin(intent, resultTo, ordered, sticky,
+                callingUid, realCallingUid, userId);
+        try {
+            final int res = broadcastIntentLockedTraced(callerApp, callerPackage, callerFeatureId,
+                    intent, resolvedType, resultToApp, resultTo, resultCode, resultData,
+                    resultExtras, requiredPermissions, excludedPermissions, excludedPackages,
+                    appOp, BroadcastOptions.fromBundleNullable(bOptions), ordered, sticky,
+                    callingPid, callingUid, realCallingUid, realCallingPid, userId,
+                    backgroundStartPrivileges, broadcastAllowList, filterExtrasForReceiver);
+            return res;
+        } finally {
+            traceBroadcastIntentEnd(cookie);
+        }
+    }
+
+    private static int traceBroadcastIntentBegin(Intent intent, IIntentReceiver resultTo,
+            boolean ordered, boolean sticky, int callingUid, int realCallingUid, int userId) {
+        if (!Flags.traceReceiverRegistration()) {
+            return BroadcastQueue.traceBegin("broadcastIntentLockedTraced");
+        }
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            final StringBuilder sb = new StringBuilder("broadcastIntent: ");
+            sb.append(callingUid); sb.append('/');
+            final String action = intent.getAction();
+            sb.append(action == null ? null : action); sb.append('/');
+            sb.append("0x"); sb.append(Integer.toHexString(intent.getFlags())); sb.append('/');
+            sb.append(ordered ? "O" : "_");
+            sb.append(sticky ? "S" : "_");
+            sb.append(resultTo != null ? "C" : "_");
+            sb.append('/');
+            sb.append('u'); sb.append(userId);
+            if (callingUid != realCallingUid) {
+                sb.append('/');
+                sb.append("sender="); sb.append(realCallingUid);
+            }
+            return BroadcastQueue.traceBegin(sb.toString());
+        }
+        return 0;
+    }
+
+    private static void traceBroadcastIntentEnd(int cookie) {
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            BroadcastQueue.traceEnd(cookie);
+        }
     }
 
     @GuardedBy("this")
@@ -16080,6 +16103,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             users = new int[] {userId};
         }
 
+        var args = new SaferIntentUtils.IntentArgs(intent, resolvedType,
+                true /* isReceiver */, true /* resolveForStart */, callingUid, callingPid);
+        args.platformCompat = mPlatformCompat;
+
         // Figure out who all will receive this broadcast.
         final int cookie = BroadcastQueue.traceBegin("queryReceivers");
         List receivers = null;
@@ -16087,7 +16114,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // Need to resolve the intent to interested receivers...
         if ((intent.getFlags() & Intent.FLAG_RECEIVER_REGISTERED_ONLY) == 0) {
             receivers = collectReceiverComponents(
-                    intent, resolvedType, callingUid, users, broadcastAllowList);
+                    intent, resolvedType, callingUid, callingPid, users, broadcastAllowList);
         }
         if (intent.getComponent() == null) {
             final PackageDataSnapshot snapshot = getPackageManagerInternal().snapshot();
@@ -16112,9 +16139,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         resolvedType, false /*defaultOnly*/, userId);
             }
             if (registeredReceivers != null) {
-                PackageManagerServiceUtils.applyNullActionBlocking(
-                        mPlatformCompat, snapshot, registeredReceivers,
-                        true, intent, callingUid);
+                SaferIntentUtils.blockNullAction(args, registeredReceivers);
             }
         }
         BroadcastQueue.traceEnd(cookie);
@@ -16136,8 +16161,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
-        filterNonExportedComponents(intent, callingUid, callingPid, registeredReceivers,
-                mPlatformCompat, callerPackage, resolvedType);
         int NR = registeredReceivers != null ? registeredReceivers.size() : 0;
 
         // Merge into one list.
@@ -16220,8 +16243,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         if ((receivers != null && receivers.size() > 0)
                 || resultTo != null) {
             BroadcastQueue queue = mBroadcastQueue;
-            filterNonExportedComponents(intent, callingUid, callingPid, receivers,
-                    mPlatformCompat, callerPackage, resolvedType);
+            SaferIntentUtils.filterNonExportedComponents(args, receivers);
             BroadcastRecord r = new BroadcastRecord(queue, intent, callerApp, callerPackage,
                     callerFeatureId, callingPid, callingUid, callerInstantApp, resolvedType,
                     requiredPermissions, excludedPermissions, excludedPackages, appOp, brOptions,
@@ -17060,6 +17082,18 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         int userId = UserHandle.getCallingUserId();
+
+        if (UserManager.isVisibleBackgroundUsersEnabled() && userId != getCurrentUserId()) {
+            // The check is added mainly for auto devices. On auto devices, it is possible that
+            // multiple users are visible simultaneously using visible background users.
+            // In such cases, it is desired that only the current user (not the visible background
+            // user) can change the locale and other persistent settings of the device.
+            Slog.w(TAG, "Only current user is allowed to update persistent configuration if "
+                    + "visible background users are enabled. Current User" + getCurrentUserId()
+                    + ". Calling User: " + userId);
+            throw new SecurityException("Only current user is allowed to update persistent "
+                    + "configuration.");
+        }
 
         mActivityTaskManager.updatePersistentConfiguration(values, userId);
     }
@@ -18300,7 +18334,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     /**
      * Stops user but allow delayed locking. Delayed locking keeps user unlocked even after
-     * stopping only if {@code config_multiuserDelayUserDataLocking} overlay is set true.
+     * stopping only if {@code config_multiuserDelayUserDataLocking} overlay is set true on the
+     * device or if the user has {@link UserProperties#getAllowStoppingUserWithDelayedLocking()}
+     * set to true.
      *
      * <p>When delayed locking is not enabled through the overlay, this call becomes the same
      * with {@link #stopUserWithCallback(int, IStopUserCallback)} call.
@@ -18312,8 +18348,6 @@ public class ActivityManagerService extends IActivityManager.Stub
      *         other {@code ActivityManager#USER_OP_*} codes for failure.
      *
      */
-    // TODO(b/302662311): Add javadoc changes corresponding to the user property that allows
-    // delayed locking behavior once the private space flag is finalized.
     @Override
     public int stopUserWithDelayedLocking(@UserIdInt int userId, IStopUserCallback callback) {
         return mUserController.stopUser(userId, /* allowDelayedLocking= */ true,
@@ -20022,13 +20056,23 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
-        public IUnsafeIntentStrictModeCallback getRegisteredStrictModeCallback(int callingPid) {
-            return mStrictModeCallbacks.get(callingPid);
-        }
-
-        @Override
-        public void unregisterStrictModeCallback(int callingPid) {
-            mStrictModeCallbacks.remove(callingPid);
+        public void triggerUnsafeIntentStrictMode(int callingPid, int type, Intent intent) {
+            final IUnsafeIntentStrictModeCallback callback;
+            final Intent i = intent.cloneFilter();
+            synchronized (ActivityManagerService.this) {
+                callback = mStrictModeCallbacks.get(callingPid);
+            }
+            if (callback != null) {
+                BackgroundThread.getExecutor().execute(() -> {
+                    try {
+                        callback.onUnsafeIntent(type, i);
+                    } catch (RemoteException e) {
+                        synchronized (ActivityManagerService.this) {
+                            mStrictModeCallbacks.remove(callingPid);
+                        }
+                    }
+                });
+            }
         }
 
         @Override
@@ -20094,6 +20138,26 @@ public class ActivityManagerService extends IActivityManager.Stub
                     ALLOW_NON_FULL, "addStartInfoTimestampSystem", null);
 
             addStartInfoTimestampInternal(key, timestampNs, userId, uid);
+        }
+
+        @Override
+        public void killApplicationSync(String pkgName, int appId, int userId,
+                String reason, int exitInfoReason) {
+            if (pkgName == null) {
+                return;
+            }
+            // Make sure the uid is valid.
+            if (appId < 0) {
+                Slog.w(TAG, "Invalid appid specified for pkg : " + pkgName);
+                return;
+            }
+            synchronized (ActivityManagerService.this) {
+                ActivityManagerService.this.forceStopPackageLocked(pkgName, appId,
+                        /* callerWillRestart= */ false, /*purgeCache= */ false,
+                        /* doit= */ true, /* evenPersistent= */ false,
+                        /* uninstalling= */ false, /* packageStateStopped= */ false,
+                        userId, reason, exitInfoReason);
+            }
         }
     }
 
@@ -20397,12 +20461,14 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Log the reason for changing an app restriction. Purely used for logging purposes and does not
      * cause any change to app state.
      *
-     * @see ActivityManager#noteAppRestrictionEnabled(String, int, int, boolean, int, String, long)
+     * @see ActivityManager#noteAppRestrictionEnabled(String, int, int, boolean, int,
+     *          String, int, long)
      */
     @Override
     public void noteAppRestrictionEnabled(String packageName, int uid,
             @RestrictionLevel int restrictionType, boolean enabled,
-            @ActivityManager.RestrictionReason int reason, String subReason, long threshold) {
+            @ActivityManager.RestrictionReason int reason, String subReason,
+            @ActivityManager.RestrictionSource int source, long threshold) {
         if (!android.app.Flags.appRestrictionsApi()) return;
 
         enforceCallingPermission(android.Manifest.permission.DEVICE_POWER,
@@ -20415,7 +20481,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 uid = mPackageManagerInt.getPackageUid(packageName, 0, userId);
             }
             mAppRestrictionController.noteAppRestrictionEnabled(packageName, uid, restrictionType,
-                    enabled, reason, subReason, threshold);
+                    enabled, reason, subReason, source, threshold);
         } finally {
             Binder.restoreCallingIdentity(callingId);
         }

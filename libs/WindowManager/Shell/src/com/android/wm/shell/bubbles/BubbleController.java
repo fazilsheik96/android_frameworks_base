@@ -86,12 +86,15 @@ import androidx.annotation.Nullable;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.statusbar.IStatusBarService;
+import com.android.internal.util.CollectionUtils;
 import com.android.launcher3.icons.BubbleIconFactory;
+import com.android.wm.shell.Flags;
 import com.android.wm.shell.R;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.bubbles.bar.BubbleBarLayerView;
 import com.android.wm.shell.bubbles.properties.BubbleProperties;
+import com.android.wm.shell.bubbles.shortcut.BubbleShortcutHelper;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.ExternalInterfaceBinder;
 import com.android.wm.shell.common.FloatingContentCoordinator;
@@ -510,6 +513,10 @@ public class BubbleController implements ConfigurationChangeListener,
         }
         mCurrentProfiles = userProfiles;
 
+        if (Flags.enableRetrievableBubbles()) {
+            registerShortcutBroadcastReceiver();
+        }
+
         mShellController.addConfigurationChangeListener(this);
         mShellController.addExternalInterface(KEY_EXTRA_SHELL_BUBBLES,
                 this::createExternalInterface, this);
@@ -517,7 +524,7 @@ public class BubbleController implements ConfigurationChangeListener,
     }
 
     private ExternalInterfaceBinder createExternalInterface() {
-        return new BubbleController.IBubblesImpl(this);
+        return new IBubblesImpl(this);
     }
 
     @VisibleForTesting
@@ -591,11 +598,12 @@ public class BubbleController implements ConfigurationChangeListener,
      * Hides the current input method, wherever it may be focused, via InputMethodManagerInternal.
      */
     void hideCurrentInputMethod() {
+        mBubblePositioner.setImeVisible(false /* visible */, 0 /* height */);
         int displayId = mWindowManager.getDefaultDisplay().getDisplayId();
         try {
             mBarService.hideCurrentInputMethodForBubbles(displayId);
         } catch (RemoteException e) {
-            e.printStackTrace();
+            Log.e(TAG, "Failed to hide IME", e);
         }
     }
 
@@ -985,6 +993,25 @@ public class BubbleController implements ConfigurationChangeListener,
         }
     };
 
+    private void registerShortcutBroadcastReceiver() {
+        IntentFilter shortcutFilter = new IntentFilter();
+        shortcutFilter.addAction(BubbleShortcutHelper.ACTION_SHOW_BUBBLES);
+        ProtoLog.d(WM_SHELL_BUBBLES, "register broadcast receive for bubbles shortcut");
+        mContext.registerReceiver(mShortcutBroadcastReceiver, shortcutFilter,
+                Context.RECEIVER_NOT_EXPORTED);
+    }
+
+    private final BroadcastReceiver mShortcutBroadcastReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            ProtoLog.v(WM_SHELL_BUBBLES, "receive broadcast to show bubbles %s",
+                    intent.getAction());
+            if (BubbleShortcutHelper.ACTION_SHOW_BUBBLES.equals(intent.getAction())) {
+                mMainExecutor.execute(() -> showBubblesFromShortcut());
+            }
+        }
+    };
+
     /**
      * Called by the BubbleStackView and whenever all bubbles have animated out, and none have been
      * added in the meantime.
@@ -1188,10 +1215,12 @@ public class BubbleController implements ConfigurationChangeListener,
      * A bubble is no longer being dragged in Launcher. And was released in given location.
      * Will be called only when bubble bar is expanded.
      *
-     * @param location  location where bubble was released
+     * @param location location where bubble was released
+     * @param topOnScreen      top coordinate of the bubble bar on the screen after release
      */
-    public void stopBubbleDrag(BubbleBarLocation location) {
+    public void stopBubbleDrag(BubbleBarLocation location, int topOnScreen) {
         mBubblePositioner.setBubbleBarLocation(location);
+        mBubblePositioner.setBubbleBarTopOnScreen(topOnScreen);
         if (mBubbleData.getSelectedBubble() != null) {
             mBubbleBarViewCallback.expansionChanged(/* isExpanded = */ true);
         }
@@ -1247,8 +1276,8 @@ public class BubbleController implements ConfigurationChangeListener,
      * <p>This is used by external callers (launcher).
      */
     @VisibleForTesting
-    public void expandStackAndSelectBubbleFromLauncher(String key, Rect bubbleBarBounds) {
-        mBubblePositioner.setBubbleBarBounds(bubbleBarBounds);
+    public void expandStackAndSelectBubbleFromLauncher(String key, int topOnScreen) {
+        mBubblePositioner.setBubbleBarTopOnScreen(topOnScreen);
 
         if (BubbleOverflow.KEY.equals(key)) {
             mBubbleData.setSelectedBubbleFromLauncher(mBubbleData.getOverflow());
@@ -1454,8 +1483,9 @@ public class BubbleController implements ConfigurationChangeListener,
             SynchronousScreenCaptureListener screenCaptureListener) {
         try {
             ScreenCapture.CaptureArgs args = null;
-            if (mStackView != null) {
-                ViewRootImpl viewRoot = mStackView.getViewRootImpl();
+            View viewToUse = mStackView != null ? mStackView : mLayerView;
+            if (viewToUse != null) {
+                ViewRootImpl viewRoot = viewToUse.getViewRootImpl();
                 if (viewRoot != null) {
                     SurfaceControl bubbleLayer = viewRoot.getSurfaceControl();
                     if (bubbleLayer != null) {
@@ -1545,6 +1575,12 @@ public class BubbleController implements ConfigurationChangeListener,
                     mStackView.setSelectedBubble(b);
                 } else {
                     Log.w(TAG, "Tried to add a bubble to the stack but the stack is null");
+                }
+            };
+        } else if (mBubbleData.isExpanded() && mBubbleData.getSelectedBubble() != null) {
+            callback = b -> {
+                if (b.getKey().equals(mBubbleData.getSelectedBubbleKey())) {
+                    mLayerView.showExpandedView(b);
                 }
             };
         }
@@ -1769,7 +1805,7 @@ public class BubbleController implements ConfigurationChangeListener,
         if (groupKey == null) {
             return bubbleChildren;
         }
-        for (Bubble bubble : mBubbleData.getActiveBubbles()) {
+        for (Bubble bubble : mBubbleData.getBubbles()) {
             if (bubble.getGroupKey() != null && groupKey.equals(bubble.getGroupKey())) {
                 bubbleChildren.add(bubble);
             }
@@ -1866,7 +1902,11 @@ public class BubbleController implements ConfigurationChangeListener,
 
         @Override
         public void bubbleOverflowChanged(boolean hasBubbles) {
-            // TODO (b/334175587): tell stack view to hide / show the overflow
+            if (Flags.enableOptionalBubbleOverflow()) {
+                if (mStackView != null) {
+                    mStackView.showOverflow(hasBubbles);
+                }
+            }
         }
     };
 
@@ -2214,6 +2254,34 @@ public class BubbleController implements ConfigurationChangeListener,
     }
 
     /**
+     * Show bubbles UI when triggered via shortcut.
+     *
+     * <p>When there are bubbles visible, expands the top-most bubble. When there are no bubbles
+     * visible, opens the bubbles overflow UI.
+     */
+    public void showBubblesFromShortcut() {
+        if (isStackExpanded()) {
+            ProtoLog.v(WM_SHELL_BUBBLES, "showBubblesFromShortcut: stack visible, skip");
+            return;
+        }
+        if (mBubbleData.getSelectedBubble() != null) {
+            ProtoLog.v(WM_SHELL_BUBBLES, "showBubblesFromShortcut: open selected bubble");
+            expandStackWithSelectedBubble();
+            return;
+        }
+        BubbleViewProvider bubbleToSelect = CollectionUtils.firstOrNull(mBubbleData.getBubbles());
+        if (bubbleToSelect == null) {
+            ProtoLog.v(WM_SHELL_BUBBLES, "showBubblesFromShortcut: no bubbles");
+            // make sure overflow bubbles are loaded
+            loadOverflowBubblesFromDisk();
+            bubbleToSelect = mBubbleData.getOverflow();
+        }
+        ProtoLog.v(WM_SHELL_BUBBLES, "showBubblesFromShortcut: select and open %s",
+                bubbleToSelect.getKey());
+        mBubbleData.setSelectedBubbleAndExpandStack(bubbleToSelect);
+    }
+
+    /**
      * Description of current bubble state.
      */
     private void dump(PrintWriter pw, String prefix) {
@@ -2221,6 +2289,7 @@ public class BubbleController implements ConfigurationChangeListener,
         pw.print(prefix); pw.println("  currentUserId= " + mCurrentUserId);
         pw.print(prefix); pw.println("  isStatusBarShade= " + mIsStatusBarShade);
         pw.print(prefix); pw.println("  isShowingAsBubbleBar= " + isShowingAsBubbleBar());
+        pw.print(prefix); pw.println("  isImeVisible= " + mBubblePositioner.isImeVisible());
         pw.println();
 
         mBubbleData.dump(pw);
@@ -2346,6 +2415,8 @@ public class BubbleController implements ConfigurationChangeListener,
         @Override
         public void invalidate() {
             mController = null;
+            // Unregister the listeners to ensure any binder death recipients are unlinked
+            mListener.unregister();
         }
 
         @Override
@@ -2359,10 +2430,9 @@ public class BubbleController implements ConfigurationChangeListener,
         }
 
         @Override
-        public void showBubble(String key, Rect bubbleBarBounds) {
+        public void showBubble(String key, int topOnScreen) {
             mMainExecutor.execute(
-                    () -> mController.expandStackAndSelectBubbleFromLauncher(
-                            key, bubbleBarBounds));
+                    () -> mController.expandStackAndSelectBubbleFromLauncher(key, topOnScreen));
         }
 
         @Override
@@ -2381,8 +2451,8 @@ public class BubbleController implements ConfigurationChangeListener,
         }
 
         @Override
-        public void stopBubbleDrag(BubbleBarLocation location) {
-            mMainExecutor.execute(() -> mController.stopBubbleDrag(location));
+        public void stopBubbleDrag(BubbleBarLocation location, int topOnScreen) {
+            mMainExecutor.execute(() -> mController.stopBubbleDrag(location, topOnScreen));
         }
 
         @Override
@@ -2403,8 +2473,11 @@ public class BubbleController implements ConfigurationChangeListener,
         }
 
         @Override
-        public void setBubbleBarBounds(Rect bubbleBarBounds) {
-            mMainExecutor.execute(() -> mBubblePositioner.setBubbleBarBounds(bubbleBarBounds));
+        public void updateBubbleBarTopOnScreen(int topOnScreen) {
+            mMainExecutor.execute(() -> {
+                mBubblePositioner.setBubbleBarTopOnScreen(topOnScreen);
+                if (mLayerView != null) mLayerView.updateExpandedView();
+            });
         }
     }
 
@@ -2520,17 +2593,6 @@ public class BubbleController implements ConfigurationChangeListener,
         }
 
         private CachedState mCachedState = new CachedState();
-
-        private IBubblesImpl mIBubbles;
-
-        @Override
-        public IBubbles createExternalInterface() {
-            if (mIBubbles != null) {
-                mIBubbles.invalidate();
-            }
-            mIBubbles = new IBubblesImpl(BubbleController.this);
-            return mIBubbles;
-        }
 
         @Override
         public boolean isBubbleNotificationSuppressedFromShade(String key, String groupKey) {
@@ -2715,6 +2777,15 @@ public class BubbleController implements ConfigurationChangeListener,
             mMainExecutor.execute(
                     () -> BubbleController.this.onSensitiveNotificationProtectionStateChanged(
                             sensitiveNotificationProtectionActive));
+        }
+
+        @Override
+        public boolean canShowBubbleNotification() {
+            // in bubble bar mode, when the IME is visible we can't animate new bubbles.
+            if (BubbleController.this.isShowingAsBubbleBar()) {
+                return !BubbleController.this.mBubblePositioner.isImeVisible();
+            }
+            return true;
         }
     }
 

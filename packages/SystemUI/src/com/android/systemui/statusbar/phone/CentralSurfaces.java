@@ -21,7 +21,6 @@ import static com.android.wm.shell.transition.Transitions.ENABLE_SHELL_TRANSITIO
 import android.annotation.Nullable;
 import android.app.ActivityOptions;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.UserHandle;
@@ -199,6 +198,11 @@ public interface CentralSurfaces extends Dumpable, LifecycleOwner, CoreStartable
 
     boolean isLaunchingActivityOverLockscreen();
 
+    /**
+     * Whether an activity launch over lockscreen is causing the shade to be dismissed.
+     */
+    boolean isDismissingShadeForActivityLaunch();
+
     void onKeyguardViewManagerStatesUpdated();
 
     /**  */
@@ -256,9 +260,6 @@ public interface CentralSurfaces extends Dumpable, LifecycleOwner, CoreStartable
 
     boolean isScreenFullyOff();
 
-    @Nullable
-    Intent getEmergencyActionIntent();
-
     boolean isCameraAllowedByAdmin();
 
     boolean isGoingToSleep();
@@ -283,11 +284,12 @@ public interface CentralSurfaces extends Dumpable, LifecycleOwner, CoreStartable
     void awakenDreams();
 
     /**
-     * Handle a touch event while dreaming when the touch was initiated within a prescribed
-     * swipeable area. This method is provided for cases where swiping in certain areas of a dream
-     * should be handled by CentralSurfaces instead (e.g. swiping communal hub open).
+     * Handle a touch event while dreaming or on the glanceable hub when the touch was initiated
+     * within a prescribed swipeable area. This method is provided for cases where swiping in
+     * certain areas should be handled by CentralSurfaces instead (e.g. swiping hub open, opening
+     * the notification shade over dream or hub).
      */
-    void handleDreamTouch(MotionEvent event);
+    void handleExternalShadeWindowTouch(MotionEvent event);
 
     boolean isBouncerShowing();
 
@@ -322,6 +324,11 @@ public interface CentralSurfaces extends Dumpable, LifecycleOwner, CoreStartable
     @Deprecated
     float getDisplayDensity();
 
+    /**
+     * Forwards touch events to communal hub
+     */
+    void handleCommunalHubTouch(MotionEvent event);
+
     public static class KeyboardShortcutsMessage {
         final int mDeviceId;
 
@@ -333,7 +340,8 @@ public interface CentralSurfaces extends Dumpable, LifecycleOwner, CoreStartable
     /**
      * Sets launching activity over LS state in central surfaces.
      */
-    void setIsLaunchingActivityOverLockscreen(boolean isLaunchingActivityOverLockscreen);
+    void setIsLaunchingActivityOverLockscreen(
+            boolean isLaunchingActivityOverLockscreen, boolean dismissShade);
 
     /**
      * Gets an animation controller from a notification row.

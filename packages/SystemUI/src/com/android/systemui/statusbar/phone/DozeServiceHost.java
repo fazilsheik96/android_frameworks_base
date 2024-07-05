@@ -29,6 +29,8 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
+import androidx.annotation.Nullable;
+
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.assist.AssistManager;
@@ -54,12 +56,12 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
 import com.android.systemui.util.Assert;
+import com.android.systemui.util.CopyOnLoopListenerSet;
+import com.android.systemui.util.IListenerSet;
 
 import dagger.Lazy;
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi;
-
-import java.util.ArrayList;
 
 import javax.inject.Inject;
 
@@ -69,11 +71,16 @@ import javax.inject.Inject;
 @ExperimentalCoroutinesApi @SysUISingleton
 public final class DozeServiceHost implements DozeHost {
     private static final String TAG = "DozeServiceHost";
-    private final ArrayList<Callback> mCallbacks = new ArrayList<>();
+    private final IListenerSet<Callback> mCallbacks = new CopyOnLoopListenerSet<>();
     private final DozeLog mDozeLog;
     private final PowerManager mPowerManager;
     private boolean mAnimateWakeup;
     private boolean mIgnoreTouchWhilePulsing;
+    private final HasPendingScreenOffCallbackChangeListener
+            mDefaultHasPendingScreenOffCallbackChangeListener =
+                    hasPendingScreenOffCallback -> { /* no op */ };
+    private HasPendingScreenOffCallbackChangeListener mHasPendingScreenOffCallbackChangeListener =
+            mDefaultHasPendingScreenOffCallbackChangeListener;
     private Runnable mPendingScreenOffCallback;
     @VisibleForTesting
     boolean mWakeLockScreenPerformsAuth = SystemProperties.getBoolean(
@@ -178,8 +185,8 @@ public final class DozeServiceHost implements DozeHost {
      */
     public void fireSideFpsAcquisitionStarted() {
         Assert.isMainThread();
-        for (int i = 0; i < mCallbacks.size(); i++) {
-            mCallbacks.get(i).onSideFingerprintAcquisitionStarted();
+        for (Callback callback : mCallbacks) {
+            callback.onSideFingerprintAcquisitionStarted();
         }
     }
 
@@ -211,7 +218,7 @@ public final class DozeServiceHost implements DozeHost {
     @Override
     public void addCallback(@NonNull Callback callback) {
         Assert.isMainThread();
-        mCallbacks.add(callback);
+        mCallbacks.addIfAbsent(callback);
     }
 
     @Override
@@ -436,12 +443,14 @@ public final class DozeServiceHost implements DozeHost {
             Log.w(TAG, "Overlapping onDisplayOffCallback. Ignoring previous one.");
         }
         mPendingScreenOffCallback = onDisplayOffCallback;
+        mHasPendingScreenOffCallbackChangeListener.onHasPendingScreenOffCallbackChanged(true);
         mCentralSurfaces.updateScrimController();
     }
 
     @Override
     public void cancelGentleSleep() {
         mPendingScreenOffCallback = null;
+        mHasPendingScreenOffCallbackChangeListener.onHasPendingScreenOffCallbackChanged(false);
         if (mScrimController.getState() == ScrimState.OFF) {
             mCentralSurfaces.updateScrimController();
         }
@@ -450,8 +459,24 @@ public final class DozeServiceHost implements DozeHost {
     /**
      * When the dozing host is waiting for scrims to fade out to change the display state.
      */
-    boolean hasPendingScreenOffCallback() {
+    public boolean hasPendingScreenOffCallback() {
         return mPendingScreenOffCallback != null;
+    }
+
+    /**
+     * Sets a listener to be notified whenever the result of {@link #hasPendingScreenOffCallback()}
+     * changes.
+     *
+     * <p>Setting the listener automatically notifies the listener inline.
+     */
+    public void setHasPendingScreenOffCallbackChangeListener(
+            @Nullable HasPendingScreenOffCallbackChangeListener listener) {
+        mHasPendingScreenOffCallbackChangeListener = listener != null
+                ? listener
+                : mDefaultHasPendingScreenOffCallbackChangeListener;
+
+        mHasPendingScreenOffCallbackChangeListener.onHasPendingScreenOffCallbackChanged(
+                mPendingScreenOffCallback != null);
     }
 
     /**
@@ -466,6 +491,7 @@ public final class DozeServiceHost implements DozeHost {
         }
         mPendingScreenOffCallback.run();
         mPendingScreenOffCallback = null;
+        mHasPendingScreenOffCallbackChangeListener.onHasPendingScreenOffCallbackChanged(false);
     }
 
     boolean shouldAnimateWakeup() {
@@ -526,4 +552,14 @@ public final class DozeServiceHost implements DozeHost {
             }
         }
     };
+
+    /**
+     * Defines interface for classes that can be notified about changes to having or not having a
+     * pending screen-off callback.
+     */
+    public interface HasPendingScreenOffCallbackChangeListener {
+
+        /** Notifies that there now is or isn't a pending screen-off callback. */
+        void onHasPendingScreenOffCallbackChanged(boolean hasPendingScreenOffCallback);
+    }
 }

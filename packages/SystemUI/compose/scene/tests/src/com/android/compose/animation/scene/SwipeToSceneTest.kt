@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertPositionInRootIsEqualTo
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
@@ -70,7 +71,9 @@ class SwipeToSceneTest {
     private fun layoutState(
         initialScene: SceneKey = SceneA,
         transitions: SceneTransitions = EmptyTestTransitions,
-    ) = MutableSceneTransitionLayoutState(initialScene, transitions)
+    ): MutableSceneTransitionLayoutState {
+        return rule.runOnUiThread { MutableSceneTransitionLayoutState(initialScene, transitions) }
+    }
 
     /** The content under test. */
     @Composable
@@ -455,7 +458,7 @@ class SwipeToSceneTest {
 
     @Test
     fun swipeEnabledLater() {
-        val layoutState = MutableSceneTransitionLayoutState(SceneA)
+        val layoutState = layoutState()
         var swipesEnabled by mutableStateOf(false)
         var touchSlop = 0f
         rule.setContent {
@@ -489,7 +492,7 @@ class SwipeToSceneTest {
     fun transitionKey() {
         val transitionkey = TransitionKey(debugName = "foo")
         val state =
-            MutableSceneTransitionLayoutStateImpl(
+            layoutState(
                 SceneA,
                 transitions {
                     from(SceneA, to = SceneB) { fade(TestElements.Foo) }
@@ -553,7 +556,7 @@ class SwipeToSceneTest {
             }
 
         val state =
-            MutableSceneTransitionLayoutState(
+            layoutState(
                 SceneA,
                 transitions { from(SceneA, to = SceneB) { distance = swipeDistance } }
             )
@@ -591,5 +594,44 @@ class SwipeToSceneTest {
         assertThat(transition).hasFromScene(SceneA)
         assertThat(transition).hasToScene(SceneB)
         assertThat(transition).hasProgress(0.5f, tolerance = 0.01f)
+    }
+
+    @Test
+    fun overscrollScopeExtendsDensity() {
+        val swipeDistance = 100.dp
+        val state =
+            rule.runOnUiThread {
+                MutableSceneTransitionLayoutState(
+                    SceneA,
+                    transitions {
+                        from(SceneA, to = SceneB) { distance = FixedDistance(swipeDistance) }
+
+                        overscroll(SceneB, Orientation.Vertical) {
+                            translate(TestElements.Foo, x = { 20.dp.toPx() }, y = { 30.dp.toPx() })
+                        }
+                    }
+                )
+            }
+        val layoutSize = 200.dp
+        var touchSlop = 0f
+        rule.setContent {
+            touchSlop = LocalViewConfiguration.current.touchSlop
+            SceneTransitionLayout(state, Modifier.size(layoutSize)) {
+                scene(SceneA, userActions = mapOf(Swipe.Down to SceneB)) {
+                    Box(Modifier.fillMaxSize())
+                }
+                scene(SceneB) { Box(Modifier.element(TestElements.Foo).fillMaxSize()) }
+            }
+        }
+
+        // Swipe down by twice the swipe distance so that we are at 100% overscrolling on scene B.
+        rule.onRoot().performTouchInput {
+            val middle = (layoutSize / 2).toPx()
+            down(Offset(middle, middle))
+            moveBy(Offset(0f, touchSlop + (swipeDistance * 2).toPx()), delayMillis = 1_000)
+        }
+
+        // Foo should be translated by (20dp, 30dp).
+        rule.onNode(isElement(TestElements.Foo)).assertPositionInRootIsEqualTo(20.dp, 30.dp)
     }
 }

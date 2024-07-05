@@ -757,6 +757,15 @@ interface IActivityManager {
     void addStartInfoTimestamp(int key, long timestampNs, int userId);
 
     /**
+    * Reports view related timestamps to be added to the calling apps most
+    * recent {@link ApplicationStartInfo}.
+    *
+    * @param renderThreadDrawStartTimeNs Clock monotonic time in nanoseconds of RenderThread draw start
+    * @param framePresentedTimeNs        Clock monotonic time in nanoseconds of frame presented
+    */
+    oneway void reportStartInfoViewTimestamps(long renderThreadDrawStartTimeNs, long framePresentedTimeNs);
+
+    /**
      * Return a list of {@link ApplicationExitInfo} records.
      *
      * <p class="note"> Note: System stores these historical information in a ring buffer, older
@@ -1016,5 +1025,5 @@ interface IActivityManager {
      */
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.DEVICE_POWER)")
     void noteAppRestrictionEnabled(in String packageName, int uid, int restrictionType,
-            boolean enabled, int reason, in String subReason, long threshold);
+            boolean enabled, int reason, in String subReason, int source, long threshold);
 }

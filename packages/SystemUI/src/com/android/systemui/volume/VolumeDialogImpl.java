@@ -118,6 +118,7 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.Prefs;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.haptics.slider.HapticSliderViewBinder;
+import com.android.systemui.haptics.slider.SeekableSliderTrackerConfig;
 import com.android.systemui.haptics.slider.SeekbarHapticPlugin;
 import com.android.systemui.haptics.slider.SliderHapticFeedbackConfig;
 import com.android.systemui.media.dialog.MediaOutputDialogManager;
@@ -134,7 +135,9 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.util.AlphaTintDrawableWrapper;
 import com.android.systemui.util.RoundedCornerProgressDrawable;
 import com.android.systemui.util.settings.SecureSettings;
+import com.android.systemui.volume.domain.interactor.VolumeDialogInteractor;
 import com.android.systemui.volume.domain.interactor.VolumePanelNavigationInteractor;
+import com.android.systemui.volume.panel.shared.flag.VolumePanelFlag;
 import com.android.systemui.volume.ui.navigation.VolumeNavigator;
 
 import dagger.Lazy;
@@ -310,6 +313,8 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
     private int mDialogTimeoutMillis;
     private final VibratorHelper mVibratorHelper;
     private final com.android.systemui.util.time.SystemClock mSystemClock;
+    private final VolumePanelFlag mVolumePanelFlag;
+    private final VolumeDialogInteractor mInteractor;
 
     public VolumeDialogImpl(
             Context context,
@@ -325,10 +330,12 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
             CsdWarningDialog.Factory csdWarningDialogFactory,
             DevicePostureController devicePostureController,
             Looper looper,
+            VolumePanelFlag volumePanelFlag,
             DumpManager dumpManager,
             Lazy<SecureSettings> secureSettings,
             VibratorHelper vibratorHelper,
-            com.android.systemui.util.time.SystemClock systemClock) {
+            com.android.systemui.util.time.SystemClock systemClock,
+            VolumeDialogInteractor interactor) {
         mContext =
                 new ContextThemeWrapper(context, R.style.volume_dialog_theme);
         mHandler = new H(looper);
@@ -361,6 +368,8 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         mVolumeNavigator = volumeNavigator;
         mSecureSettings = secureSettings;
         mDialogTimeoutMillis = DIALOG_TIMEOUT_MILLIS;
+        mVolumePanelFlag = volumePanelFlag;
+        mInteractor = interactor;
 
         dumpManager.registerDumpable("VolumeDialogImpl", this);
 
@@ -1357,6 +1366,9 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
     }
 
     private void updateODICaptionsH(boolean isServiceComponentEnabled, boolean fromTooltip) {
+        // don't show captions view when the new volume panel is enabled.
+        isServiceComponentEnabled =
+                isServiceComponentEnabled && !mVolumePanelFlag.canUseNewVolumePanel();
         if (mODICaptionsView != null) {
             mODICaptionsView.setVisibility(isServiceComponentEnabled ? VISIBLE : GONE);
         }
@@ -1505,6 +1517,7 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         mShowing = true;
         mIsAnimatingDismiss = false;
         mDialog.show();
+        mInteractor.onDialogShown();
         Events.writeEvent(Events.EVENT_SHOW_DIALOG, reason, keyguardLocked);
         mController.notifyVisible(true);
         mController.getCaptionsComponentState(false);
@@ -1591,6 +1604,7 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         }
         mIsAnimatingDismiss = true;
         mDialogView.animate().cancel();
+        mInteractor.onDialogDismissed();
         if (mShowing) {
             mShowing = false;
             // Only logs when the volume dialog visibility is changed.
@@ -2621,6 +2635,13 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
                 /* upperBookendScale= */ 1f,
                 /* lowerBookendScale= */ 0.05f,
                 /* exponent= */ 1f / 0.89f);
+        private static final SeekableSliderTrackerConfig sSliderTrackerConfig =
+                new SeekableSliderTrackerConfig(
+                        /* waitTimeMillis= */100,
+                        /* jumpThreshold= */0.02f,
+                        /* lowerBookendThreshold= */0.01f,
+                        /* upperBookendThreshold= */0.99f
+                );
 
         private View view;
         private TextView header;
@@ -2662,7 +2683,8 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
             mHapticPlugin = new SeekbarHapticPlugin(
                 vibratorHelper,
                 systemClock,
-                sSliderHapticFeedbackConfig);
+                sSliderHapticFeedbackConfig,
+                sSliderTrackerConfig);
         }
 
 

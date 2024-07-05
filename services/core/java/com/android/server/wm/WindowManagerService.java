@@ -358,6 +358,7 @@ import com.android.server.power.ShutdownThread;
 import com.android.server.utils.PriorityDump;
 import com.android.server.wallpaper.WallpaperCropper.WallpaperCropUtils;
 import com.android.window.flags.Flags;
+import com.android.server.am.ProcessFreezerManager;
 
 import dalvik.annotation.optimization.NeverCompile;
 
@@ -786,7 +787,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     boolean mHardKeyboardAvailable;
     WindowManagerInternal.OnHardKeyboardStatusChangeListener mHardKeyboardStatusChangeListener;
-
+    WindowManagerInternal.OnImeRequestedChangedListener mOnImeRequestedChangedListener;
     @Nullable ImeTargetChangeListener mImeTargetChangeListener;
 
     SettingsObserver mSettingsObserver;
@@ -1530,7 +1531,7 @@ public class WindowManagerService extends IWindowManager.Stub
             InputChannel outInputChannel, InsetsState outInsetsState,
             InsetsSourceControl.Array outActiveControls, Rect outAttachedFrame,
             float[] outSizeCompatScale) {
-        outActiveControls.set(null);
+        outActiveControls.set(null, false /* copyControls */);
         int[] appOp = new int[1];
         final boolean isRoundedCornerOverlay = (attrs.privateFlags
                 & PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY) != 0;
@@ -1933,7 +1934,7 @@ public class WindowManagerService extends IWindowManager.Stub
             displayContent.getInsetsStateController().updateAboveInsetsState(
                     false /* notifyInsetsChanged */);
 
-            outInsetsState.set(win.getCompatInsetsState(), true /* copySources */);
+            win.fillInsetsState(outInsetsState, true /* copySources */);
             getInsetsSourceControls(win, outActiveControls);
 
             if (win.mLayoutAttached) {
@@ -2323,7 +2324,7 @@ public class WindowManagerService extends IWindowManager.Stub
             InsetsState outInsetsState, InsetsSourceControl.Array outActiveControls,
             Bundle outBundle, WindowRelayoutResult outRelayoutResult) {
         if (outActiveControls != null) {
-            outActiveControls.set(null);
+            outActiveControls.set(null, false /* copyControls */);
         }
         int result = 0;
         boolean configChanged = false;
@@ -2651,9 +2652,6 @@ public class WindowManagerService extends IWindowManager.Stub
             if (displayPolicy.areSystemBarsForcedConsumedLw()) {
                 result |= WindowManagerGlobal.RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS;
             }
-            if (!win.isGoneForLayout()) {
-                win.mResizedWhileGone = false;
-            }
 
             if (outFrames != null && outMergedConfiguration != null) {
                 final boolean shouldReportActivityWindowInfo;
@@ -2686,7 +2684,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
 
             if (outInsetsState != null) {
-                outInsetsState.set(win.getCompatInsetsState(), true /* copySources */);
+                win.fillInsetsState(outInsetsState, true /* copySources */);
             }
 
             ProtoLog.v(WM_DEBUG_FOCUS, "Relayout of %s: focusMayChange=%b",
@@ -2749,25 +2747,14 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private void getInsetsSourceControls(WindowState win, InsetsSourceControl.Array outArray) {
-        final InsetsSourceControl[] controls =
-                win.getDisplayContent().getInsetsStateController().getControlsForDispatch(win);
-        if (controls != null) {
-            final int length = controls.length;
-            final InsetsSourceControl[] outControls = new InsetsSourceControl[length];
-            for (int i = 0; i < length; i++) {
-                // We will leave the critical section before returning the leash to the client,
-                // so we need to copy the leash to prevent others release the one that we are
-                // about to return.
-                if (controls[i] != null) {
-                    // This source control is an extra copy if the client is not local. By setting
-                    // PARCELABLE_WRITE_RETURN_VALUE, the leash will be released at the end of
-                    // SurfaceControl.writeToParcel.
-                    outControls[i] = new InsetsSourceControl(controls[i]);
-                    outControls[i].setParcelableFlags(PARCELABLE_WRITE_RETURN_VALUE);
-                }
-            }
-            outArray.set(outControls);
-        }
+        // We will leave the critical section before returning the leash to the client,
+        // so we need to copy the leash to prevent others release the one that we are
+        // about to return.
+        win.fillInsetsSourceControls(outArray, true /* copyControls */);
+        // This source control is an extra copy if the client is not local. By setting
+        // PARCELABLE_WRITE_RETURN_VALUE, the leash will be released at the end of
+        // SurfaceControl.writeToParcel.
+        outArray.setParcelableFlags(PARCELABLE_WRITE_RETURN_VALUE);
     }
 
     private void tryStartExitingAnimation(WindowState win, WindowStateAnimator winAnimator) {
@@ -2864,6 +2851,12 @@ public class WindowManagerService extends IWindowManager.Stub
 
     void finishDrawingWindow(Session session, IWindow client,
             @Nullable SurfaceControl.Transaction postDrawTransaction, int seqId) {
+        //unfreeze process if the first frame appeared
+        ProcessFreezerManager freezer = ProcessFreezerManager.getInstance();
+        if (freezer != null && freezer.useFreezerManager()) {
+            freezer.startUnfreeze(session.mPackageName, ProcessFreezerManager.COMPLETE_LAUNCH_UNFREEZE);
+        }
+
         if (postDrawTransaction != null) {
             postDrawTransaction.sanitize(Binder.getCallingPid(), Binder.getCallingUid());
         }
@@ -3522,10 +3515,11 @@ public class WindowManagerService extends IWindowManager.Stub
         if (!checkCallingPermission(permission.CONTROL_KEYGUARD, "dismissKeyguard")) {
             throw new SecurityException("Requires CONTROL_KEYGUARD permission");
         }
-        if (!dreamHandlesConfirmKeys() && mAtmService.mKeyguardController.isShowingDream()) {
-            mAtmService.mTaskSupervisor.wakeUp("leaveDream");
-        }
         synchronized (mGlobalLock) {
+            if (!dreamHandlesConfirmKeys()
+                    && getDefaultDisplayContentLocked().getDisplayPolicy().isShowingDreamLw()) {
+                mAtmService.mTaskSupervisor.wakeUp("leaveDream");
+            }
             mPolicy.dismissKeyguardLw(callback, message);
         }
     }
@@ -8173,6 +8167,27 @@ public class WindowManagerService extends IWindowManager.Stub
                     getInputTargetFromWindowTokenLocked(imeTargetWindowToken);
                 if (imeTarget != null) {
                     imeTarget.getDisplayContent().updateImeInputAndControlTarget(imeTarget);
+
+                    if (android.view.inputmethod.Flags.refactorInsetsController()) {
+                        // In case of a virtual display that may not show the IME, reset the
+                        // inputTarget of all other displays
+                        WindowState imeWindowState = imeTarget.getWindowState();
+                        if (imeWindowState != null) {
+                            InsetsControlTarget fallback =
+                                    imeTarget.getDisplayContent().getImeHostOrFallback(
+                                            imeWindowState);
+                            if (imeWindowState != fallback) {
+                                // fallback should be the RemoteInsetsControlTarget of the
+                                // default display
+                                int currentDisplayId = imeTarget.getDisplayContent().getDisplayId();
+                                mRoot.forAllDisplays(display -> {
+                                    if (display.getDisplayId() != currentDisplayId) {
+                                        display.setImeInputTarget(null);
+                                    }
+                                });
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -8189,6 +8204,14 @@ public class WindowManagerService extends IWindowManager.Stub
                 OnHardKeyboardStatusChangeListener listener) {
             synchronized (mGlobalLock) {
                 mHardKeyboardStatusChangeListener = listener;
+            }
+        }
+
+        @Override
+        public void setOnImeRequestedChangedListener(
+                OnImeRequestedChangedListener listener) {
+            synchronized (mGlobalLock) {
+                mOnImeRequestedChangedListener = listener;
             }
         }
 
@@ -8650,8 +8673,8 @@ public class WindowManagerService extends IWindowManager.Stub
                     return true;
                 }
                 // For a task session, find the activity identified by the launch cookie.
-                final WindowContainerInfo wci = getTaskWindowContainerInfoForLaunchCookie(
-                        incomingSession.getTokenToRecord());
+                final WindowContainerInfo wci =
+                        getTaskWindowContainerInfoForRecordingSession(incomingSession);
                 if (wci == null) {
                     Slog.w(TAG, "Handling a new recording session; unable to find the "
                             + "WindowContainerToken");
@@ -9113,35 +9136,58 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     /**
-     * Retrieve the {@link WindowContainerInfo} of the task that contains the activity started with
-     * the given launch cookie.
+     * Retrieve the {@link WindowContainerInfo} of the task that was launched for MediaProjection.
      *
-     * @param launchCookie the launch cookie set on the {@link ActivityOptions} when starting an
-     *     activity
+     * @param session the {@link ContentRecordingSession} containing the launch cookie and/or
+     *     task id of the Task started for capture.
      * @return a token representing the task containing the activity started with the given launch
      *     cookie, or {@code null} if the token couldn't be found.
      */
     @VisibleForTesting
     @Nullable
-    WindowContainerInfo getTaskWindowContainerInfoForLaunchCookie(@NonNull IBinder launchCookie) {
-        // Find the activity identified by the launch cookie.
-        final ActivityRecord targetActivity =
-                mRoot.getActivity(activity -> activity.mLaunchCookie == launchCookie);
-        if (targetActivity == null) {
-            Slog.w(TAG, "Unable to find the activity for this launch cookie");
-            return null;
+    WindowContainerInfo getTaskWindowContainerInfoForRecordingSession(
+            @NonNull ContentRecordingSession session) {
+        WindowContainerToken taskWindowContainerToken = null;
+        ActivityRecord targetActivity = null;
+        Task targetTask = null;
+
+        // First attempt to find the launched task by looking for the launched activity with the
+        // matching launch cookie.
+        if (session.getTokenToRecord() != null) {
+            IBinder launchCookie = session.getTokenToRecord();
+            targetActivity = mRoot.getActivity(activity -> activity.mLaunchCookie == launchCookie);
+            if (targetActivity == null) {
+                Slog.w(TAG, "Unable to find the activity for this launch cookie");
+            } else {
+                if (targetActivity.getTask() == null) {
+                    Slog.w(TAG, "Unable to find the task for this launch cookie");
+                } else {
+                    targetTask = targetActivity.getTask();
+                    taskWindowContainerToken = targetTask.mRemoteToken.toWindowContainerToken();
+                }
+            }
         }
-        if (targetActivity.getTask() == null) {
-            Slog.w(TAG, "Unable to find the task for this launch cookie");
-            return null;
+
+        // In the case we can't find an activity with a matching launch cookie, it could be due to
+        // the launched activity being closed, but the launched task is still open, so now attempt
+        // to look for the task directly.
+        if (taskWindowContainerToken == null && session.getTaskId() != -1) {
+            int targetTaskId = session.getTaskId();
+            targetTask = mRoot.getTask(task -> task.isTaskId(targetTaskId));
+            if (targetTask == null) {
+                Slog.w(TAG, "Unable to find the task for this projection");
+            } else {
+                taskWindowContainerToken = targetTask.mRemoteToken.toWindowContainerToken();
+            }
         }
-        WindowContainerToken taskWindowContainerToken =
-                targetActivity.getTask().mRemoteToken.toWindowContainerToken();
+
+        // If we were unable to find the launched task in either fashion, then something must have
+        // wrong (i.e. the task was closed before capture started).
         if (taskWindowContainerToken == null) {
-            Slog.w(TAG, "Unable to find the WindowContainerToken for " + targetActivity.getName());
+            Slog.w(TAG, "Unable to find the WindowContainerToken for ContentRecordingSession");
             return null;
         }
-        return new WindowContainerInfo(targetActivity.getUid(), taskWindowContainerToken);
+        return new WindowContainerInfo(targetTask.effectiveUid, taskWindowContainerToken);
     }
 
     /**

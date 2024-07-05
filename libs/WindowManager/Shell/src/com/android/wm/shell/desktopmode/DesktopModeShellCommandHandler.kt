@@ -16,13 +16,11 @@
 
 package com.android.wm.shell.desktopmode
 
-import android.window.WindowContainerTransaction
+import com.android.wm.shell.common.desktopmode.DesktopModeTransitionSource.UNKNOWN
 import com.android.wm.shell.sysui.ShellCommandHandler
 import java.io.PrintWriter
 
-/**
- * Handles the shell commands for the DesktopTasksController.
- */
+/** Handles the shell commands for the DesktopTasksController. */
 class DesktopModeShellCommandHandler(private val controller: DesktopTasksController) :
     ShellCommandHandler.ShellCommandActionHandler {
 
@@ -58,14 +56,15 @@ class DesktopModeShellCommandHandler(private val controller: DesktopTasksControl
             return false
         }
 
-        val taskId = try {
-            args[1].toInt()
-        } catch (e: NumberFormatException) {
-            pw.println("Error: task id should be an integer")
-            return false
-        }
+        val taskId =
+            try {
+                args[1].toInt()
+            } catch (e: NumberFormatException) {
+                pw.println("Error: task id should be an integer")
+                return false
+            }
 
-        return controller.moveToDesktop(taskId, WindowContainerTransaction())
+        return controller.moveToDesktop(taskId, transitionSource = UNKNOWN)
     }
 
     private fun runMoveToNextDisplay(args: Array<String>, pw: PrintWriter): Boolean {
@@ -75,12 +74,13 @@ class DesktopModeShellCommandHandler(private val controller: DesktopTasksControl
             return false
         }
 
-        val taskId = try {
-            args[1].toInt()
-        } catch (e: NumberFormatException) {
-            pw.println("Error: task id should be an integer")
-            return false
-        }
+        val taskId =
+            try {
+                args[1].toInt()
+            } catch (e: NumberFormatException) {
+                pw.println("Error: task id should be an integer")
+                return false
+            }
 
         controller.moveToNextDisplay(taskId)
         return true

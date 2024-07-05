@@ -1029,6 +1029,10 @@ public class HdmiControlService extends SystemService {
 
     /** Helper method for sending feature discovery command */
     private void reportFeatures(boolean isTvDeviceSetting) {
+        // <Report Features> should only be sent for HDMI 2.0
+        if (getCecVersion() < HdmiControlManager.HDMI_CEC_VERSION_2_0) {
+            return;
+        }
         // check if tv device is enabled for tv device specific RC profile setting
         if (isTvDeviceSetting) {
             if (isTvDeviceEnabled()) {
@@ -1567,7 +1571,7 @@ public class HdmiControlService extends SystemService {
      * Returns physical address of the device.
      */
     int getPhysicalAddress() {
-        return mCecController.getPhysicalAddress();
+        return mHdmiCecNetwork.getPhysicalAddress();
     }
 
     /**
@@ -1646,6 +1650,13 @@ public class HdmiControlService extends SystemService {
             case Constants.MESSAGE_ROUTING_CHANGE:
             case Constants.MESSAGE_SET_STREAM_PATH:
             case Constants.MESSAGE_TEXT_VIEW_ON:
+                // RequestActiveSourceAction is started after the TV finished logical address
+                // allocation. This action is used by the TV to get the active source from the CEC
+                // network. If the TV sent a source changing CEC message, this action does not have
+                // to continue anymore.
+                if (isTvDeviceEnabled()) {
+                    tv().removeAction(RequestActiveSourceAction.class);
+                }
                 sendCecCommandWithRetries(command, callback);
                 break;
             default:

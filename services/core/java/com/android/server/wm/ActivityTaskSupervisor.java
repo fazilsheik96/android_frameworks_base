@@ -158,9 +158,10 @@ import com.android.server.LocalServices;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.HostingRecord;
 import com.android.server.am.UserState;
-import com.android.server.pm.PackageManagerServiceUtils;
+import com.android.server.pm.SaferIntentUtils;
 import com.android.server.utils.Slogf;
 import com.android.server.wm.ActivityMetricsLogger.LaunchingState;
+import com.android.server.am.ProcessFreezerManager;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -807,7 +808,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             // (e.g. AMS.startActivityAsUser).
             final long token = Binder.clearCallingIdentity();
             try {
-                return mService.getPackageManagerInternalLocked().resolveIntentExported(
+                return mService.getPackageManagerInternalLocked().resolveIntent(
                         intent, resolvedType, modifiedFlags, privateResolveFlags, userId, true,
                         filterCallingUid, callingPid);
             } finally {
@@ -1160,6 +1161,12 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         r.notifyUnknownVisibilityLaunchedForKeyguardTransition();
 
         final boolean isTop = andResume && r.isTopRunningActivity();
+        if (isTop) {
+            ProcessFreezerManager freezer = ProcessFreezerManager.getInstance();
+            if (freezer != null && freezer.useFreezerManager()) {
+                freezer.startFreeze(r.processName, ProcessFreezerManager.COLD_LAUNCH_FREEZE);
+            }
+        }
         mService.startProcessAsync(r, knownToBeDead, isTop,
                 isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
                         : HostingRecord.HOSTING_TYPE_ACTIVITY);
@@ -1571,7 +1578,10 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         }
 
         try {
-            if ((flags & ActivityManager.MOVE_TASK_NO_USER_ACTION) == 0) {
+            // We allow enter PiP for previous front task if not requested otherwise via options.
+            boolean shouldCauseEnterPip = options == null
+                    || !options.disallowEnterPictureInPictureWhileLaunching();
+            if ((flags & ActivityManager.MOVE_TASK_NO_USER_ACTION) == 0 && shouldCauseEnterPip) {
                 mUserLeaving = true;
             }
 
@@ -2989,14 +2999,14 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             // We need to temporarily disable the explicit intent filter matching enforcement
             // because Task does not store the resolved type of the intent data, causing filter
             // mismatch in certain cases. (b/240373119)
-            PackageManagerServiceUtils.DISABLE_ENFORCE_INTENTS_TO_MATCH_INTENT_FILTERS.set(true);
+            SaferIntentUtils.DISABLE_ENFORCE_INTENTS_TO_MATCH_INTENT_FILTERS.set(true);
             return mService.getActivityStartController().startActivityInPackage(taskCallingUid,
                     callingPid, callingUid, callingPackage, callingFeatureId, intent, null, null,
                     null, 0, 0, options, userId, task, "startActivityFromRecents",
                     false /* validateIncomingUser */, null /* originatingPendingIntent */,
                     BackgroundStartPrivileges.NONE);
         } finally {
-            PackageManagerServiceUtils.DISABLE_ENFORCE_INTENTS_TO_MATCH_INTENT_FILTERS.set(false);
+            SaferIntentUtils.DISABLE_ENFORCE_INTENTS_TO_MATCH_INTENT_FILTERS.set(false);
             synchronized (mService.mGlobalLock) {
                 mService.continueWindowLayout();
             }

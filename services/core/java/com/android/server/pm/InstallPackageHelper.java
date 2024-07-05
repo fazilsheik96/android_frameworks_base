@@ -512,14 +512,13 @@ final class InstallPackageHelper {
         // metadata file on the system image. Do not reset the path and source if this is the
         // case.
         if (pkgSetting.getAppMetadataFilePath() == null) {
-            File dir = new File(pkg.getPath());
+            String dir = pkg.getPath();
             if (pkgSetting.isSystem()) {
-                dir = new File(Environment.getDataDirectory(),
-                        "app-metadata/" + pkg.getPackageName());
+                dir = Environment.getDataDirectoryPath() + "/app-metadata/" + pkg.getPackageName();
             }
-            File appMetadataFile = new File(dir, APP_METADATA_FILE_NAME);
-            if (appMetadataFile.exists()) {
-                pkgSetting.setAppMetadataFilePath(appMetadataFile.getAbsolutePath());
+            String appMetadataFilePath = dir + "/" + APP_METADATA_FILE_NAME;
+            if (request.hasAppMetadataFile()) {
+                pkgSetting.setAppMetadataFilePath(appMetadataFilePath);
                 if (Flags.aslInApkAppMetadataSource()) {
                     pkgSetting.setAppMetadataSource(APP_METADATA_SOURCE_INSTALLER);
                 }
@@ -527,7 +526,7 @@ final class InstallPackageHelper {
                 Map<String, PackageManager.Property> properties = pkg.getProperties();
                 if (properties.containsKey(PROPERTY_ANDROID_SAFETY_LABEL)) {
                     // ASL file extraction is done in post-install
-                    pkgSetting.setAppMetadataFilePath(appMetadataFile.getAbsolutePath());
+                    pkgSetting.setAppMetadataFilePath(appMetadataFilePath);
                     pkgSetting.setAppMetadataSource(APP_METADATA_SOURCE_APK);
                 }
             }
@@ -758,7 +757,7 @@ final class InstallPackageHelper {
                             Process.INVALID_UID /* previousAppId */,
                             permissionParamsBuilder.build(), userId);
 
-                    synchronized (mPm.mInstallLock) {
+                    try (PackageManagerTracedLock installLock = mPm.mInstallLock.acquireLock()) {
                         // We don't need to freeze for a brand new install
                         mAppDataHelper.prepareAppDataPostCommitLIF(
                                 pkgSetting, /* previousAppId= */0, new int[] { userId });
@@ -987,13 +986,11 @@ final class InstallPackageHelper {
     }
 
     void installPackagesTraced(List<InstallRequest> requests) {
-        mPm.mInstallLock.lock();
-        try {
+        try (PackageManagerTracedLock installLock = mPm.mInstallLock.acquireLock()) {
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "installPackages");
             installPackagesLI(requests);
         } finally {
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-            mPm.mInstallLock.unlock();
         }
     }
 
@@ -2615,7 +2612,8 @@ final class InstallPackageHelper {
             if (performDexopt) {
                 // dexopt can take long, and ArtService doesn't require installd, so we release
                 // the lock here and re-acquire the lock after dexopt is finished.
-                mPm.mInstallLock.unlock();
+                PackageManagerTracedLock.RawLock installLock = mPm.mInstallLock.getRawLock();
+                installLock.unlock();
                 try {
                     Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "dexopt");
 
@@ -2635,7 +2633,7 @@ final class InstallPackageHelper {
                     installRequest.onDexoptFinished(dexOptResult);
                     Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
                 } finally {
-                    mPm.mInstallLock.lock();
+                    installLock.lock();
                 }
             }
         }
@@ -2944,7 +2942,7 @@ final class InstallPackageHelper {
                     // propagated to all application threads.
                     mPm.scheduleDeferredNoKillPostDelete(args);
                     if (Flags.improveInstallDontKill()) {
-                        synchronized (mPm.mInstallLock) {
+                        try (var installLock = mPm.mInstallLock.acquireLock()) {
                             PackageManagerServiceUtils.linkFilesToOldDirs(mPm.mInstaller,
                                     packageName, pkgSetting.getPath(), pkgSetting.getOldPaths());
                         }
@@ -3091,7 +3089,7 @@ final class InstallPackageHelper {
             @NonNull PackageSetting stubPkgSetting) {
         final int parseFlags = mPm.getDefParseFlags() | ParsingPackageUtils.PARSE_CHATTY
                 | ParsingPackageUtils.PARSE_ENFORCE_CODE;
-        synchronized (mPm.mInstallLock) {
+        try (PackageManagerTracedLock installLock = mPm.mInstallLock.acquireLock()) {
             final AndroidPackage pkg;
             try (PackageFreezer freezer =
                          mPm.freezePackage(stubPkg.getPackageName(), UserHandle.USER_ALL,
@@ -3254,12 +3252,10 @@ final class InstallPackageHelper {
         }
         // Install the system package
         if (DEBUG_REMOVE) Slog.d(TAG, "Re-installing system package: " + disabledPs);
-        try {
-            synchronized (mPm.mInstallLock) {
-                final int[] origUsers = outInfo == null ? null : outInfo.mOrigUsers;
-                installPackageFromSystemLIF(disabledPs.getPathString(), allUserHandles,
-                        origUsers, writeSettings);
-            }
+        try (PackageManagerTracedLock installLock = mPm.mInstallLock.acquireLock()) {
+            final int[] origUsers = outInfo == null ? null : outInfo.mOrigUsers;
+            installPackageFromSystemLIF(disabledPs.getPathString(), allUserHandles,
+                    origUsers, writeSettings);
         } catch (PackageManagerException e) {
             Slog.w(TAG, "Failed to restore system package:" + deletedPs.getPackageName() + ": "
                     + e.getMessage());
@@ -3489,12 +3485,9 @@ final class InstallPackageHelper {
                 if (ps != null) {
                     ps.getPkgState().setUpdatedSystemApp(false);
                 }
-
-                try {
-                    final File codePath = new File(pkg.getPath());
-                    synchronized (mPm.mInstallLock) {
-                        initPackageTracedLI(codePath, 0, scanFlags);
-                    }
+                final File codePath = new File(pkg.getPath());
+                try (PackageManagerTracedLock installLock = mPm.mInstallLock.acquireLock()) {
+                    initPackageTracedLI(codePath, 0, scanFlags);
                 } catch (PackageManagerException e) {
                     Slog.e(TAG, "Failed to parse updated, ex-system package: "
                             + e.getMessage());
@@ -3702,14 +3695,12 @@ final class InstallPackageHelper {
             }
             mPm.mSettings.enableSystemPackageLPw(packageName);
 
-            try {
-                synchronized (mPm.mInstallLock) {
-                    final AndroidPackage newPkg = initPackageTracedLI(
-                            scanFile, reparseFlags, rescanFlags);
-                    // We rescanned a stub, add it to the list of stubbed system packages
-                    if (newPkg.isStub()) {
-                        stubSystemApps.add(packageName);
-                    }
+            try (PackageManagerTracedLock installLock = mPm.mInstallLock.acquireLock()) {
+                final AndroidPackage newPkg = initPackageTracedLI(
+                         scanFile, reparseFlags, rescanFlags);
+                 // We rescanned a stub, add it to the list of stubbed system packages
+                if (newPkg.isStub()) {
+                    stubSystemApps.add(packageName);
                 }
             } catch (PackageManagerException e) {
                 Slog.e(TAG, "Failed to parse original system package: "

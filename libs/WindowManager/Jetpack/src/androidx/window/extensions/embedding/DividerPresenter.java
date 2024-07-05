@@ -16,6 +16,9 @@
 
 package androidx.window.extensions.embedding;
 
+import static android.content.pm.ActivityInfo.CONFIG_DENSITY;
+import static android.content.pm.ActivityInfo.CONFIG_LAYOUT_DIRECTION;
+import static android.content.pm.ActivityInfo.CONFIG_WINDOW_CONFIGURATION;
 import static android.util.TypedValue.COMPLEX_UNIT_DIP;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
@@ -33,12 +36,13 @@ import static androidx.window.extensions.embedding.SplitPresenter.CONTAINER_POSI
 import static androidx.window.extensions.embedding.SplitPresenter.CONTAINER_POSITION_RIGHT;
 import static androidx.window.extensions.embedding.SplitPresenter.CONTAINER_POSITION_TOP;
 
-import android.annotation.DimenRes;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.annotation.Nullable;
 import android.app.Activity;
 import android.app.ActivityThread;
 import android.content.Context;
-import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
@@ -53,9 +57,11 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.SurfaceControl;
 import android.view.SurfaceControlViewHost;
+import android.view.VelocityTracker;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.WindowlessWindowManager;
+import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.window.InputTransferToken;
@@ -97,6 +103,16 @@ class DividerPresenter implements View.OnTouchListener {
     @VisibleForTesting
     static final int DEFAULT_DIVIDER_WIDTH_DP = 24;
 
+    @VisibleForTesting
+    static final PathInterpolator FLING_ANIMATION_INTERPOLATOR =
+            new PathInterpolator(0.4f, 0f, 0.2f, 1f);
+    @VisibleForTesting
+    static final int FLING_ANIMATION_DURATION = 250;
+    @VisibleForTesting
+    static final int MIN_DISMISS_VELOCITY_DP_PER_SECOND = 600;
+    @VisibleForTesting
+    static final int MIN_FLING_VELOCITY_DP_PER_SECOND = 400;
+
     private final int mTaskId;
 
     @NonNull
@@ -107,6 +123,14 @@ class DividerPresenter implements View.OnTouchListener {
 
     @NonNull
     private final Executor mCallbackExecutor;
+
+    /**
+     * The VelocityTracker of the divider, used to track the dragging velocity. This field is
+     * {@code null} until dragging starts.
+     */
+    @GuardedBy("mLock")
+    @Nullable
+    VelocityTracker mVelocityTracker;
 
     /**
      * The {@link Properties} of the divider. This field is {@code null} when no divider should be
@@ -178,6 +202,10 @@ class DividerPresenter implements View.OnTouchListener {
             }
 
             // At this point, a divider is required.
+            final TaskFragmentContainer primaryContainer =
+                    topSplitContainer.getPrimaryContainer();
+            final TaskFragmentContainer secondaryContainer =
+                    topSplitContainer.getSecondaryContainer();
 
             // Create the decor surface if one is not available yet.
             final SurfaceControl decorSurface = parentInfo.getDecorSurface();
@@ -185,42 +213,43 @@ class DividerPresenter implements View.OnTouchListener {
                 // Clean up when the decor surface is currently unavailable.
                 removeDivider();
                 // Request to create the decor surface
-                createOrMoveDecorSurfaceLocked(wct, topSplitContainer.getPrimaryContainer());
+                createOrMoveDecorSurfaceLocked(wct, primaryContainer);
                 return;
             }
 
             // Update the decor surface owner if needed.
             boolean isDraggableExpandType =
                     SplitAttributesHelper.isDraggableExpandType(splitAttributes);
-            final TaskFragmentContainer decorSurfaceOwnerContainer = isDraggableExpandType
-                    ? topSplitContainer.getSecondaryContainer()
-                    : topSplitContainer.getPrimaryContainer();
+            final TaskFragmentContainer decorSurfaceOwnerContainer =
+                    isDraggableExpandType ? secondaryContainer : primaryContainer;
 
             if (!Objects.equals(
                     mDecorSurfaceOwner, decorSurfaceOwnerContainer.getTaskFragmentToken())) {
                 createOrMoveDecorSurfaceLocked(wct, decorSurfaceOwnerContainer);
             }
-            final boolean isVerticalSplit = isVerticalSplit(topSplitContainer);
-            final boolean isReversedLayout = isReversedLayout(
-                    topSplitContainer.getCurrentSplitAttributes(),
-                    parentInfo.getConfiguration());
+
+            final Configuration parentConfiguration = parentInfo.getConfiguration();
+            final Rect taskBounds = parentConfiguration.windowConfiguration.getBounds();
+            final boolean isVerticalSplit = isVerticalSplit(splitAttributes);
+            final boolean isReversedLayout = isReversedLayout(splitAttributes, parentConfiguration);
+            final int dividerWidthPx = getDividerWidthPx(dividerAttributes);
 
             updateProperties(
                     new Properties(
-                            parentInfo.getConfiguration(),
+                            parentConfiguration,
                             dividerAttributes,
                             decorSurface,
                             getInitialDividerPosition(
-                                    topSplitContainer, isVerticalSplit, isReversedLayout),
+                                    primaryContainer, secondaryContainer, taskBounds,
+                                    dividerWidthPx, isDraggableExpandType, isVerticalSplit,
+                                    isReversedLayout),
                             isVerticalSplit,
                             isReversedLayout,
                             parentInfo.getDisplayId(),
                             isDraggableExpandType,
-                            getContainerBackgroundColor(topSplitContainer.getPrimaryContainer(),
-                                    DEFAULT_PRIMARY_VEIL_COLOR),
-                            getContainerBackgroundColor(topSplitContainer.getSecondaryContainer(),
-                                    DEFAULT_SECONDARY_VEIL_COLOR)
-                    ));
+                            primaryContainer,
+                            secondaryContainer)
+            );
         }
     }
 
@@ -316,32 +345,31 @@ class DividerPresenter implements View.OnTouchListener {
 
     @VisibleForTesting
     static int getInitialDividerPosition(
-            @NonNull SplitContainer splitContainer,
+            @NonNull TaskFragmentContainer primaryContainer,
+            @NonNull TaskFragmentContainer secondaryContainer,
+            @NonNull Rect taskBounds,
+            int dividerWidthPx,
+            boolean isDraggableExpandType,
             boolean isVerticalSplit,
             boolean isReversedLayout) {
-        final Rect primaryBounds =
-                splitContainer.getPrimaryContainer().getLastRequestedBounds();
-        final Rect secondaryBounds =
-                splitContainer.getSecondaryContainer().getLastRequestedBounds();
-        final SplitAttributes splitAttributes = splitContainer.getCurrentSplitAttributes();
-
-        if (SplitAttributesHelper.isDraggableExpandType(splitAttributes)) {
-            // If the container is fully expanded by dragging the divider, we display the divider
-            // on the edge.
-            final int dividerWidth = getDividerWidthPx(splitAttributes.getDividerAttributes());
+        if (isDraggableExpandType) {
+            // If the secondary container is fully expanded by dragging the divider, we display the
+            // divider on the edge.
             final int fullyExpandedPosition = isVerticalSplit
-                    ? primaryBounds.right - dividerWidth
-                    : primaryBounds.bottom - dividerWidth;
+                    ? taskBounds.width() - dividerWidthPx
+                    : taskBounds.height() - dividerWidthPx;
             return isReversedLayout ? fullyExpandedPosition : 0;
         } else {
+            final Rect primaryBounds = primaryContainer.getLastRequestedBounds();
+            final Rect secondaryBounds = secondaryContainer.getLastRequestedBounds();
             return isVerticalSplit
                     ? Math.min(primaryBounds.right, secondaryBounds.right)
                     : Math.min(primaryBounds.bottom, secondaryBounds.bottom);
         }
     }
 
-    private static boolean isVerticalSplit(@NonNull SplitContainer splitContainer) {
-        final int layoutDirection = splitContainer.getCurrentSplitAttributes().getLayoutDirection();
+    private static boolean isVerticalSplit(@NonNull SplitAttributes splitAttributes) {
+        final int layoutDirection = splitAttributes.getLayoutDirection();
         switch (layoutDirection) {
             case SplitAttributes.LayoutDirection.LEFT_TO_RIGHT:
             case SplitAttributes.LayoutDirection.RIGHT_TO_LEFT:
@@ -370,13 +398,11 @@ class DividerPresenter implements View.OnTouchListener {
                 applicationContext.getResources().getDisplayMetrics());
     }
 
-    private static int getDimensionDp(@DimenRes int resId) {
-        final Context context = ActivityThread.currentActivityThread().getApplication();
-        final int px = context.getResources().getDimensionPixelSize(resId);
-        return (int) TypedValue.convertPixelsToDimension(
-                COMPLEX_UNIT_DIP,
-                px,
-                context.getResources().getDisplayMetrics());
+    private static float getDisplayDensity() {
+        // TODO(b/329193115) support divider on secondary display
+        final Context applicationContext =
+                ActivityThread.currentActivityThread().getApplication();
+        return applicationContext.getResources().getDisplayMetrics().density;
     }
 
     /**
@@ -487,24 +513,32 @@ class DividerPresenter implements View.OnTouchListener {
     @Override
     public boolean onTouch(@NonNull View view, @NonNull MotionEvent event) {
         synchronized (mLock) {
-            final Rect taskBounds = mProperties.mConfiguration.windowConfiguration.getBounds();
-            mDividerPosition = calculateDividerPosition(
-                    event, taskBounds, mRenderer.mDividerWidthPx, mProperties.mDividerAttributes,
-                    mProperties.mIsVerticalSplit, calculateMinPosition(), calculateMaxPosition());
-            mRenderer.setDividerPosition(mDividerPosition);
-            switch (event.getAction()) {
-                case MotionEvent.ACTION_DOWN:
-                    onStartDragging();
-                    break;
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    onFinishDragging();
-                    break;
-                case MotionEvent.ACTION_MOVE:
-                    onDrag();
-                    break;
-                default:
-                    break;
+            if (mProperties != null && mRenderer != null) {
+                final Rect taskBounds = mProperties.mConfiguration.windowConfiguration.getBounds();
+                mDividerPosition = calculateDividerPosition(
+                        event, taskBounds, mProperties.mDividerWidthPx,
+                        mProperties.mDividerAttributes, mProperties.mIsVerticalSplit,
+                        calculateMinPosition(), calculateMaxPosition());
+                mRenderer.setDividerPosition(mDividerPosition);
+
+                // Convert to use screen-based coordinates to prevent lost track of motion events
+                // while moving divider bar and calculating dragging velocity.
+                event.setLocation(event.getRawX(), event.getRawY());
+                final int action = event.getAction() & MotionEvent.ACTION_MASK;
+                switch (action) {
+                    case MotionEvent.ACTION_DOWN:
+                        onStartDragging(event);
+                        break;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        onFinishDragging(event);
+                        break;
+                    case MotionEvent.ACTION_MOVE:
+                        onDrag(event);
+                        break;
+                    default:
+                        break;
+                }
             }
         }
 
@@ -514,7 +548,10 @@ class DividerPresenter implements View.OnTouchListener {
     }
 
     @GuardedBy("mLock")
-    private void onStartDragging() {
+    private void onStartDragging(@NonNull MotionEvent event) {
+        mVelocityTracker = VelocityTracker.obtain();
+        mVelocityTracker.addMovement(event);
+
         mRenderer.mIsDragging = true;
         mRenderer.mDragHandle.setPressed(mRenderer.mIsDragging);
         mRenderer.updateSurface();
@@ -536,16 +573,81 @@ class DividerPresenter implements View.OnTouchListener {
     }
 
     @GuardedBy("mLock")
-    private void onDrag() {
+    private void onDrag(@NonNull MotionEvent event) {
+        if (mVelocityTracker != null) {
+            mVelocityTracker.addMovement(event);
+        }
         mRenderer.updateSurface();
     }
 
     @GuardedBy("mLock")
-    private void onFinishDragging() {
-        mDividerPosition = adjustDividerPositionForSnapPoints(mDividerPosition);
-        mRenderer.setDividerPosition(mDividerPosition);
-        mRenderer.updateSurface();
+    private void onFinishDragging(@NonNull MotionEvent event) {
+        float velocity = 0.0f;
+        if (mVelocityTracker != null) {
+            mVelocityTracker.addMovement(event);
+            mVelocityTracker.computeCurrentVelocity(1000 /* units */);
+            velocity = mProperties.mIsVerticalSplit
+                    ? mVelocityTracker.getXVelocity()
+                    : mVelocityTracker.getYVelocity();
+            mVelocityTracker.recycle();
+        }
 
+        final int prevDividerPosition = mDividerPosition;
+        mDividerPosition = dividerPositionForSnapPoints(mDividerPosition, velocity);
+        if (mDividerPosition != prevDividerPosition) {
+            ValueAnimator animator = getFlingAnimator(prevDividerPosition, mDividerPosition);
+            animator.start();
+        } else {
+            onDraggingEnd();
+        }
+    }
+
+    @GuardedBy("mLock")
+    @NonNull
+    @VisibleForTesting
+    ValueAnimator getFlingAnimator(int prevDividerPosition, int snappedDividerPosition) {
+        final ValueAnimator animator =
+                getValueAnimator(prevDividerPosition, snappedDividerPosition);
+        animator.addUpdateListener(animation -> {
+            synchronized (mLock) {
+                updateDividerPosition((int) animation.getAnimatedValue());
+            }
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                synchronized (mLock) {
+                    onDraggingEnd();
+                }
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                synchronized (mLock) {
+                    onDraggingEnd();
+                }
+            }
+        });
+        return animator;
+    }
+
+    @VisibleForTesting
+    static ValueAnimator getValueAnimator(int prevDividerPosition, int snappedDividerPosition) {
+        ValueAnimator animator = ValueAnimator
+                .ofInt(prevDividerPosition, snappedDividerPosition)
+                .setDuration(FLING_ANIMATION_DURATION);
+        animator.setInterpolator(FLING_ANIMATION_INTERPOLATOR);
+        return animator;
+    }
+
+    @GuardedBy("mLock")
+    private void updateDividerPosition(int position) {
+        mRenderer.setDividerPosition(position);
+        mRenderer.updateSurface();
+    }
+
+    @GuardedBy("mLock")
+    private void onDraggingEnd() {
         // Veil visibility change should be applied together with the surface boost transaction in
         // the wct.
         final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
@@ -570,36 +672,96 @@ class DividerPresenter implements View.OnTouchListener {
 
     /**
      * Returns the divider position adjusted for the min max ratio and fullscreen expansion.
-     *
-     * If the dragging position is above the {@link DividerAttributes#getPrimaryMaxRatio()} or below
-     * {@link DividerAttributes#getPrimaryMinRatio()} and
-     * {@link DividerAttributes#isDraggingToFullscreenAllowed} is {@code true}, the system will
-     * choose a snap algorithm to adjust the ending position to either fully expand one container or
-     * move the divider back to the specified min/max ratio.
-     *
-     * TODO(b/327067596) implement snap algorithm
-     *
      * The adjusted divider position is in the range of [minPosition, maxPosition] for a split, 0
      * for expanded right (bottom) container, or task width (height) minus the divider width for
      * expanded left (top) container.
      */
     @GuardedBy("mLock")
-    private int adjustDividerPositionForSnapPoints(int dividerPosition) {
+    private int dividerPositionForSnapPoints(int dividerPosition, float velocity) {
         final Rect taskBounds = mProperties.mConfiguration.windowConfiguration.getBounds();
         final int minPosition = calculateMinPosition();
         final int maxPosition = calculateMaxPosition();
         final int fullyExpandedPosition = mProperties.mIsVerticalSplit
-                ? taskBounds.right - mRenderer.mDividerWidthPx
-                : taskBounds.bottom - mRenderer.mDividerWidthPx;
-        if (isDraggingToFullscreenAllowed(mProperties.mDividerAttributes)) {
-            if (dividerPosition < minPosition) {
+                ? taskBounds.width() - mProperties.mDividerWidthPx
+                : taskBounds.height() - mProperties.mDividerWidthPx;
+
+        final float displayDensity = getDisplayDensity();
+        final boolean isDraggingToFullscreenAllowed =
+                isDraggingToFullscreenAllowed(mProperties.mDividerAttributes);
+        return dividerPositionWithPositionOptions(
+                dividerPosition,
+                minPosition,
+                maxPosition,
+                fullyExpandedPosition,
+                velocity,
+                displayDensity,
+                isDraggingToFullscreenAllowed);
+    }
+
+    /**
+     * Returns the divider position given a set of position options. A snap algorithm can adjust
+     * the ending position to either fully expand one container or move the divider back to
+     * the specified min/max ratio depending on the dragging velocity and if dragging to fullscreen
+     * is allowed.
+     */
+    @VisibleForTesting
+    static int dividerPositionWithPositionOptions(int dividerPosition, int minPosition,
+            int maxPosition, int fullyExpandedPosition, float velocity, float displayDensity,
+            boolean isDraggingToFullscreenAllowed) {
+        if (isDraggingToFullscreenAllowed) {
+            final float minDismissVelocityPxPerSecond =
+                    MIN_DISMISS_VELOCITY_DP_PER_SECOND * displayDensity;
+            if (dividerPosition < minPosition && velocity < -minDismissVelocityPxPerSecond) {
                 return 0;
             }
-            if (dividerPosition > maxPosition) {
+            if (dividerPosition > maxPosition && velocity > minDismissVelocityPxPerSecond) {
                 return fullyExpandedPosition;
             }
         }
-        return Math.clamp(dividerPosition, minPosition, maxPosition);
+        final float minFlingVelocityPxPerSecond =
+                MIN_FLING_VELOCITY_DP_PER_SECOND * displayDensity;
+        if (Math.abs(velocity) >= minFlingVelocityPxPerSecond) {
+            return dividerPositionForFling(
+                    dividerPosition, minPosition, maxPosition, velocity);
+        }
+        if (dividerPosition >= minPosition && dividerPosition <= maxPosition) {
+            return dividerPosition;
+        }
+        return snap(
+                dividerPosition,
+                isDraggingToFullscreenAllowed
+                        ? new int[] {0, minPosition, maxPosition, fullyExpandedPosition}
+                        : new int[] {minPosition, maxPosition});
+    }
+
+    /**
+     * Returns the closest position that is in the fling direction.
+     */
+    private static int dividerPositionForFling(int dividerPosition, int minPosition,
+            int maxPosition, float velocity) {
+        final boolean isBackwardDirection = velocity < 0;
+        if (isBackwardDirection) {
+            return dividerPosition < maxPosition ? minPosition : maxPosition;
+        } else {
+            return dividerPosition > minPosition ? maxPosition : minPosition;
+        }
+    }
+
+    /**
+     * Returns the snapped position from a list of possible positions. Currently, this method
+     * snaps to the closest position by distance from the divider position.
+     */
+    private static int snap(int dividerPosition, int[] possiblePositions) {
+        int snappedPosition = dividerPosition;
+        float minDistance = Float.MAX_VALUE;
+        for (int position : possiblePositions) {
+            float distance = Math.abs(dividerPosition - position);
+            if (distance < minDistance) {
+                snappedPosition = position;
+                minDistance = distance;
+            }
+        }
+        return snappedPosition;
     }
 
     private static void setDecorSurfaceBoosted(
@@ -646,7 +808,7 @@ class DividerPresenter implements View.OnTouchListener {
     private int calculateMinPosition() {
         return calculateMinPosition(
                 mProperties.mConfiguration.windowConfiguration.getBounds(),
-                mRenderer.mDividerWidthPx, mProperties.mDividerAttributes,
+                mProperties.mDividerWidthPx, mProperties.mDividerAttributes,
                 mProperties.mIsVerticalSplit, mProperties.mIsReversedLayout);
     }
 
@@ -654,7 +816,7 @@ class DividerPresenter implements View.OnTouchListener {
     private int calculateMaxPosition() {
         return calculateMaxPosition(
                 mProperties.mConfiguration.windowConfiguration.getBounds(),
-                mRenderer.mDividerWidthPx, mProperties.mDividerAttributes,
+                mProperties.mDividerWidthPx, mProperties.mDividerAttributes,
                 mProperties.mIsVerticalSplit, mProperties.mIsReversedLayout);
     }
 
@@ -692,13 +854,12 @@ class DividerPresenter implements View.OnTouchListener {
      * Returns the new split ratio of the {@link SplitContainer} based on the current divider
      * position.
      */
-    float calculateNewSplitRatio(@NonNull SplitContainer topSplitContainer) {
+    float calculateNewSplitRatio() {
         synchronized (mLock) {
             return calculateNewSplitRatio(
-                    topSplitContainer,
                     mDividerPosition,
                     mProperties.mConfiguration.windowConfiguration.getBounds(),
-                    mRenderer.mDividerWidthPx,
+                    mProperties.mDividerWidthPx,
                     mProperties.mIsVerticalSplit,
                     mProperties.mIsReversedLayout,
                     calculateMinPosition(),
@@ -710,21 +871,20 @@ class DividerPresenter implements View.OnTouchListener {
     private static boolean isDraggingToFullscreenAllowed(
             @NonNull DividerAttributes dividerAttributes) {
         // TODO(b/293654166) Use DividerAttributes.isDraggingToFullscreenAllowed when extension is
-        // updated.
-        return true;
+        // updated to v7.
+        return false;
     }
 
     /**
      * Returns the new split ratio of the {@link SplitContainer} based on the current divider
      * position.
      *
-     * @param topSplitContainer the {@link SplitContainer} for which to compute the split ratio.
      * @param dividerPosition the divider position. See {@link #mDividerPosition}.
      * @param taskBounds the task bounds
      * @param dividerWidthPx the width of the divider in pixels.
      * @param isVerticalSplit if {@code true}, the split is a vertical split. If {@code false}, the
      *                        split is a horizontal split. See
-     *                        {@link #isVerticalSplit(SplitContainer)}.
+     *                        {@link #isVerticalSplit(SplitAttributes)}.
      * @param isReversedLayout if {@code true}, the split layout is reversed, i.e. right-to-left or
      *                         bottom-to-top. If {@code false}, the split is not reversed, i.e.
      *                         left-to-right or top-to-bottom. See
@@ -735,7 +895,6 @@ class DividerPresenter implements View.OnTouchListener {
      */
     @VisibleForTesting
     static float calculateNewSplitRatio(
-            @NonNull SplitContainer topSplitContainer,
             int dividerPosition,
             @NonNull Rect taskBounds,
             int dividerWidthPx,
@@ -760,8 +919,6 @@ class DividerPresenter implements View.OnTouchListener {
             dividerPosition = Math.clamp(dividerPosition, minPosition, maxPosition);
         }
 
-        final TaskFragmentContainer primaryContainer = topSplitContainer.getPrimaryContainer();
-        final Rect origPrimaryBounds = primaryContainer.getLastRequestedBounds();
         final int usableSize = isVerticalSplit
                 ? taskBounds.width() - dividerWidthPx
                 : taskBounds.height() - dividerWidthPx;
@@ -769,13 +926,13 @@ class DividerPresenter implements View.OnTouchListener {
         final float newRatio;
         if (isVerticalSplit) {
             final int newPrimaryWidth = isReversedLayout
-                    ? (origPrimaryBounds.right - (dividerPosition + dividerWidthPx))
-                    : (dividerPosition - origPrimaryBounds.left);
+                    ? taskBounds.width() - (dividerPosition + dividerWidthPx)
+                    : dividerPosition;
             newRatio = 1.0f * newPrimaryWidth / usableSize;
         } else {
             final int newPrimaryHeight = isReversedLayout
-                    ? (origPrimaryBounds.bottom - (dividerPosition + dividerWidthPx))
-                    : (dividerPosition - origPrimaryBounds.top);
+                    ? taskBounds.height() - (dividerPosition + dividerWidthPx)
+                    : dividerPosition;
             newRatio = 1.0f * newPrimaryHeight / usableSize;
         }
         return newRatio;
@@ -811,7 +968,7 @@ class DividerPresenter implements View.OnTouchListener {
     @VisibleForTesting
     static class Properties {
         private static final int CONFIGURATION_MASK_FOR_DIVIDER =
-                ActivityInfo.CONFIG_DENSITY | ActivityInfo.CONFIG_WINDOW_CONFIGURATION;
+                CONFIG_DENSITY | CONFIG_WINDOW_CONFIGURATION | CONFIG_LAYOUT_DIRECTION;
         @NonNull
         private final Configuration mConfiguration;
         @NonNull
@@ -828,8 +985,11 @@ class DividerPresenter implements View.OnTouchListener {
         private final int mDisplayId;
         private final boolean mIsReversedLayout;
         private final boolean mIsDraggableExpandType;
-        private final Color mPrimaryVeilColor;
-        private final Color mSecondaryVeilColor;
+        @NonNull
+        private final TaskFragmentContainer mPrimaryContainer;
+        @NonNull
+        private final TaskFragmentContainer mSecondaryContainer;
+        private final int mDividerWidthPx;
 
         @VisibleForTesting
         Properties(
@@ -841,8 +1001,8 @@ class DividerPresenter implements View.OnTouchListener {
                 boolean isReversedLayout,
                 int displayId,
                 boolean isDraggableExpandType,
-                @NonNull Color primaryVeilColor,
-                @NonNull Color secondaryVeilColor) {
+                @NonNull TaskFragmentContainer primaryContainer,
+                @NonNull TaskFragmentContainer secondaryContainer) {
             mConfiguration = configuration;
             mDividerAttributes = dividerAttributes;
             mDecorSurface = decorSurface;
@@ -851,8 +1011,9 @@ class DividerPresenter implements View.OnTouchListener {
             mIsReversedLayout = isReversedLayout;
             mDisplayId = displayId;
             mIsDraggableExpandType = isDraggableExpandType;
-            mPrimaryVeilColor = primaryVeilColor;
-            mSecondaryVeilColor = secondaryVeilColor;
+            mPrimaryContainer = primaryContainer;
+            mSecondaryContainer = secondaryContainer;
+            mDividerWidthPx = getDividerWidthPx(dividerAttributes);
         }
 
         /**
@@ -875,8 +1036,8 @@ class DividerPresenter implements View.OnTouchListener {
                     && a.mDisplayId == b.mDisplayId
                     && a.mIsReversedLayout == b.mIsReversedLayout
                     && a.mIsDraggableExpandType == b.mIsDraggableExpandType
-                    && a.mPrimaryVeilColor.equals(b.mPrimaryVeilColor)
-                    && a.mSecondaryVeilColor.equals(b.mSecondaryVeilColor);
+                    && a.mPrimaryContainer == b.mPrimaryContainer
+                    && a.mSecondaryContainer == b.mSecondaryContainer;
         }
 
         private static boolean areSameSurfaces(
@@ -919,7 +1080,6 @@ class DividerPresenter implements View.OnTouchListener {
         private final View.OnTouchListener mListener;
         @NonNull
         private Properties mProperties;
-        private int mDividerWidthPx;
         private int mHandleWidthPx;
         @Nullable
         private SurfaceControl mPrimaryVeil;
@@ -959,7 +1119,6 @@ class DividerPresenter implements View.OnTouchListener {
         /** Updates the divider when initializing or when properties are changed */
         @VisibleForTesting
         void update() {
-            mDividerWidthPx = getDividerWidthPx(mProperties.mDividerAttributes);
             mDividerPosition = mProperties.mInitialDividerPosition;
             mWindowlessWindowManager.setConfiguration(mProperties.mConfiguration);
 
@@ -1025,15 +1184,17 @@ class DividerPresenter implements View.OnTouchListener {
                 // When the divider drag handle width is larger than the divider width, the position
                 // of the divider surface is adjusted so that it is large enough to host both the
                 // divider line and the divider drag handle.
-                mDividerSurfaceWidthPx = Math.max(mDividerWidthPx, mHandleWidthPx);
+                mDividerSurfaceWidthPx = Math.max(mProperties.mDividerWidthPx, mHandleWidthPx);
+                dividerSurfacePosition = mProperties.mIsReversedLayout
+                        ? mDividerPosition
+                        : mDividerPosition + mProperties.mDividerWidthPx - mDividerSurfaceWidthPx;
                 dividerSurfacePosition =
-                        mProperties.mIsReversedLayout
-                                ? mDividerPosition
-                                : mDividerPosition + mDividerWidthPx - mDividerSurfaceWidthPx;
-                dividerSurfacePosition = Math.clamp(dividerSurfacePosition, 0,
-                        mProperties.mIsVerticalSplit ? taskBounds.width() : taskBounds.height());
+                        Math.clamp(dividerSurfacePosition, 0,
+                                mProperties.mIsVerticalSplit
+                                        ? taskBounds.width() - mDividerSurfaceWidthPx
+                                        : taskBounds.height() - mDividerSurfaceWidthPx);
             } else {
-                mDividerSurfaceWidthPx = mDividerWidthPx;
+                mDividerSurfaceWidthPx = mProperties.mDividerWidthPx;
                 dividerSurfacePosition = mDividerPosition;
             }
 
@@ -1046,16 +1207,9 @@ class DividerPresenter implements View.OnTouchListener {
             }
 
             // Update divider line position in the surface
-            if (!mProperties.mIsReversedLayout) {
-                final int offset = mDividerPosition - dividerSurfacePosition;
-                mDividerLine.setX(mProperties.mIsVerticalSplit ? offset : 0);
-                mDividerLine.setY(mProperties.mIsVerticalSplit ? 0 : offset);
-            } else {
-                // For reversed layout, the divider line is always at the start of the divider
-                // surface.
-                mDividerLine.setX(0);
-                mDividerLine.setY(0);
-            }
+            final int offset = mDividerPosition - dividerSurfacePosition;
+            mDividerLine.setX(mProperties.mIsVerticalSplit ? offset : 0);
+            mDividerLine.setY(mProperties.mIsVerticalSplit ? 0 : offset);
 
             if (mIsDragging) {
                 updateVeils(t);
@@ -1083,6 +1237,12 @@ class DividerPresenter implements View.OnTouchListener {
                             FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCH_MODAL | FLAG_SLIPPERY,
                             PixelFormat.TRANSLUCENT);
             lp.setTitle(WINDOW_NAME);
+
+            // Ensure that the divider layout is always LTR regardless of the locale, because we
+            // already considered the locale when determining the split layout direction and the
+            // computed divider line position always starts from the left. This only affects the
+            // horizontal layout and does not have any effect on the top-to-bottom layout.
+            mDividerLayout.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
             mViewHost.setView(mDividerLayout, lp);
             mViewHost.relayout(lp);
         }
@@ -1105,8 +1265,10 @@ class DividerPresenter implements View.OnTouchListener {
             final Rect taskBounds = mProperties.mConfiguration.windowConfiguration.getBounds();
             mDividerLine.setLayoutParams(
                     mProperties.mIsVerticalSplit
-                            ? new FrameLayout.LayoutParams(mDividerWidthPx, taskBounds.height())
-                            : new FrameLayout.LayoutParams(taskBounds.width(), mDividerWidthPx)
+                            ? new FrameLayout.LayoutParams(
+                                    mProperties.mDividerWidthPx, taskBounds.height())
+                            : new FrameLayout.LayoutParams(
+                                    taskBounds.width(), mProperties.mDividerWidthPx)
             );
             if (mProperties.mDividerAttributes.getDividerType()
                     == DividerAttributes.DIVIDER_TYPE_DRAGGABLE) {
@@ -1194,8 +1356,12 @@ class DividerPresenter implements View.OnTouchListener {
         }
 
         private void showVeils(@NonNull SurfaceControl.Transaction t) {
-            t.setColor(mPrimaryVeil, colorToFloatArray(mProperties.mPrimaryVeilColor))
-                    .setColor(mSecondaryVeil, colorToFloatArray(mProperties.mSecondaryVeilColor))
+            final Color primaryVeilColor = getContainerBackgroundColor(
+                    mProperties.mPrimaryContainer, DEFAULT_PRIMARY_VEIL_COLOR);
+            final Color secondaryVeilColor = getContainerBackgroundColor(
+                    mProperties.mSecondaryContainer, DEFAULT_SECONDARY_VEIL_COLOR);
+            t.setColor(mPrimaryVeil, colorToFloatArray(primaryVeilColor))
+                    .setColor(mSecondaryVeil, colorToFloatArray(secondaryVeilColor))
                     .setLayer(mDividerSurface, DIVIDER_LAYER)
                     .setLayer(mPrimaryVeil, VEIL_LAYER)
                     .setLayer(mSecondaryVeil, VEIL_LAYER)
@@ -1216,21 +1382,28 @@ class DividerPresenter implements View.OnTouchListener {
             Rect secondaryBounds;
             if (mProperties.mIsVerticalSplit) {
                 final Rect boundsLeft = new Rect(0, 0, mDividerPosition, taskBounds.height());
-                final Rect boundsRight = new Rect(mDividerPosition + mDividerWidthPx, 0,
+                final Rect boundsRight = new Rect(mDividerPosition + mProperties.mDividerWidthPx, 0,
                         taskBounds.width(), taskBounds.height());
                 primaryBounds = mProperties.mIsReversedLayout ? boundsRight : boundsLeft;
                 secondaryBounds = mProperties.mIsReversedLayout ? boundsLeft : boundsRight;
             } else {
                 final Rect boundsTop = new Rect(0, 0, taskBounds.width(), mDividerPosition);
-                final Rect boundsBottom = new Rect(0, mDividerPosition + mDividerWidthPx,
+                final Rect boundsBottom = new Rect(
+                        0, mDividerPosition + mProperties.mDividerWidthPx,
                         taskBounds.width(), taskBounds.height());
                 primaryBounds = mProperties.mIsReversedLayout ? boundsBottom : boundsTop;
                 secondaryBounds = mProperties.mIsReversedLayout ? boundsTop : boundsBottom;
             }
-            t.setWindowCrop(mPrimaryVeil, primaryBounds.width(), primaryBounds.height());
-            t.setWindowCrop(mSecondaryVeil, secondaryBounds.width(), secondaryBounds.height());
-            t.setPosition(mPrimaryVeil, primaryBounds.left, primaryBounds.top);
-            t.setPosition(mSecondaryVeil, secondaryBounds.left, secondaryBounds.top);
+            if (mPrimaryVeil != null) {
+                t.setWindowCrop(mPrimaryVeil, primaryBounds.width(), primaryBounds.height());
+                t.setPosition(mPrimaryVeil, primaryBounds.left, primaryBounds.top);
+                t.setVisibility(mPrimaryVeil, !primaryBounds.isEmpty());
+            }
+            if (mSecondaryVeil != null) {
+                t.setWindowCrop(mSecondaryVeil, secondaryBounds.width(), secondaryBounds.height());
+                t.setPosition(mSecondaryVeil, secondaryBounds.left, secondaryBounds.top);
+                t.setVisibility(mSecondaryVeil, !secondaryBounds.isEmpty());
+            }
         }
 
         private static float[] colorToFloatArray(@NonNull Color color) {

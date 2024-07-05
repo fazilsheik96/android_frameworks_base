@@ -28,20 +28,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.colorResource
@@ -64,9 +64,11 @@ import com.android.compose.animation.scene.SceneScope
 import com.android.compose.animation.scene.TransitionState
 import com.android.compose.animation.scene.UserAction
 import com.android.compose.animation.scene.UserActionResult
+import com.android.compose.animation.scene.animateSceneDpAsState
 import com.android.compose.animation.scene.animateSceneFloatAsState
 import com.android.compose.modifiers.padding
 import com.android.compose.modifiers.thenIf
+import com.android.compose.windowsizeclass.LocalWindowSizeClass
 import com.android.systemui.battery.BatteryMeterViewController
 import com.android.systemui.common.ui.compose.windowinsets.CutoutLocation
 import com.android.systemui.common.ui.compose.windowinsets.LocalDisplayCutout
@@ -82,7 +84,10 @@ import com.android.systemui.media.dagger.MediaModule.QUICK_QS_PANEL
 import com.android.systemui.notifications.ui.composable.NotificationScrollingStack
 import com.android.systemui.qs.footer.ui.compose.FooterActionsWithAnimatedVisibility
 import com.android.systemui.qs.ui.composable.BrightnessMirror
+import com.android.systemui.qs.ui.composable.QSMediaMeasurePolicy
 import com.android.systemui.qs.ui.composable.QuickSettings
+import com.android.systemui.qs.ui.composable.QuickSettings.SharedValues.MediaLandscapeTopOffset
+import com.android.systemui.qs.ui.composable.QuickSettings.SharedValues.MediaOffset.InQQS
 import com.android.systemui.res.R
 import com.android.systemui.scene.session.ui.composable.SaveableSession
 import com.android.systemui.scene.shared.model.Scenes
@@ -110,7 +115,7 @@ object Shade {
     object Dimensions {
         val ScrimCornerSize = 32.dp
         val HorizontalPadding = 16.dp
-        const val ScrimOverscrollLimit = 100f
+        val ScrimOverscrollLimit = 32.dp
         const val ScrimVisibilityThreshold = 5f
     }
 
@@ -235,6 +240,12 @@ private fun SceneScope.SingleShade(
     val shouldPunchHoleBehindScrim =
         layoutState.isTransitioningBetween(Scenes.Gone, Scenes.Shade) ||
             layoutState.isTransitioningBetween(Scenes.Lockscreen, Scenes.Shade)
+    // Media is visible and we are in landscape on a small height screen
+    val mediaInRow =
+        isMediaVisible &&
+            LocalWindowSizeClass.current.heightSizeClass == WindowHeightSizeClass.Compact
+    val mediaOffset by
+        animateSceneDpAsState(value = InQQS, key = MediaLandscapeTopOffset, canOverflow = false)
 
     Box(
         modifier =
@@ -274,23 +285,43 @@ private fun SceneScope.SingleShade(
                                 createBatteryMeterViewController = createBatteryMeterViewController,
                                 statusBarIconController = statusBarIconController,
                             )
-                            Box(Modifier.element(QuickSettings.Elements.QuickQuickSettings)) {
-                                QuickSettings(
-                                    viewModel.qsSceneAdapter,
-                                    { viewModel.qsSceneAdapter.qqsHeight },
-                                    isSplitShade = false,
-                                    squishiness = tileSquishiness,
+
+                            val content: @Composable () -> Unit = {
+                                Box(
+                                    Modifier.element(QuickSettings.Elements.QuickQuickSettings)
+                                        .layoutId(QSMediaMeasurePolicy.LayoutId.QS)
+                                ) {
+                                    QuickSettings(
+                                        viewModel.qsSceneAdapter,
+                                        { viewModel.qsSceneAdapter.qqsHeight },
+                                        isSplitShade = false,
+                                        squishiness = { tileSquishiness },
+                                    )
+                                }
+
+                                MediaCarousel(
+                                    isVisible = isMediaVisible,
+                                    mediaHost = mediaHost,
+                                    modifier =
+                                        Modifier.fillMaxWidth()
+                                            .layoutId(QSMediaMeasurePolicy.LayoutId.Media),
+                                    carouselController = mediaCarouselController,
                                 )
                             }
-
-                            MediaCarousel(
-                                isVisible = isMediaVisible,
-                                mediaHost = mediaHost,
-                                modifier = Modifier.fillMaxWidth(),
-                                carouselController = mediaCarouselController,
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
+                            val landscapeQsMediaMeasurePolicy = remember {
+                                QSMediaMeasurePolicy(
+                                    { viewModel.qsSceneAdapter.qqsHeight },
+                                    { mediaOffset.roundToPx() },
+                                )
+                            }
+                            if (mediaInRow) {
+                                Layout(
+                                    content = content,
+                                    measurePolicy = landscapeQsMediaMeasurePolicy,
+                                )
+                            } else {
+                                content()
+                            }
                         }
                     },
                     {
@@ -468,7 +499,7 @@ private fun SceneScope.SplitShade(
                                     heightProvider = { viewModel.qsSceneAdapter.qsHeight },
                                     isSplitShade = true,
                                     modifier = Modifier.fillMaxWidth(),
-                                    squishiness = tileSquishiness,
+                                    squishiness = { tileSquishiness },
                                 )
                             }
 

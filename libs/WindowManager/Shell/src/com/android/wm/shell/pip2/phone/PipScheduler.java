@@ -24,6 +24,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.view.SurfaceControl;
 import android.window.WindowContainerTransaction;
@@ -152,12 +153,43 @@ public class PipScheduler {
      * Animates resizing of the pinned stack given the duration.
      */
     public void scheduleAnimateResizePip(Rect toBounds) {
+        scheduleAnimateResizePip(toBounds, false /* configAtEnd */);
+    }
+
+    /**
+     * Animates resizing of the pinned stack given the duration.
+     *
+     * @param configAtEnd true if we are delaying config updates until the transition ends.
+     */
+    public void scheduleAnimateResizePip(Rect toBounds, boolean configAtEnd) {
         if (mPipTransitionState.mPipTaskToken == null || !mPipTransitionState.isInPip()) {
             return;
         }
         WindowContainerTransaction wct = new WindowContainerTransaction();
         wct.setBounds(mPipTransitionState.mPipTaskToken, toBounds);
+        if (configAtEnd) {
+            wct.deferConfigToTransitionEnd(mPipTransitionState.mPipTaskToken);
+        }
         mPipTransitionController.startResizeTransition(wct);
+    }
+
+    /**
+     * Signals to Core to finish the PiP resize transition.
+     * Note that we do not allow any actual WM Core changes at this point.
+     *
+     * @param configAtEnd true if we are waiting for config updates at the end of the transition.
+     */
+    public void scheduleFinishResizePip(boolean configAtEnd) {
+        SurfaceControl.Transaction tx = null;
+        if (configAtEnd) {
+            tx = new SurfaceControl.Transaction();
+            tx.addTransactionCommittedListener(mMainExecutor, () -> {
+                mPipTransitionState.setState(PipTransitionState.CHANGED_PIP_BOUNDS);
+            });
+        } else {
+            mPipTransitionState.setState(PipTransitionState.CHANGED_PIP_BOUNDS);
+        }
+        mPipTransitionController.finishTransition(tx);
     }
 
     /**
@@ -165,6 +197,16 @@ public class PipScheduler {
      * {@link WindowContainerTransaction}.
      */
     public void scheduleUserResizePip(Rect toBounds) {
+        scheduleUserResizePip(toBounds, 0f /* degrees */);
+    }
+
+    /**
+     * Directly perform a scaled matrix transformation on the leash. This will not perform any
+     * {@link WindowContainerTransaction}.
+     *
+     * @param degrees the angle to rotate the bounds to.
+     */
+    public void scheduleUserResizePip(Rect toBounds, float degrees) {
         if (toBounds.isEmpty()) {
             ProtoLog.w(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
                     "%s: Attempted to user resize PIP to empty bounds, aborting.", TAG);
@@ -172,7 +214,16 @@ public class PipScheduler {
         }
         SurfaceControl leash = mPipTransitionState.mPinnedTaskLeash;
         final SurfaceControl.Transaction tx = new SurfaceControl.Transaction();
-        tx.setPosition(leash, toBounds.left, toBounds.top);
+
+        Matrix transformTensor = new Matrix();
+        final float[] mMatrixTmp = new float[9];
+        final float scale = (float) toBounds.width() / mPipBoundsState.getBounds().width();
+
+        transformTensor.setScale(scale, scale);
+        transformTensor.postTranslate(toBounds.left, toBounds.top);
+        transformTensor.postRotate(degrees, toBounds.centerX(), toBounds.centerY());
+
+        tx.setMatrix(leash, transformTensor, mMatrixTmp);
         tx.apply();
     }
 }

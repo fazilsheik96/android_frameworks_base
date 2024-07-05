@@ -28,7 +28,6 @@ import android.annotation.Nullable;
 import android.graphics.Rect;
 import android.os.Message;
 import android.os.Trace;
-import android.util.Log;
 import android.util.Slog;
 import android.view.DisplayInfo;
 import android.window.DisplayAreaInfo;
@@ -195,6 +194,16 @@ public class DeferredDisplayUpdater implements DisplayUpdater {
             final Rect startBounds = new Rect(0, 0, mDisplayContent.mInitialDisplayWidth,
                     mDisplayContent.mInitialDisplayHeight);
             final int fromRotation = mDisplayContent.getRotation();
+            if (Flags.blastSyncNotificationShadeOnDisplaySwitch() && physicalDisplayUpdated) {
+                final WindowState notificationShade =
+                        mDisplayContent.getDisplayPolicy().getNotificationShade();
+                if (notificationShade != null && notificationShade.isVisible()
+                        && mDisplayContent.mAtmService.mKeyguardController.isKeyguardOrAodShowing(
+                                mDisplayContent.mDisplayId)) {
+                    Slog.i(TAG, notificationShade + " uses blast for display switch");
+                    notificationShade.mSyncMethodOverride = BLASTSyncEngine.METHOD_BLAST;
+                }
+            }
 
             mDisplayContent.mAtmService.deferWindowLayout();
             try {
@@ -391,6 +400,7 @@ public class DeferredDisplayUpdater implements DisplayUpdater {
                 || first.defaultModeId != second.defaultModeId
                 || first.userPreferredModeId != second.userPreferredModeId
                 || !Arrays.equals(first.supportedModes, second.supportedModes)
+                || !Arrays.equals(first.appsSupportedModes, second.appsSupportedModes)
                 || first.colorMode != second.colorMode
                 || !Arrays.equals(first.supportedColorModes, second.supportedColorModes)
                 || !Objects.equals(first.hdrCapabilities, second.hdrCapabilities)

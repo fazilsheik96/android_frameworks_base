@@ -247,13 +247,11 @@
     <!-- Padding for the bubble popup view contents. -->
     <dimen name="bubble_popup_padding">24dp</dimen>
     <!-- The size of the caption bar inset at the top of bubble bar expanded view. -->
-    <dimen name="bubble_bar_expanded_view_caption_height">32dp</dimen>
+    <dimen name="bubble_bar_expanded_view_caption_height">36dp</dimen>
     <!-- The width of the caption bar at the top of bubble bar expanded view. -->
-    <dimen name="bubble_bar_expanded_view_caption_width">128dp</dimen>
-    <!-- The height of the dots shown for the caption menu in the bubble bar expanded view.. -->
-    <dimen name="bubble_bar_expanded_view_caption_dot_size">4dp</dimen>
-    <!-- The spacing between the dots for the caption menu in the bubble bar expanded view.. -->
-    <dimen name="bubble_bar_expanded_view_caption_dot_spacing">4dp</dimen>
+    <dimen name="bubble_bar_expanded_view_caption_width">80dp</dimen>
+    <!-- The height of the handle shown for the caption menu in the bubble bar expanded view. -->
+    <dimen name="bubble_bar_expanded_view_handle_height">4dp</dimen>
     <!-- Width of the expanded bubble bar view shown when the bubble is expanded. -->
     <dimen name="bubble_bar_expanded_view_width">412dp</dimen>
     <!-- Minimum width of the bubble bar manage menu. -->
@@ -461,6 +459,12 @@
          start of this area. -->
     <dimen name="desktop_mode_customizable_caption_margin_end">152dp</dimen>
 
+    <!-- The default minimum allowed window width when resizing a window in desktop mode. -->
+    <dimen name="desktop_mode_minimum_window_width">386dp</dimen>
+
+    <!-- The default minimum allowed window height when resizing a window in desktop mode. -->
+    <dimen name="desktop_mode_minimum_window_height">352dp</dimen>
+
     <!-- The width of the maximize menu in desktop mode. -->
     <dimen name="desktop_mode_maximize_menu_width">228dp</dimen>
 
@@ -478,6 +482,12 @@
 
     <!-- The radius of the layout outline around the maximize menu buttons. -->
     <dimen name="desktop_mode_maximize_menu_buttons_outline_radius">6dp</dimen>
+    <!-- The stroke width of the outline around the maximize menu buttons. -->
+    <dimen name="desktop_mode_maximize_menu_buttons_outline_stroke">1dp</dimen>
+    <!-- The radius of the inner fill of the maximize menu buttons. -->
+    <dimen name="desktop_mode_maximize_menu_buttons_fill_radius">4dp</dimen>
+    <!-- The padding between the outline and fill of the maximize menu buttons. -->
+    <dimen name="desktop_mode_maximize_menu_buttons_fill_padding">4dp</dimen>
 
     <!-- The corner radius of the maximize menu. -->
     <dimen name="desktop_mode_maximize_menu_corner_radius">8dp</dimen>
@@ -551,6 +561,28 @@
     desktop task snapping to split size. The empty space between this and the top is to allow
     for corner drags without transition. -->
     <dimen name="desktop_mode_split_from_desktop_height">100dp</dimen>
+
+    <!-- The corner radius of a task that was dragged from fullscreen. -->
+    <dimen name="desktop_mode_dragged_task_radius">28dp</dimen>
+
+    <!-- The corner radius of the app chip, maximize and close button's ripple drawable -->
+    <dimen name="desktop_mode_header_buttons_ripple_radius">16dp</dimen>
+    <!-- The vertical inset to apply to the app chip's ripple drawable -->
+    <dimen name="desktop_mode_header_app_chip_ripple_inset_vertical">4dp</dimen>
+
+    <!-- The corner radius of the maximize button's ripple drawable -->
+    <dimen name="desktop_mode_header_maximize_ripple_radius">18dp</dimen>
+    <!-- The vertical inset to apply to the maximize button's ripple drawable -->
+    <dimen name="desktop_mode_header_maximize_ripple_inset_vertical">4dp</dimen>
+    <!-- The horizontal inset to apply to the maximize button's ripple drawable -->
+    <dimen name="desktop_mode_header_maximize_ripple_inset_horizontal">6dp</dimen>
+
+    <!-- The corner radius of the close button's ripple drawable -->
+    <dimen name="desktop_mode_header_close_ripple_radius">18dp</dimen>
+    <!-- The vertical inset to apply to the close button's ripple drawable -->
+    <dimen name="desktop_mode_header_close_ripple_inset_vertical">4dp</dimen>
+    <!-- The horizontal inset to apply to the close button's ripple drawable -->
+    <dimen name="desktop_mode_header_close_ripple_inset_horizontal">6dp</dimen>
 
     <!-- The acceptable area ratio of fg icon area/bg icon area, i.e. (72 x 72) / (108 x 108) -->
     <item type="dimen" format="float" name="splash_icon_enlarge_foreground_threshold">0.44</item>

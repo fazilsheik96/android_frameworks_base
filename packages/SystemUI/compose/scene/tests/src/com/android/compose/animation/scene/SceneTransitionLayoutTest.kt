@@ -21,6 +21,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -76,12 +77,13 @@ class SceneTransitionLayoutTest {
 
     /** The content under test. */
     @Composable
-    private fun TestContent() {
+    private fun TestContent(enableInterruptions: Boolean = true) {
         layoutState =
             updateSceneTransitionLayoutState(
                 currentScene,
                 { currentScene = it },
-                EmptyTestTransitions
+                EmptyTestTransitions,
+                enableInterruptions = enableInterruptions,
             )
 
         SceneTransitionLayout(
@@ -219,7 +221,7 @@ class SceneTransitionLayoutTest {
 
     @Test
     fun testSharedElement() {
-        rule.setContent { TestContent() }
+        rule.setContent { TestContent(enableInterruptions = false) }
 
         // In scene A, the shared element SharedFoo() is at the top end of the layout and has a size
         // of 50.dp.
@@ -329,6 +331,42 @@ class SceneTransitionLayoutTest {
             at(48) { rule.onNodeWithTag(layoutTag).assertSizeIsEqualTo(140.dp, 130.dp) }
             after { rule.onNodeWithTag(layoutTag).assertSizeIsEqualTo(120.dp, 140.dp) }
         }
+    }
+
+    @Test
+    fun layoutSizeDoesNotOverscrollWhenOverscrollIsSpecified() {
+        val state =
+            rule.runOnUiThread {
+                MutableSceneTransitionLayoutStateImpl(
+                    SceneA,
+                    transitions { overscroll(SceneB, Orientation.Horizontal) }
+                )
+            }
+
+        val layoutTag = "layout"
+        rule.setContent {
+            SceneTransitionLayout(state, Modifier.testTag(layoutTag)) {
+                scene(SceneA) { Box(Modifier.size(50.dp)) }
+                scene(SceneB) { Box(Modifier.size(70.dp)) }
+            }
+        }
+
+        // Overscroll on A at -100%: size should be interpolated given that there is no overscroll
+        // defined for scene A.
+        var progress by mutableStateOf(-1f)
+        rule.runOnIdle {
+            state.startTransition(transition(from = SceneA, to = SceneB, progress = { progress }))
+        }
+        rule.onNodeWithTag(layoutTag).assertSizeIsEqualTo(30.dp)
+
+        // Middle of the transition.
+        progress = 0.5f
+        rule.onNodeWithTag(layoutTag).assertSizeIsEqualTo(60.dp)
+
+        // Overscroll on B at 200%: size should not be interpolated given that there is an
+        // overscroll defined for scene B.
+        progress = 2f
+        rule.onNodeWithTag(layoutTag).assertSizeIsEqualTo(70.dp)
     }
 
     @Test
@@ -459,5 +497,31 @@ class SceneTransitionLayoutTest {
 
         assertThat(exception).hasMessageThat().contains(Back.toString())
         assertThat(exception).hasMessageThat().contains(SceneA.debugName)
+    }
+
+    @Test
+    fun sceneKeyInScope() {
+        val state = rule.runOnUiThread { MutableSceneTransitionLayoutState(SceneA) }
+
+        var keyInA: SceneKey? = null
+        var keyInB: SceneKey? = null
+        var keyInC: SceneKey? = null
+        rule.setContent {
+            SceneTransitionLayout(state) {
+                scene(SceneA) { keyInA = sceneKey }
+                scene(SceneB) { keyInB = sceneKey }
+                scene(SceneC) { keyInC = sceneKey }
+            }
+        }
+
+        // Snap to B then C to compose these scenes at least once.
+        rule.runOnUiThread { state.snapToScene(SceneB) }
+        rule.waitForIdle()
+        rule.runOnUiThread { state.snapToScene(SceneC) }
+        rule.waitForIdle()
+
+        assertThat(keyInA).isEqualTo(SceneA)
+        assertThat(keyInB).isEqualTo(SceneB)
+        assertThat(keyInC).isEqualTo(SceneC)
     }
 }

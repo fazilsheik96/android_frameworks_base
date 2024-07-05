@@ -24,25 +24,33 @@ import android.content.res.Resources
 import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import com.android.internal.logging.UiEventLogger
+import com.android.systemui.Flags.enableWidgetPickerSizeFilter
 import com.android.systemui.communal.domain.interactor.CommunalInteractor
+import com.android.systemui.communal.domain.interactor.CommunalSceneInteractor
 import com.android.systemui.communal.domain.interactor.CommunalSettingsInteractor
 import com.android.systemui.communal.domain.model.CommunalContentModel
 import com.android.systemui.communal.shared.log.CommunalUiEvent
+import com.android.systemui.communal.shared.model.EditModeState
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
+import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.log.LogBuffer
 import com.android.systemui.log.core.Logger
 import com.android.systemui.log.dagger.CommunalLog
 import com.android.systemui.media.controls.ui.view.MediaHost
 import com.android.systemui.media.dagger.MediaModule
 import com.android.systemui.res.R
+import com.android.systemui.util.kotlin.BooleanFlowOperators.allOf
 import javax.inject.Inject
 import javax.inject.Named
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 
@@ -51,17 +59,33 @@ import kotlinx.coroutines.withContext
 class CommunalEditModeViewModel
 @Inject
 constructor(
+    communalSceneInteractor: CommunalSceneInteractor,
     private val communalInteractor: CommunalInteractor,
     private val communalSettingsInteractor: CommunalSettingsInteractor,
+    keyguardTransitionInteractor: KeyguardTransitionInteractor,
     @Named(MediaModule.COMMUNAL_HUB) mediaHost: MediaHost,
     private val uiEventLogger: UiEventLogger,
     @CommunalLog logBuffer: LogBuffer,
     @Background private val backgroundDispatcher: CoroutineDispatcher,
-) : BaseCommunalViewModel(communalInteractor, mediaHost) {
+) : BaseCommunalViewModel(communalSceneInteractor, communalInteractor, mediaHost) {
 
     private val logger = Logger(logBuffer, "CommunalEditModeViewModel")
 
     override val isEditMode = true
+
+    override val isCommunalContentVisible: Flow<Boolean> =
+        communalSceneInteractor.editModeState.map { it == EditModeState.SHOWING }
+
+    /**
+     * Emits when edit mode activity can show, after we've transitioned to [KeyguardState.GONE]
+     * and edit mode is open.
+     */
+    val canShowEditMode =
+        allOf(
+                keyguardTransitionInteractor.isFinishedInState(KeyguardState.GONE),
+                communalInteractor.editModeOpen
+            )
+            .filter { it }
 
     // Only widgets are editable.
     override val communalContent: Flow<List<CommunalContentModel>> =
@@ -95,6 +119,8 @@ constructor(
         _reorderingWidgets.value = false
         uiEventLogger.log(CommunalUiEvent.COMMUNAL_HUB_REORDER_WIDGET_CANCEL)
     }
+
+    val isIdleOnCommunal: StateFlow<Boolean> = communalInteractor.isIdleOnCommunal
 
     /** Launch the widget picker activity using the given {@link ActivityResultLauncher}. */
     suspend fun onOpenWidgetPicker(
@@ -135,14 +161,16 @@ constructor(
 
         return Intent(Intent.ACTION_PICK).apply {
             setPackage(packageName)
-            putExtra(
-                EXTRA_DESIRED_WIDGET_WIDTH,
-                resources.getDimensionPixelSize(R.dimen.communal_widget_picker_desired_width)
-            )
-            putExtra(
-                EXTRA_DESIRED_WIDGET_HEIGHT,
-                resources.getDimensionPixelSize(R.dimen.communal_widget_picker_desired_height)
-            )
+            if (enableWidgetPickerSizeFilter()) {
+                putExtra(
+                    EXTRA_DESIRED_WIDGET_WIDTH,
+                    resources.getDimensionPixelSize(R.dimen.communal_widget_picker_desired_width)
+                )
+                putExtra(
+                    EXTRA_DESIRED_WIDGET_HEIGHT,
+                    resources.getDimensionPixelSize(R.dimen.communal_widget_picker_desired_height)
+                )
+            }
             putExtra(
                 AppWidgetManager.EXTRA_CATEGORY_FILTER,
                 communalSettingsInteractor.communalWidgetCategories.value
@@ -164,6 +192,11 @@ constructor(
 
     /** Sets whether edit mode is currently open */
     fun setEditModeOpen(isOpen: Boolean) = communalInteractor.setEditModeOpen(isOpen)
+
+    /** Called when exiting the edit mode, before transitioning back to the communal scene. */
+    fun cleanupEditModeState() {
+        communalSceneInteractor.setEditModeState(null)
+    }
 
     companion object {
         private const val TAG = "CommunalEditModeViewModel"

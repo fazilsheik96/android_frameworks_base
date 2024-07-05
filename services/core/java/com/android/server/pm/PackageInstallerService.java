@@ -1424,7 +1424,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         DevicePolicyManagerInternal dpmi =
                 LocalServices.getService(DevicePolicyManagerInternal.class);
         final boolean canSilentlyInstallPackage =
-                dpmi != null && dpmi.canSilentlyInstallPackage(callerPackageName, callingUid);
+                (dpmi != null && dpmi.canSilentlyInstallPackage(callerPackageName, callingUid))
+                        || PackageInstallerSession.isEmergencyInstallerEnabled(
+                        versionedPackage.getPackageName(), snapshot, userId, callingUid);
 
         final PackageDeleteObserverAdapter adapter = new PackageDeleteObserverAdapter(mContext,
                 statusReceiver, versionedPackage.getPackageName(),

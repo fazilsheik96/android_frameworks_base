@@ -52,9 +52,9 @@ import android.os.Handler;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
-import android.testing.AndroidTestingRunner;
 
 import androidx.annotation.VisibleForTesting;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
@@ -64,6 +64,7 @@ import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor;
+import com.android.systemui.monet.DynamicColors;
 import com.android.systemui.monet.Style;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
@@ -87,7 +88,7 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 
 @SmallTest
-@RunWith(AndroidTestingRunner.class)
+@RunWith(AndroidJUnit4.class)
 public class ThemeOverlayControllerTest extends SysuiTestCase {
 
     private static final int USER_SYSTEM = UserHandle.USER_SYSTEM;
@@ -201,7 +202,7 @@ public class ThemeOverlayControllerTest extends SysuiTestCase {
         verify(mWakefulnessLifecycle).addObserver(mWakefulnessLifecycleObserver.capture());
         verify(mDumpManager).registerDumpable(any(), any());
         verify(mDeviceProvisionedController).addCallback(mDeviceProvisionedListener.capture());
-        verify(mSecureSettings).registerContentObserverForUser(
+        verify(mSecureSettings).registerContentObserverForUserSync(
                 eq(Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES),
                 eq(false), mSettingsObserver.capture(), eq(UserHandle.USER_ALL)
         );
@@ -997,7 +998,7 @@ public class ThemeOverlayControllerTest extends SysuiTestCase {
         // All fixed colors were added once
         // All custom dynamic tokens added twice
         verify(dynamic, times(
-                DynamicColors.allDynamicColorsMapped(false).size() * 2
+                DynamicColors.getAllDynamicColorsMapped(false).size() * 2
                         + DynamicColors.getFixedColorsMapped(false).size()
                         + DynamicColors.getCustomColorsMapped(false).size() * 2)
         ).setResourceValue(any(String.class), eq(TYPE_INT_COLOR_ARGB8), anyInt(), eq(null));

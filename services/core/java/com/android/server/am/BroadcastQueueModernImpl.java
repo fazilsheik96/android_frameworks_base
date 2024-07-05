@@ -1336,7 +1336,8 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
     private class BroadcastAnrTimer extends AnrTimer<BroadcastProcessQueue> {
         BroadcastAnrTimer(@NonNull Handler handler) {
             super(Objects.requireNonNull(handler),
-                    MSG_DELIVERY_TIMEOUT, "BROADCAST_TIMEOUT", true);
+                    MSG_DELIVERY_TIMEOUT, "BROADCAST_TIMEOUT",
+                    new AnrTimer.Args().extend(true).freeze(true));
         }
 
         @Override
@@ -1454,11 +1455,12 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
         if (deliveryState == BroadcastRecord.DELIVERY_TIMEOUT) {
             r.anrCount++;
             if (app != null && !app.isDebugging()) {
-                mAnrTimer.accept(queue);
+                final AutoCloseable timer = mAnrTimer.accept(queue);
                 final String packageName = getReceiverPackageName(receiver);
                 final String className = getReceiverClassName(receiver);
-                mService.appNotResponding(queue.app,
-                        TimeoutRecord.forBroadcastReceiver(r.intent, packageName, className));
+                TimeoutRecord tr = TimeoutRecord.forBroadcastReceiver(r.intent, packageName,
+                        className).setExpiredTimer(timer);
+                mService.appNotResponding(queue.app, tr);
             } else {
                 mAnrTimer.discard(queue);
             }

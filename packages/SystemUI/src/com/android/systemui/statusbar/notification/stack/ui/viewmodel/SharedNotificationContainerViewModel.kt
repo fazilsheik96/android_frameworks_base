@@ -53,6 +53,7 @@ import com.android.systemui.keyguard.ui.viewmodel.GlanceableHubToLockscreenTrans
 import com.android.systemui.keyguard.ui.viewmodel.GoneToAodTransitionViewModel
 import com.android.systemui.keyguard.ui.viewmodel.GoneToDozingTransitionViewModel
 import com.android.systemui.keyguard.ui.viewmodel.GoneToDreamingTransitionViewModel
+import com.android.systemui.keyguard.ui.viewmodel.GoneToLockscreenTransitionViewModel
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenToDreamingTransitionViewModel
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenToGlanceableHubTransitionViewModel
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenToGoneTransitionViewModel
@@ -120,6 +121,7 @@ constructor(
     private val goneToAodTransitionViewModel: GoneToAodTransitionViewModel,
     private val goneToDozingTransitionViewModel: GoneToDozingTransitionViewModel,
     private val goneToDreamingTransitionViewModel: GoneToDreamingTransitionViewModel,
+    private val goneToLockscreenTransitionViewModel: GoneToLockscreenTransitionViewModel,
     private val lockscreenToDreamingTransitionViewModel: LockscreenToDreamingTransitionViewModel,
     private val lockscreenToGlanceableHubTransitionViewModel:
         LockscreenToGlanceableHubTransitionViewModel,
@@ -249,8 +251,14 @@ constructor(
                     state == GLANCEABLE_HUB
                 },
                 anyOf(
-                    keyguardTransitionInteractor.isInTransitionToState(GLANCEABLE_HUB),
-                    keyguardTransitionInteractor.isInTransitionFromState(GLANCEABLE_HUB),
+                    keyguardTransitionInteractor.isInTransition(
+                        edge = Edge.create(to = Scenes.Communal),
+                        edgeWithoutSceneContainer = Edge.create(to = GLANCEABLE_HUB)
+                    ),
+                    keyguardTransitionInteractor.isInTransition(
+                        edge = Edge.create(from = Scenes.Communal),
+                        edgeWithoutSceneContainer = Edge.create(from = GLANCEABLE_HUB)
+                    ),
                 ),
             ) { isOnGlanceableHub, transitioningToOrFromHub ->
                 isOnGlanceableHub || transitioningToOrFromHub
@@ -435,7 +443,7 @@ constructor(
                     anyOf(
                             *toFlowArray(statesForHiddenKeyguard) { state ->
                                 keyguardTransitionInteractor
-                                    .transitionStepsToState(state)
+                                    .transition(Edge.create(to = state))
                                     .map { it.value > 0f && it.transitionState == RUNNING }
                                     .onStart { emit(false) }
                             }
@@ -466,6 +474,9 @@ constructor(
         // All transition view models are mututally exclusive, and safe to merge
         val alphaTransitions =
             merge(
+                keyguardInteractor.dismissAlpha.dumpWhileCollecting(
+                    "keyguardInteractor.dismissAlpha"
+                ),
                 alternateBouncerToGoneTransitionViewModel.notificationAlpha(viewState),
                 aodToGoneTransitionViewModel.notificationAlpha(viewState),
                 aodToLockscreenTransitionViewModel.notificationAlpha,
@@ -475,7 +486,8 @@ constructor(
                 dreamingToLockscreenTransitionViewModel.lockscreenAlpha,
                 goneToAodTransitionViewModel.notificationAlpha,
                 goneToDreamingTransitionViewModel.lockscreenAlpha,
-                goneToDozingTransitionViewModel.lockscreenAlpha,
+                goneToDozingTransitionViewModel.notificationAlpha,
+                goneToLockscreenTransitionViewModel.lockscreenAlpha,
                 lockscreenToDreamingTransitionViewModel.lockscreenAlpha,
                 lockscreenToGoneTransitionViewModel.notificationAlpha(viewState),
                 lockscreenToOccludedTransitionViewModel.lockscreenAlpha,
@@ -492,24 +504,10 @@ constructor(
                 // These remaining cases handle alpha changes within an existing state, such as
                 // shade expansion or swipe to dismiss
                 combineTransform(
-                    isOnLockscreenWithoutShade,
                     isTransitioningToHiddenKeyguard,
-                    shadeCollapseFadeIn,
                     alphaForShadeAndQsExpansion,
-                    keyguardInteractor.dismissAlpha.dumpWhileCollecting(
-                        "keyguardInteractor.keyguardAlpha"
-                    ),
-                ) {
-                    isOnLockscreenWithoutShade,
-                    isTransitioningToHiddenKeyguard,
-                    shadeCollapseFadeIn,
-                    alphaForShadeAndQsExpansion,
-                    dismissAlpha ->
-                    if (isOnLockscreenWithoutShade) {
-                        if (!shadeCollapseFadeIn && dismissAlpha != null) {
-                            emit(dismissAlpha)
-                        }
-                    } else if (!isTransitioningToHiddenKeyguard) {
+                ) { isTransitioningToHiddenKeyguard, alphaForShadeAndQsExpansion ->
+                    if (!isTransitioningToHiddenKeyguard) {
                         emit(alphaForShadeAndQsExpansion)
                     }
                 },

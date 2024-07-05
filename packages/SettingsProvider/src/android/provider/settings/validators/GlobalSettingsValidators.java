@@ -51,6 +51,9 @@ public class GlobalSettingsValidators {
     public static final Map<String, Validator> VALIDATORS = new ArrayMap<>();
 
     static {
+        VALIDATORS.put(Global.CONNECTED_APPS_ALLOWED_PACKAGES, new PackageNameListValidator((",")));
+        VALIDATORS.put(Global.CONNECTED_APPS_DISALLOWED_PACKAGES,
+                new PackageNameListValidator((",")));
         VALIDATORS.put(Global.APPLY_RAMPING_RINGER, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.BUGREPORT_IN_POWER_MENU, BOOLEAN_VALIDATOR);
         VALIDATORS.put(
@@ -415,6 +418,7 @@ public class GlobalSettingsValidators {
         VALIDATORS.put(Global.Wearable.CHARGING_SOUNDS_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.BEDTIME_MODE, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.BEDTIME_HARD_MODE, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Global.Wearable.VIBRATE_FOR_ACTIVE_UNLOCK, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.DYNAMIC_COLOR_THEME_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.SCREENSHOT_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.UPGRADE_DATA_MIGRATION_STATUS,
@@ -450,5 +454,8 @@ public class GlobalSettingsValidators {
                 Global.Wearable.CONSISTENT_NOTIFICATION_BLOCKING_ENABLED, ANY_INTEGER_VALIDATOR);
         VALIDATORS.put(Global.Wearable.AUTO_BEDTIME_MODE, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.FORCE_ENABLE_PSS_PROFILING, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Global.ADD_USERS_WHEN_LOCKED, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Global.REMOVE_GUEST_ON_EXIT, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Global.USER_SWITCHER_ENABLED, BOOLEAN_VALIDATOR);
     }
 }

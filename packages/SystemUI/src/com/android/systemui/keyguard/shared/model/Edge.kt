@@ -23,11 +23,6 @@ import com.android.systemui.scene.shared.flag.SceneContainerFlag
 /**
  * Represents an edge either between two Keyguard Transition Framework states (KTF) or a KTF state
  * and a scene container scene. Passing [null] in either [from] or [to] indicates a wildcard.
- *
- * Wildcards are not allowed for transitions involving a scene. Use [sceneInteractor] directly
- * instead. Reason: [TransitionStep]s are not emitted for every edge leading into/out of a scene.
- * For example: Lockscreen -> Gone would be emitted as LOCKSCREEN -> UNDEFINED but Bouncer -> Gone
- * would not emit anything.
  */
 sealed class Edge {
 
@@ -59,17 +54,6 @@ sealed class Edge {
                     Please remove or port this edge to scene container."""
                         .trimIndent(),
                 )
-            } else if ((fromChanged && to == null) || (toChanged && from == null)) {
-                Log.e(
-                    TAG,
-                    """
-                    The edge ${from?.name} => ${to?.name} was automatically converted to
-                    ${mappedFrom?.name} => ${mappedTo?.name}. Wildcards are not allowed together
-                    with UNDEFINED because it will only be tracking edges leading in and out of
-                    the Lockscreen scene but miss others. Please remove or port this edge."""
-                        .trimIndent(),
-                    Exception()
-                )
             } else if (fromChanged || toChanged) {
                 Log.w(
                     TAG,
@@ -90,23 +74,45 @@ sealed class Edge {
         }
     }
 
+    fun isSceneWildcardEdge(): Boolean {
+        return when (this) {
+            is StateToState -> false
+            is SceneToState -> to == null
+            is StateToScene -> from == null
+        }
+    }
+
     data class StateToState(val from: KeyguardState?, val to: KeyguardState?) : Edge() {
+
         init {
             check(!(from == null && to == null)) { "to and from can't both be null" }
         }
     }
 
-    data class StateToScene(val from: KeyguardState, val to: SceneKey) : Edge()
+    data class StateToScene(val from: KeyguardState? = null, val to: SceneKey) : Edge()
 
-    data class SceneToState(val from: SceneKey, val to: KeyguardState) : Edge()
+    data class SceneToState(val from: SceneKey, val to: KeyguardState? = null) : Edge()
 
     companion object {
         private const val TAG = "Edge"
 
+        @JvmStatic
+        @JvmOverloads
         fun create(from: KeyguardState? = null, to: KeyguardState? = null) = StateToState(from, to)
 
-        fun create(from: KeyguardState, to: SceneKey) = StateToScene(from, to)
+        @JvmStatic
+        @JvmOverloads
+        fun create(from: KeyguardState? = null, to: SceneKey) = StateToScene(from, to)
 
-        fun create(from: SceneKey, to: KeyguardState) = SceneToState(from, to)
+        @JvmStatic
+        @JvmOverloads
+        fun create(from: SceneKey, to: KeyguardState? = null) = SceneToState(from, to)
+
+        /**
+         * This edge is a placeholder for when an edge needs to be passed but there is no edge for
+         * this flag configuration available. Usually for Scene <-> Scene edges with scene container
+         * enabled where these edges are managed by STL separately.
+         */
+        val INVALID = StateToState(UNDEFINED, UNDEFINED)
     }
 }

@@ -6110,6 +6110,15 @@ public final class Settings {
         public static final String POINTER_SPEED = "pointer_speed";
 
         /**
+         * Pointer scale setting.
+         *
+         * <p>This float value represents the scale by which the size of the pointer increases.
+         * @hide
+         */
+        @Readable
+        public static final String POINTER_SCALE = "pointer_scale";
+
+        /**
          * Touchpad pointer speed setting.
          * This is an integer value in a range between -7 and +7, so there are 15 possible values.
          *   -7 = slowest
@@ -6154,6 +6163,15 @@ public final class Settings {
          * @hide
          */
         public static final String TOUCHPAD_RIGHT_CLICK_ZONE = "touchpad_right_click_zone";
+
+        /**
+         * Pointer fill style, specified by
+         * {@link android.view.PointerIcon.PointerIconVectorStyleFill} constants.
+         *
+         * @hide
+         */
+        @Readable
+        public static final String POINTER_FILL_STYLE = "pointer_fill_style";
 
         /**
          * Whether lock-to-app will be triggered by long-press on recents.
@@ -6357,6 +6375,8 @@ public final class Settings {
             PRIVATE_SETTINGS.add(SIP_ADDRESS_ONLY);
             PRIVATE_SETTINGS.add(SIP_ASK_ME_EACH_TIME);
             PRIVATE_SETTINGS.add(POINTER_SPEED);
+            PRIVATE_SETTINGS.add(POINTER_FILL_STYLE);
+            PRIVATE_SETTINGS.add(POINTER_SCALE);
             PRIVATE_SETTINGS.add(LOCK_TO_APP_ENABLED);
             PRIVATE_SETTINGS.add(EGG_MODE);
             PRIVATE_SETTINGS.add(SHOW_BATTERY_PERCENT);
@@ -7449,6 +7469,12 @@ public final class Settings {
          */
         public static final String BLUETOOTH_LE_BROADCAST_PROGRAM_INFO =
                 "bluetooth_le_broadcast_program_info";
+
+        /**
+         * This is used by LocalBluetoothLeBroadcast to store the broadcast name.
+         * @hide
+         */
+        public static final String BLUETOOTH_LE_BROADCAST_NAME = "bluetooth_le_broadcast_name";
 
         /**
          * This is used by LocalBluetoothLeBroadcast to store the broadcast code.
@@ -12689,6 +12715,16 @@ public final class Settings {
          * @hide
          */
         public static final String CHARGE_OPTIMIZATION_MODE = "charge_optimization_mode";
+
+        /**
+         * String property which contains the package name of the contextual
+         * search provider supplied by individual OEM's
+         * R.string.config_defaultContextualSearchPackageName.
+         *
+         * @hide
+         */
+        @Readable
+        public static final String CONTEXTUAL_SEARCH_PACKAGE = "contextual_search_package";
     }
 
     /**
@@ -17055,6 +17091,28 @@ public final class Settings {
          */
         public static final String ENABLE_BACK_ANIMATION = "enable_back_animation";
 
+        /**
+         * An allow list of packages for which the user has granted the permission to communicate
+         * across profiles.
+         *
+         * @hide
+         */
+        @Readable
+        @FlaggedApi(android.app.admin.flags.Flags.FLAG_BACKUP_CONNECTED_APPS_SETTINGS)
+        public static final String CONNECTED_APPS_ALLOWED_PACKAGES =
+                "connected_apps_allowed_packages";
+
+        /**
+         * A block list of packages for which the user has denied the permission to communicate
+         * across profiles.
+         *
+         * @hide
+         */
+        @Readable
+        @FlaggedApi(android.app.admin.flags.Flags.FLAG_BACKUP_CONNECTED_APPS_SETTINGS)
+        public static final String CONNECTED_APPS_DISALLOWED_PACKAGES =
+                "connected_apps_disallowed_packages";
+
         /** @hide */ public static String zenModeToString(int mode) {
             if (mode == ZEN_MODE_IMPORTANT_INTERRUPTIONS) return "ZEN_MODE_IMPORTANT_INTERRUPTIONS";
             if (mode == ZEN_MODE_ALARMS) return "ZEN_MODE_ALARMS";
@@ -19949,6 +20007,12 @@ public final class Settings {
              * @hide
              */
             public static final String NETWORK_LOCATION_OPT_IN = "network_location_opt_in";
+
+            /**
+             * Whether haptics are enabled for Active Unlock on wear.
+             * @hide
+             */
+            public static final String VIBRATE_FOR_ACTIVE_UNLOCK = "wear_vibrate_for_active_unlock";
 
             /**
              * The custom foreground color.

@@ -172,7 +172,18 @@ final class ActivityManagerConstants extends ContentObserver {
      */
     static final String KEY_ENABLE_NEW_OOMADJ = "enable_new_oom_adj";
 
-    private static int DEFAULT_MAX_CACHED_PROCESSES = 1024;
+    /**
+     * Whether or not to enable the batching of OOM adjuster calls to LMKD
+     */
+    static final String KEY_ENABLE_BATCHING_OOM_ADJ = "enable_batching_oom_adj";
+
+    /**
+     * How long to wait before scheduling another follow-up oomAdjuster update for time based state.
+     */
+    static final String KEY_FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION =
+            "follow_up_oomadj_update_wait_duration";
+
+    private static final int DEFAULT_MAX_CACHED_PROCESSES = 1024;
     private static final boolean DEFAULT_PRIORITIZE_ALARM_BROADCASTS = true;
     private static final long DEFAULT_FGSERVICE_MIN_SHOWN_TIME = 2*1000;
     private static final long DEFAULT_FGSERVICE_MIN_REPORT_TIME = 3*1000;
@@ -234,7 +245,7 @@ final class ActivityManagerConstants extends ContentObserver {
 
     static final long DEFAULT_BACKGROUND_SETTLE_TIME = 60 * 1000;
     static final long DEFAULT_KILL_BG_RESTRICTED_CACHED_IDLE_SETTLE_TIME_MS = 60 * 1000;
-    static final boolean DEFAULT_KILL_BG_RESTRICTED_CACHED_IDLE = true;
+    static final boolean DEFAULT_KILL_BG_RESTRICTED_CACHED_IDLE = false;
 
     static final int DEFAULT_MAX_SERVICE_CONNECTIONS_PER_PROCESS = 3000;
 
@@ -245,6 +256,16 @@ final class ActivityManagerConstants extends ContentObserver {
      * The default value to {@link #KEY_ENABLE_NEW_OOMADJ}.
      */
     private static final boolean DEFAULT_ENABLE_NEW_OOM_ADJ = Flags.oomadjusterCorrectnessRewrite();
+
+    /**
+     * The default value to {@link #KEY_ENABLE_BATCHING_OOM_ADJ}.
+     */
+    private static final boolean DEFAULT_ENABLE_BATCHING_OOM_ADJ = Flags.batchingOomAdj();
+
+    /**
+     * The default value to {@link #KEY_FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION}.
+     */
+    private static final long DEFAULT_FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION = 1000L;
 
     /**
      * Same as {@link TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED}
@@ -860,6 +881,16 @@ final class ActivityManagerConstants extends ContentObserver {
     private ContentResolver mResolver;
     private final KeyValueListParser mParser = new KeyValueListParser(',');
 
+    public static BoostFramework mPerf = new BoostFramework();
+
+    static boolean USE_TRIM_SETTINGS = true;
+    static int COMPACTION_DELAY_MS = 300 * 1000;
+    static int EMPTY_APP_PERCENT = 50;
+    static int TRIM_EMPTY_PERCENT = 100;
+    static int TRIM_CACHE_PERCENT = 100;
+    static long TRIM_ENABLE_MEMORY = 1073741824;
+    public static boolean allowTrim() { return Process.getTotalMemory() < TRIM_ENABLE_MEMORY ; }
+
     private int mOverrideMaxCachedProcesses = -1;
     private final int mCustomizedMaxCachedProcesses;
 
@@ -873,16 +904,6 @@ final class ActivityManagerConstants extends ContentObserver {
     // processes and the number of those processes does not count against the cached
     // process limit. This will be initialized in the constructor.
     public int CUR_MAX_CACHED_PROCESSES;
-
-    public static BoostFramework mPerf = new BoostFramework();
-
-    static boolean USE_TRIM_SETTINGS = true;
-    static int COMPACTION_DELAY_MS = 300 * 1000;
-    static int EMPTY_APP_PERCENT = 50;
-    static int TRIM_EMPTY_PERCENT = 100;
-    static int TRIM_CACHE_PERCENT = 100;
-    static long TRIM_ENABLE_MEMORY = 1073741824;
-    public static boolean allowTrim() { return Process.getTotalMemory() < TRIM_ENABLE_MEMORY ; }
 
     // The maximum number of empty app processes we will let sit around.  This will be
     // initialized in the constructor.
@@ -1149,6 +1170,13 @@ final class ActivityManagerConstants extends ContentObserver {
     /** @see #KEY_ENABLE_NEW_OOMADJ */
     public boolean ENABLE_NEW_OOMADJ = DEFAULT_ENABLE_NEW_OOM_ADJ;
 
+    /** @see #KEY_ENABLE_BATCHING_OOM_ADJ */
+    public boolean ENABLE_BATCHING_OOM_ADJ = DEFAULT_ENABLE_BATCHING_OOM_ADJ;
+
+    /** @see #KEY_FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION */
+    public long FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION =
+            DEFAULT_FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION;
+
     /**
      * Indicates whether PSS profiling in AppProfiler is disabled or not.
      */
@@ -1359,6 +1387,9 @@ final class ActivityManagerConstants extends ContentObserver {
                             case KEY_PROC_STATE_DEBUG_UIDS:
                                 updateProcStateDebugUids();
                                 break;
+                            case KEY_FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION:
+                                updateFollowUpOomAdjUpdateWaitDuration();
+                                break;
                             default:
                                 updateFGSPermissionEnforcementFlagsIfNecessary(name);
                                 break;
@@ -1452,10 +1483,6 @@ final class ActivityManagerConstants extends ContentObserver {
 
     private void updatePerfConfigConstants() {
         if (mPerf != null) {
-          // Maximum number of cached processes we will allow.
-            DEFAULT_MAX_CACHED_PROCESSES = MAX_CACHED_PROCESSES = CUR_MAX_CACHED_PROCESSES = Integer.valueOf(
-                                                 mPerf.perfGetProp("ro.vendor.qti.sys.fw.bg_apps_limit", "32"));
-
             // Wait time after bootup to trigger system compaction
             COMPACTION_DELAY_MS = Integer.valueOf(mPerf.perfGetProp("ro.vendor.qti.sys.fw.compaction_delay_sec", "300")) * 1000;
 
@@ -1465,13 +1492,6 @@ final class ActivityManagerConstants extends ContentObserver {
             TRIM_EMPTY_PERCENT = Integer.valueOf(mPerf.perfGetProp("ro.vendor.qti.sys.fw.trim_empty_percent", "100"));
             TRIM_CACHE_PERCENT = Integer.valueOf(mPerf.perfGetProp("ro.vendor.qti.sys.fw.trim_cache_percent", "100"));
             TRIM_ENABLE_MEMORY = Long.valueOf(mPerf.perfGetProp("ro.vendor.qti.sys.fw.trim_enable_memory", "1073741824"));
-
-            // The maximum number of empty app processes we will let sit around.
-            CUR_MAX_EMPTY_PROCESSES = computeEmptyProcessLimit(CUR_MAX_CACHED_PROCESSES);
-
-            final int rawEmptyProcesses = computeEmptyProcessLimit(MAX_CACHED_PROCESSES);
-            CUR_TRIM_EMPTY_PROCESSES = computeTrimEmptyApps(rawEmptyProcesses);
-            CUR_TRIM_CACHED_PROCESSES = computeTrimCachedApps(rawEmptyProcesses, MAX_CACHED_PROCESSES);
         }
     }
 
@@ -1519,23 +1539,8 @@ final class ActivityManagerConstants extends ContentObserver {
     private void loadNativeBootDeviceConfigConstants() {
         ENABLE_NEW_OOMADJ = getDeviceConfigBoolean(KEY_ENABLE_NEW_OOMADJ,
                 DEFAULT_ENABLE_NEW_OOM_ADJ);
-    }
-
-    public void setOverrideMaxCachedProcesses(int value) {
-        mOverrideMaxCachedProcesses = value;
-        updateMaxCachedProcesses();
-    }
-
-    public int getOverrideMaxCachedProcesses() {
-        return mOverrideMaxCachedProcesses;
-    }
-
-    public static int computeEmptyProcessLimit(int totalProcessLimit) {
-        if(USE_TRIM_SETTINGS && allowTrim()) {
-            return totalProcessLimit*EMPTY_APP_PERCENT/100;
-        } else {
-            return totalProcessLimit/2;
-        }
+        ENABLE_BATCHING_OOM_ADJ = getDeviceConfigBoolean(KEY_ENABLE_BATCHING_OOM_ADJ,
+                DEFAULT_ENABLE_BATCHING_OOM_ADJ);
     }
 
     public static int computeTrimEmptyApps(int rawMaxEmptyProcesses) {
@@ -1552,6 +1557,19 @@ final class ActivityManagerConstants extends ContentObserver {
         } else {
             return (totalProcessLimit-rawMaxEmptyProcesses)/3;
         }
+    }
+
+    public void setOverrideMaxCachedProcesses(int value) {
+        mOverrideMaxCachedProcesses = value;
+        updateMaxCachedProcesses();
+    }
+
+    public int getOverrideMaxCachedProcesses() {
+        return mOverrideMaxCachedProcesses;
+    }
+
+    public static int computeEmptyProcessLimit(int totalProcessLimit) {
+        return totalProcessLimit/2;
     }
 
     @Override
@@ -2070,12 +2088,9 @@ final class ActivityManagerConstants extends ContentObserver {
         }
         CUR_MAX_EMPTY_PROCESSES = computeEmptyProcessLimit(CUR_MAX_CACHED_PROCESSES);
 
-        // Note the trim levels do NOT depend on the override process limit, we want
-        // to consider the same level the point where we do trimming regardless of any
-        // additional enforced limit.
         final int rawMaxEmptyProcesses = computeEmptyProcessLimit(
                 Integer.min(CUR_MAX_CACHED_PROCESSES, MAX_CACHED_PROCESSES));
-        CUR_TRIM_EMPTY_PROCESSES = computeTrimEmptyApps(rawMaxEmptyProcesses);
+        CUR_TRIM_EMPTY_PROCESSES = rawMaxEmptyProcesses / 2;
         CUR_TRIM_CACHED_PROCESSES = (Integer.min(CUR_MAX_CACHED_PROCESSES, MAX_CACHED_PROCESSES)
                     - rawMaxEmptyProcesses) / 3;
     }
@@ -2294,6 +2309,13 @@ final class ActivityManagerConstants extends ContentObserver {
             DEFAULT_ENABLE_NEW_OOM_ADJ);
     }
 
+    private void updateFollowUpOomAdjUpdateWaitDuration() {
+        FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION = DeviceConfig.getLong(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION,
+                DEFAULT_FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION);
+    }
+
     private void updateFGSPermissionEnforcementFlagsIfNecessary(@NonNull String name) {
         ForegroundServiceTypePolicy.getDefaultPolicy()
             .updatePermissionEnforcementFlagIfNecessary(name);
@@ -2309,6 +2331,13 @@ final class ActivityManagerConstants extends ContentObserver {
         PSS_TO_RSS_THRESHOLD_MODIFIER = DeviceConfig.getFloat(
                 DeviceConfig.NAMESPACE_ACTIVITY_MANAGER, KEY_PSS_TO_RSS_THRESHOLD_MODIFIER,
                 mDefaultPssToRssThresholdModifier);
+    }
+
+    private void updateEnableBatchingOomAdj() {
+        ENABLE_BATCHING_OOM_ADJ = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER_NATIVE_BOOT,
+                KEY_ENABLE_BATCHING_OOM_ADJ,
+                DEFAULT_ENABLE_BATCHING_OOM_ADJ);
     }
 
     boolean shouldDebugUidForProcState(int uid) {
@@ -2539,6 +2568,9 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.print("  "); pw.print(KEY_MAX_PREVIOUS_TIME);
         pw.print("="); pw.println(MAX_PREVIOUS_TIME);
 
+        pw.print("  "); pw.print(KEY_ENABLE_BATCHING_OOM_ADJ);
+        pw.print("="); pw.println(ENABLE_BATCHING_OOM_ADJ);
+
         pw.println();
         if (mOverrideMaxCachedProcesses >= 0) {
             pw.print("  mOverrideMaxCachedProcesses="); pw.println(mOverrideMaxCachedProcesses);
@@ -2551,6 +2583,9 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.print("  OOMADJ_UPDATE_QUICK="); pw.println(OOMADJ_UPDATE_QUICK);
         pw.print("  ENABLE_WAIT_FOR_FINISH_ATTACH_APPLICATION=");
         pw.println(mEnableWaitForFinishAttachApplication);
+
+        pw.print("  "); pw.print(KEY_FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION);
+        pw.print("="); pw.println(FOLLOW_UP_OOMADJ_UPDATE_WAIT_DURATION);
 
         synchronized (mProcStateDebugUids) {
             pw.print("  "); pw.print(KEY_PROC_STATE_DEBUG_UIDS);

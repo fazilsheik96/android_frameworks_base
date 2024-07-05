@@ -1016,6 +1016,10 @@ class WindowTestsBase extends SystemServiceTestsBase {
             public void topFocusedWindowChanged(ComponentName component,
                     int requestedVisibleTypes) {
             }
+
+            @Override
+            public void setImeInputTargetRequestedVisibility(boolean visible) {
+            }
         };
     }
 
@@ -1785,8 +1789,6 @@ class WindowTestsBase extends SystemServiceTestsBase {
     static class TestStartingWindowOrganizer extends WindowOrganizerTests.StubOrganizer {
         private final ActivityTaskManagerService mAtm;
         private final WindowManagerService mWMService;
-
-        private Runnable mRunnableWhenAddingSplashScreen;
         private final SparseArray<IBinder> mTaskAppMap = new SparseArray<>();
         private final HashMap<IBinder, WindowState> mAppWindowMap = new HashMap<>();
 
@@ -1794,10 +1796,6 @@ class WindowTestsBase extends SystemServiceTestsBase {
             mAtm = service;
             mWMService = mAtm.mWindowManager;
             mAtm.mTaskOrganizerController.registerTaskOrganizer(this);
-        }
-
-        void setRunnableWhenAddingSplashScreen(Runnable r) {
-            mRunnableWhenAddingSplashScreen = r;
         }
 
         @Override
@@ -1813,10 +1811,6 @@ class WindowTestsBase extends SystemServiceTestsBase {
                 activity.mStartingWindow = window;
                 mAppWindowMap.put(info.appToken, window);
                 mTaskAppMap.put(info.taskInfo.taskId, info.appToken);
-            }
-            if (mRunnableWhenAddingSplashScreen != null) {
-                mRunnableWhenAddingSplashScreen.run();
-                mRunnableWhenAddingSplashScreen = null;
             }
         }
         @Override

@@ -2617,6 +2617,9 @@ public class ApplicationPackageManager extends PackageManager {
         try {
             Objects.requireNonNull(packageName);
             return mPM.isAppArchivable(packageName, new UserHandle(getUserId()));
+        } catch (ParcelableException e) {
+            e.maybeRethrow(NameNotFoundException.class);
+            throw new RuntimeException(e);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4085,6 +4088,38 @@ public class ApplicationPackageManager extends PackageManager {
         ApkAssets apkAssets = null;
         try {
             apkAssets = ApkAssets.loadFromPath(apkFile.getAbsolutePath());
+            return apkAssets.openXml(ApkLiteParseUtils.ANDROID_MANIFEST_FILENAME);
+        } finally {
+            if (apkAssets != null) {
+                try {
+                    apkAssets.close();
+                } catch (Throwable ignored) {
+                    Log.w(TAG, "Failed to close apkAssets", ignored);
+                }
+            }
+        }
+    }
+
+
+    @Override
+    public <T> T parseAndroidManifest(@NonNull ParcelFileDescriptor apkFileDescriptor,
+            @NonNull Function<XmlResourceParser, T> parserFunction) throws IOException {
+        Objects.requireNonNull(apkFileDescriptor, "apkFileDescriptor cannot be null");
+        Objects.requireNonNull(parserFunction, "parserFunction cannot be null");
+        try (XmlResourceParser xmlResourceParser = getAndroidManifestParser(apkFileDescriptor)) {
+            return parserFunction.apply(xmlResourceParser);
+        } catch (IOException e) {
+            Log.w(TAG, "Failed to get the android manifest parser", e);
+            throw e;
+        }
+    }
+
+    private static XmlResourceParser getAndroidManifestParser(@NonNull ParcelFileDescriptor fd)
+            throws IOException {
+        ApkAssets apkAssets = null;
+        try {
+            apkAssets = ApkAssets.loadFromFd(
+                    fd.getFileDescriptor(), fd.toString(), /* flags= */ 0 , /* assets= */null);
             return apkAssets.openXml(ApkLiteParseUtils.ANDROID_MANIFEST_FILENAME);
         } finally {
             if (apkAssets != null) {

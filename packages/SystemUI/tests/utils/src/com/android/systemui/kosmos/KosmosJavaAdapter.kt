@@ -27,8 +27,10 @@ import com.android.systemui.bouncer.domain.interactor.simBouncerInteractor
 import com.android.systemui.classifier.falsingCollector
 import com.android.systemui.common.ui.data.repository.fakeConfigurationRepository
 import com.android.systemui.common.ui.domain.interactor.configurationInteractor
-import com.android.systemui.communal.data.repository.fakeCommunalRepository
+import com.android.systemui.communal.data.repository.fakeCommunalSceneRepository
 import com.android.systemui.communal.domain.interactor.communalInteractor
+import com.android.systemui.communal.domain.interactor.communalSceneInteractor
+import com.android.systemui.communal.ui.viewmodel.communalTransitionViewModel
 import com.android.systemui.concurrency.fakeExecutor
 import com.android.systemui.deviceentry.domain.interactor.deviceEntryInteractor
 import com.android.systemui.deviceentry.domain.interactor.deviceEntryUdfpsInteractor
@@ -49,24 +51,38 @@ import com.android.systemui.plugins.statusbar.statusBarStateController
 import com.android.systemui.power.data.repository.fakePowerRepository
 import com.android.systemui.power.domain.interactor.powerInteractor
 import com.android.systemui.scene.domain.interactor.sceneInteractor
+import com.android.systemui.scene.domain.startable.scrimStartable
 import com.android.systemui.scene.sceneContainerConfig
 import com.android.systemui.scene.shared.model.sceneDataSource
 import com.android.systemui.settings.brightness.domain.interactor.brightnessMirrorShowingInteractor
 import com.android.systemui.shade.data.repository.shadeRepository
 import com.android.systemui.shade.domain.interactor.shadeInteractor
 import com.android.systemui.shade.shadeController
+import com.android.systemui.statusbar.chips.ui.viewmodel.ongoingActivityChipsViewModel
+import com.android.systemui.statusbar.notification.stack.domain.interactor.headsUpNotificationInteractor
 import com.android.systemui.statusbar.notification.stack.domain.interactor.sharedNotificationContainerInteractor
+import com.android.systemui.statusbar.phone.scrimController
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.fakeMobileConnectionsRepository
+import com.android.systemui.statusbar.pipeline.wifi.data.repository.fakeWifiRepository
+import com.android.systemui.statusbar.pipeline.wifi.domain.interactor.wifiInteractor
 import com.android.systemui.statusbar.policy.data.repository.fakeDeviceProvisioningRepository
 import com.android.systemui.statusbar.policy.domain.interactor.deviceProvisioningInteractor
 import com.android.systemui.util.time.systemClock
+import com.android.systemui.volume.domain.interactor.volumeDialogInteractor
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 
-/** Helper for using [Kosmos] from Java. */
+/**
+ * Helper for using [Kosmos] from Java.
+ *
+ * If your test class extends [SysuiTestCase], you may use the secondary constructor so that
+ * [Kosmos.applicationContext] and [Kosmos.testCase] are automatically set.
+ */
 @Deprecated("Please convert your test to Kotlin and use [Kosmos] directly.")
-class KosmosJavaAdapter(
-    testCase: SysuiTestCase,
-) {
+class KosmosJavaAdapter() {
+    constructor(testCase: SysuiTestCase) : this() {
+        kosmos.applicationContext = testCase.context
+        kosmos.testCase = testCase
+    }
 
     private val kosmos = Kosmos()
 
@@ -77,7 +93,9 @@ class KosmosJavaAdapter(
     val configurationRepository by lazy { kosmos.fakeConfigurationRepository }
     val configurationInteractor by lazy { kosmos.configurationInteractor }
     val bouncerRepository by lazy { kosmos.bouncerRepository }
-    val communalRepository by lazy { kosmos.fakeCommunalRepository }
+    val communalRepository by lazy { kosmos.fakeCommunalSceneRepository }
+    val communalTransitionViewModel by lazy { kosmos.communalTransitionViewModel }
+    val headsUpNotificationInteractor by lazy { kosmos.headsUpNotificationInteractor }
     val keyguardRepository by lazy { kosmos.fakeKeyguardRepository }
     val keyguardBouncerRepository by lazy { kosmos.fakeKeyguardBouncerRepository }
     val keyguardInteractor by lazy { kosmos.keyguardInteractor }
@@ -97,6 +115,7 @@ class KosmosJavaAdapter(
     val deviceEntryUdfpsInteractor by lazy { kosmos.deviceEntryUdfpsInteractor }
     val deviceUnlockedInteractor by lazy { kosmos.deviceUnlockedInteractor }
     val communalInteractor by lazy { kosmos.communalInteractor }
+    val communalSceneInteractor by lazy { kosmos.communalSceneInteractor }
     val sceneContainerPlugin by lazy { kosmos.sceneContainerPlugin }
     val deviceProvisioningInteractor by lazy { kosmos.deviceProvisioningInteractor }
     val fakeDeviceProvisioningRepository by lazy { kosmos.fakeDeviceProvisioningRepository }
@@ -116,9 +135,11 @@ class KosmosJavaAdapter(
     val shadeController by lazy { kosmos.shadeController }
     val shadeRepository by lazy { kosmos.shadeRepository }
     val shadeInteractor by lazy { kosmos.shadeInteractor }
+    val wifiInteractor by lazy { kosmos.wifiInteractor }
+    val fakeWifiRepository by lazy { kosmos.fakeWifiRepository }
+    val volumeDialogInteractor by lazy { kosmos.volumeDialogInteractor }
 
-    init {
-        kosmos.applicationContext = testCase.context
-        kosmos.testCase = testCase
-    }
+    val ongoingActivityChipsViewModel by lazy { kosmos.ongoingActivityChipsViewModel }
+    val scrimController by lazy { kosmos.scrimController }
+    val scrimStartable by lazy { kosmos.scrimStartable }
 }

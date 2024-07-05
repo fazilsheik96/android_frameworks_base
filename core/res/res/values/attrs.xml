@@ -606,11 +606,9 @@
         <!-- ============ -->
        <eat-comment />
        <attr name="floatingToolbarCloseDrawable" format="reference" />
-       <attr name="floatingToolbarForegroundColor" format="reference|color" />
        <attr name="floatingToolbarItemBackgroundBorderlessDrawable" format="reference" />
        <attr name="floatingToolbarItemBackgroundDrawable" format="reference" />
        <attr name="floatingToolbarOpenDrawable" format="reference" />
-       <attr name="floatingToolbarPopupBackgroundDrawable" format="reference" />
        <attr name="floatingToolbarDividerColor" format="reference" />
 
         <!-- ============ -->
@@ -2589,6 +2587,8 @@
                  <li>The framework will set {@link android.R.attr#statusBarColor},
                  {@link android.R.attr#navigationBarColor}, and
                  {@link android.R.attr#navigationBarDividerColor} to transparent.
+                 <li>The frameworks will send Configuration no longer considering system insets.
+                 The Configuration will be stable regardless of the system insets change.
              </ul>
 
              <p>If this is true, the edge-to-edge enforcement won't be applied. However, this
@@ -9698,6 +9698,12 @@
         <attr name="hotSpotX" format="dimension" />
         <!-- Y coordinate of the icon hot spot. -->
         <attr name="hotSpotY" format="dimension" />
+    </declare-styleable>
+
+    <!-- @hide -->
+    <declare-styleable name="PointerIconVectorTheme">
+        <attr name="pointerIconVectorFill" format="color" />
+        <attr name="pointerIconVectorFillInverse" format="color" />
     </declare-styleable>
 
     <declare-styleable name="Storage">

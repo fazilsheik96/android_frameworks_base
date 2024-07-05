@@ -255,6 +255,7 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import javax.inject.Inject;
@@ -455,6 +456,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     private final ShadeHeadsUpTrackerImpl mShadeHeadsUpTracker = new ShadeHeadsUpTrackerImpl();
     private final ShadeFoldAnimatorImpl mShadeFoldAnimator = new ShadeFoldAnimatorImpl();
 
+    @VisibleForTesting
+    Set<Animator> mTestSetOfAnimatorsUsed;
+
     private boolean mShowIconsWhenExpanded;
     private int mIndicationBottomPadding;
     private int mAmbientIndicationBottomPadding;
@@ -539,8 +543,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     private final KeyguardMediaController mKeyguardMediaController;
 
     private final Optional<KeyguardUnfoldTransition> mKeyguardUnfoldTransition;
-    private final Optional<NotificationPanelUnfoldAnimationController>
-            mNotificationPanelUnfoldAnimationController;
 
     /** The drag distance required to fully expand the split shade. */
     private int mSplitShadeFullTransitionDistance;
@@ -968,8 +970,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
         mKeyguardUnfoldTransition = unfoldComponent.map(
                 SysUIUnfoldComponent::getKeyguardUnfoldTransition);
-        mNotificationPanelUnfoldAnimationController = unfoldComponent.map(
-                SysUIUnfoldComponent::getNotificationPanelUnfoldAnimationController);
 
         updateUserSwitcherFlags();
         mKeyguardBottomAreaViewModel = keyguardBottomAreaViewModel;
@@ -1135,9 +1135,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mShadeHeaderController.init();
         mShadeHeaderController.setShadeCollapseAction(
                 () -> collapse(/* delayed= */ false , /* speedUpFactor= */ 1.0f));
-        mKeyguardUnfoldTransition.ifPresent(u -> u.setup(mView));
-        mNotificationPanelUnfoldAnimationController.ifPresent(controller ->
-                controller.setup(mNotificationContainerParent));
 
         // Dreaming->Lockscreen
         collectFlow(
@@ -1515,9 +1512,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         if (!KeyguardBottomAreaRefactor.isEnabled()) {
             setKeyguardBottomAreaVisibility(mBarState, false);
         }
-
-        mKeyguardUnfoldTransition.ifPresent(u -> u.setup(mView));
-        mNotificationPanelUnfoldAnimationController.ifPresent(u -> u.setup(mView));
     }
 
     private void attachSplitShadeMediaPlayerContainer(FrameLayout container) {
@@ -1805,6 +1799,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
     private void updateKeyguardStatusViewAlignment(boolean animate) {
         boolean shouldBeCentered = shouldKeyguardStatusViewBeCentered();
+        mKeyguardUnfoldTransition.ifPresent(t -> t.setStatusViewCentered(shouldBeCentered));
         if (MigrateClocksToBlueprint.isEnabled()) {
             mKeyguardInteractor.setClockShouldBeCentered(shouldBeCentered);
             return;
@@ -1812,7 +1807,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         ConstraintLayout layout = mNotificationContainerParent;
         mKeyguardStatusViewController.updateAlignment(
                 layout, mSplitShadeEnabled, shouldBeCentered, animate);
-        mKeyguardUnfoldTransition.ifPresent(t -> t.setStatusViewCentered(shouldBeCentered));
     }
 
     private boolean shouldKeyguardStatusViewBeCentered() {
@@ -4161,6 +4155,8 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     }
 
     private void setAnimator(ValueAnimator animator) {
+        // TODO(b/341163515): Should we clean up the old animator?
+        registerAnimatorForTest(animator);
         mHeightAnimator = animator;
         if (animator == null && mPanelUpdateWhenAnimatorEnds) {
             mPanelUpdateWhenAnimatorEnds = false;
@@ -4205,6 +4201,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     private ValueAnimator createHeightAnimator(float targetHeight, float overshootAmount) {
         float startExpansion = mOverExpansion;
         ValueAnimator animator = ValueAnimator.ofFloat(mExpandedHeight, targetHeight);
+        registerAnimatorForTest(animator);
         animator.addUpdateListener(
                 animation -> {
                     if (overshootAmount > 0.0f
@@ -4220,6 +4217,12 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                     setExpandedHeightInternal((float) animation.getAnimatedValue());
                 });
         return animator;
+    }
+
+    private void registerAnimatorForTest(Animator animator) {
+        if (mTestSetOfAnimatorsUsed != null && animator != null) {
+            mTestSetOfAnimatorsUsed.add(animator);
+        }
     }
 
     /** Update the visibility of {@link NotificationPanelView} if necessary. */

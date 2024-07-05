@@ -64,6 +64,7 @@ import com.android.internal.inputmethod.IInputMethodClient;
 import com.android.internal.inputmethod.IRemoteAccessibilityInputConnection;
 import com.android.internal.inputmethod.IRemoteInputConnection;
 import com.android.internal.inputmethod.InputBindResult;
+import com.android.internal.inputmethod.InputMethodInfoSafeList;
 import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.internal.inputmethod.StartInputFlags;
 import com.android.internal.inputmethod.StartInputReason;
@@ -139,14 +140,25 @@ final class ZeroJankProxy implements IInputMethodManagerImpl.Callback {
     }
 
     @Override
-    public List<InputMethodInfo> getInputMethodList(
+    public InputMethodInfoSafeList getInputMethodList(
             int userId, @DirectBootAwareness int directBootAwareness) {
         return mInner.getInputMethodList(userId, directBootAwareness);
     }
 
     @Override
-    public List<InputMethodInfo> getEnabledInputMethodList(int userId) {
+    public InputMethodInfoSafeList getEnabledInputMethodList(int userId) {
         return mInner.getEnabledInputMethodList(userId);
+    }
+
+    @Override
+    public List<InputMethodInfo> getInputMethodListLegacy(
+            int userId, @DirectBootAwareness int directBootAwareness) {
+        return mInner.getInputMethodListLegacy(userId, directBootAwareness);
+    }
+
+    @Override
+    public List<InputMethodInfo> getEnabledInputMethodListLegacy(int userId) {
+        return mInner.getEnabledInputMethodListLegacy(userId);
     }
 
     @Override
@@ -236,6 +248,17 @@ final class ZeroJankProxy implements IInputMethodManagerImpl.Callback {
                     unverifiedTargetSdkVersion,
                     userId, imeDispatcher);
             sendOnStartInputResult(client, result, startInputSeq);
+            // For first-time client bind, MSG_BIND should arrive after MSG_START_INPUT_RESULT.
+            if (result.result == InputBindResult.ResultCode.SUCCESS_WAITING_IME_SESSION) {
+                InputMethodManagerService imms = ((InputMethodManagerService) mInner);
+                synchronized (ImfLock.class) {
+                    ClientState cs = imms.getClientStateLocked(client);
+                    if (cs != null) {
+                        imms.requestClientSessionLocked(cs);
+                        imms.requestClientSessionForAccessibilityLocked(cs);
+                    }
+                }
+            }
         });
     }
 

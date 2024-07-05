@@ -133,6 +133,7 @@ import android.window.ClientWindowFrames;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.os.BackgroundThread;
 import com.android.internal.policy.ForceShowNavBarSettingsObserver;
 import com.android.internal.policy.GestureNavigationSettingsObserver;
 import com.android.internal.policy.ScreenDecorationsUtils;
@@ -150,6 +151,7 @@ import com.android.server.policy.WindowManagerPolicy.ScreenOnListener;
 import com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.wallpaper.WallpaperManagerInternal;
+import com.android.wm.shell.Flags;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -823,6 +825,7 @@ public class DisplayPolicy {
                 mService.mHighRefreshRateDenylist);
 
         mGestureNavigationSettingsObserver = new GestureNavigationSettingsObserver(mHandler,
+                BackgroundThread.getHandler(),
                 mContext, () -> {
             synchronized (mLock) {
                 onConfigurationChanged();
@@ -1956,7 +1959,8 @@ public class DisplayPolicy {
         updateConfigurationAndScreenSizeDependentBehaviors();
 
         final boolean shouldAttach =
-                res.getBoolean(R.bool.config_attachNavBarToAppDuringTransition);
+                res.getBoolean(R.bool.config_attachNavBarToAppDuringTransition)
+                        && !Flags.enableTinyTaskbar();
         if (mShouldAttachNavBarToAppDuringTransition != shouldAttach) {
             mShouldAttachNavBarToAppDuringTransition = shouldAttach;
         }
@@ -2160,9 +2164,14 @@ public class DisplayPolicy {
             public String toString() {
                 final StringBuilder tmpSb = new StringBuilder(32);
                 return "{nonDecorInsets=" + mNonDecorInsets.toShortString(tmpSb)
+                        + ", overrideNonDecorInsets=" + mOverrideNonDecorInsets.toShortString(tmpSb)
                         + ", configInsets=" + mConfigInsets.toShortString(tmpSb)
+                        + ", overrideConfigInsets=" + mOverrideConfigInsets.toShortString(tmpSb)
                         + ", nonDecorFrame=" + mNonDecorFrame.toShortString(tmpSb)
-                        + ", configFrame=" + mConfigFrame.toShortString(tmpSb) + '}';
+                        + ", overrideNonDecorFrame=" + mOverrideNonDecorFrame.toShortString(tmpSb)
+                        + ", configFrame=" + mConfigFrame.toShortString(tmpSb)
+                        + ", overrideConfigFrame=" + mOverrideConfigFrame.toShortString(tmpSb)
+                        + '}';
             }
         }
 

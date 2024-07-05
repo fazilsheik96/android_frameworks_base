@@ -23,6 +23,8 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
 import android.app.Activity;
@@ -35,10 +37,10 @@ import android.platform.test.annotations.Presubmit;
 import android.util.ArrayMap;
 import android.util.MergedConfiguration;
 import android.view.IWindow;
+import android.view.InsetsSourceControl;
 import android.view.InsetsState;
 import android.window.ActivityWindowInfo;
 import android.window.ClientWindowFrames;
-import android.window.WindowContext;
 import android.window.WindowContextInfo;
 
 import androidx.test.filters.SmallTest;
@@ -72,8 +74,6 @@ public class ClientTransactionItemTest {
     @Mock
     private IBinder mWindowClientToken;
     @Mock
-    private WindowContext mWindowContext;
-    @Mock
     private IWindow mWindow;
 
     // Can't mock final class.
@@ -85,6 +85,7 @@ public class ClientTransactionItemTest {
     private ClientWindowFrames mFrames;
     private MergedConfiguration mMergedConfiguration;
     private ActivityWindowInfo mActivityWindowInfo;
+    private InsetsSourceControl.Array mActiveControls;
 
     @Before
     public void setup() {
@@ -97,6 +98,7 @@ public class ClientTransactionItemTest {
         mFrames = new ClientWindowFrames();
         mMergedConfiguration = new MergedConfiguration(mGlobalConfig, mConfiguration);
         mActivityWindowInfo = new ActivityWindowInfo();
+        mActiveControls = new InsetsSourceControl.Array();
 
         doReturn(mActivity).when(mHandler).getActivity(mActivityToken);
         doReturn(mActivitiesToBeDestroyed).when(mHandler).getActivitiesToBeDestroyed();
@@ -163,5 +165,27 @@ public class ClientTransactionItemTest {
                 true /* reportDraw */, mMergedConfiguration, mInsetsState, true /* forceLayout */,
                 true /* alwaysConsumeSystemBars */, 123 /* displayId */, 321 /* syncSeqId */,
                 true /* dragResizing */, mActivityWindowInfo);
+    }
+
+    @Test
+    public void testWindowStateInsetsControlChangeItem_execute() throws RemoteException {
+        final WindowStateInsetsControlChangeItem item = WindowStateInsetsControlChangeItem.obtain(
+                mWindow, mInsetsState, mActiveControls);
+        item.execute(mHandler, mPendingActions);
+
+        verify(mWindow).insetsControlChanged(mInsetsState, mActiveControls);
+    }
+
+    @Test
+    public void testWindowStateInsetsControlChangeItem_executeError() throws RemoteException {
+        doThrow(new RemoteException()).when(mWindow).insetsControlChanged(any(), any());
+
+        mActiveControls = spy(mActiveControls);
+        final WindowStateInsetsControlChangeItem item = WindowStateInsetsControlChangeItem.obtain(
+                mWindow, mInsetsState, mActiveControls);
+        item.mActiveControls = mActiveControls;
+        item.execute(mHandler, mPendingActions);
+
+        verify(mActiveControls).release();
     }
 }

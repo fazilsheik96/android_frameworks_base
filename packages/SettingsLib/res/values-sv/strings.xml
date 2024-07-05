@@ -103,6 +103,8 @@
     <string name="bluetooth_battery_level_untethered" msgid="1616774716076301755">"V: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g>, H: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g> batteri."</string>
     <string name="bluetooth_battery_level_untethered_left" msgid="5725764679536058365">"Vänster: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g> batteri"</string>
     <string name="bluetooth_battery_level_untethered_right" msgid="8377995536997790142">"Höger: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g> batteri"</string>
+    <string name="tv_bluetooth_battery_level_untethered_left" msgid="337629670583744410">"Vänster: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
+    <string name="tv_bluetooth_battery_level_untethered_right" msgid="8610019317279155595">"Höger <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
     <string name="bluetooth_active_no_battery_level" msgid="4155462233006205630">"Aktiv"</string>
     <string name="bluetooth_saved_device" msgid="4895871321722311428">"Sparad"</string>
     <string name="bluetooth_hearing_aid_left_active" msgid="8330226430756799572">"Aktiv (endast vänster)"</string>
@@ -233,7 +235,7 @@
     <item msgid="6946761421234586000">"400 %"</item>
   </string-array>
     <string name="choose_profile" msgid="343803890897657450">"Välj profil"</string>
-    <string name="category_personal" msgid="6236798763159385225">"Privat"</string>
+    <string name="category_personal" msgid="6236798763159385225">"Personlig"</string>
     <string name="category_work" msgid="4014193632325996115">"Jobb"</string>
     <string name="category_private" msgid="4244892185452788977">"Privat"</string>
     <string name="category_clone" msgid="1554511758987195974">"Klon"</string>
@@ -294,7 +296,7 @@
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Begränsning av wifi-sökning"</string>
     <string name="wifi_non_persistent_mac_randomization" msgid="7482769677894247316">"Slumpgenerering av icke-beständig MAC för wifi"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Mobildata alltid aktiverad"</string>
-    <string name="tethering_hardware_offload" msgid="4116053719006939161">"Maskinvaruacceleration för internetdelning"</string>
+    <string name="tethering_hardware_offload" msgid="4116053719006939161">"Hårdvaruacceleration för internetdelning"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Visa namnlösa Bluetooth-enheter"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="1452342324349203434">"Inaktivera Absolute volume"</string>
     <string name="bluetooth_enable_gabeldorsche" msgid="9131730396242883416">"Aktivera Gabeldorsche"</string>
@@ -339,7 +341,7 @@
     <string name="allow_mock_location_summary" msgid="179780881081354579">"Tillåt skenplatser"</string>
     <string name="debug_view_attributes" msgid="3539609843984208216">"Aktivera inspektion av visningsattribut"</string>
     <string name="mobile_data_always_on_summary" msgid="1112156365594371019">"Håll alltid mobildata aktiverad, även när wifi är aktiverat (så att du snabbt kan byta mellan nätverk)."</string>
-    <string name="tethering_hardware_offload_summary" msgid="7801345335142803029">"Använd maskinvaruacceleration för internetdelning om tillgängligt"</string>
+    <string name="tethering_hardware_offload_summary" msgid="7801345335142803029">"Använd hårdvaruacceleration för internetdelning om tillgängligt"</string>
     <string name="adb_warning_title" msgid="7708653449506485728">"Ska USB-felsökning tillåtas?"</string>
     <string name="adb_warning_message" msgid="8145270656419669221">"USB-felsökning ska endast användas i utvecklingssyfte. Använd den för att kopiera data mellan datorn och enheten, installera appar på enheten utan meddelanden och läsa loggdata."</string>
     <string name="adbwifi_warning_title" msgid="727104571653031865">"Vill du tillåta trådlös felsökning?"</string>
@@ -367,7 +369,7 @@
     <string name="wait_for_debugger_summary" msgid="6846330006113363286">"Felsökaren måste ansluta till appen först"</string>
     <string name="debug_input_category" msgid="7349460906970849771">"Indata"</string>
     <string name="debug_drawing_category" msgid="5066171112313666619">"Ritning"</string>
-    <string name="debug_hw_drawing_category" msgid="5830815169336975162">"Maskinvaruaccelererad rendering"</string>
+    <string name="debug_hw_drawing_category" msgid="5830815169336975162">"Hårdvaruaccelererad rendering"</string>
     <string name="media_category" msgid="8122076702526144053">"Media"</string>
     <string name="debug_monitoring_category" msgid="1597387133765424994">"Övervakning"</string>
     <string name="strict_mode" msgid="889864762140862437">"Strikt läge aktiverat"</string>
@@ -382,8 +384,8 @@
     <string name="show_screen_updates_summary" msgid="2126932969682087406">"Hela fönstret blinkar vid uppdatering"</string>
     <string name="show_hw_screen_updates" msgid="2021286231267747506">"Visa visningsuppdatering"</string>
     <string name="show_hw_screen_updates_summary" msgid="3539770072741435691">"Visningar blinkar i fönster vid ritningar"</string>
-    <string name="show_hw_layers_updates" msgid="5268370750002509767">"Visa maskinvaruskiktuppdatering"</string>
-    <string name="show_hw_layers_updates_summary" msgid="5850955890493054618">"Låt maskinvaruskikt blinka grönt vid uppdateringar"</string>
+    <string name="show_hw_layers_updates" msgid="5268370750002509767">"Visa hårdvaruskiktuppdatering"</string>
+    <string name="show_hw_layers_updates_summary" msgid="5850955890493054618">"Låt hårdvaruskikt blinka grönt vid uppdateringar"</string>
     <string name="debug_hw_overdraw" msgid="8944851091008756796">"Felsök GPU-överritning"</string>
     <string name="disable_overlays" msgid="4206590799671557143">"Inaktivera HW-överlagringar"</string>
     <string name="disable_overlays_summary" msgid="1954852414363338166">"Använd alltid GPU för skärmsammansättning"</string>
@@ -706,7 +708,7 @@
     <string name="physical_keyboard_title" msgid="4811935435315835220">"Fysiskt tangentbord"</string>
     <string name="keyboard_layout_dialog_title" msgid="3927180147005616290">"Välj en tangentbordslayout"</string>
     <string name="keyboard_layout_default_label" msgid="1997292217218546957">"Standard"</string>
-    <string name="turn_screen_on_title" msgid="3266937298097573424">"Aktivera skärmen"</string>
+    <string name="turn_screen_on_title" msgid="2662312432042116026">"Inställningar för att sätta på skärmen"</string>
     <string name="allow_turn_screen_on" msgid="6194845766392742639">"Tillåt att skärmen aktiveras"</string>
     <string name="allow_turn_screen_on_description" msgid="43834403291575164">"Tillåt att en app aktiverar skärmen. Om du ger tillåtelse kan appen aktivera skärmen när som helst utan din uttryckliga avsikt."</string>
     <string name="bt_le_audio_broadcast_dialog_title" msgid="5392738488989777074">"Vill du sluta sända från <xliff:g id="APP_NAME">%1$s</xliff:g>?"</string>

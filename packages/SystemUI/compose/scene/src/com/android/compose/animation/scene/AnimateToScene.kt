@@ -21,6 +21,7 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.SpringSpec
 import kotlin.math.absoluteValue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -108,8 +109,7 @@ internal fun CoroutineScope.animateToScene(
                     layoutState.transitions.interruptionHandler.onInterruption(
                         transitionState,
                         target,
-                    )
-                        ?: DefaultInterruptionHandler.onInterruption(transitionState, target)
+                    ) ?: DefaultInterruptionHandler.onInterruption(transitionState, target)
 
                 val animateFrom = interruptionResult.animateFrom
                 if (
@@ -158,6 +158,7 @@ private fun CoroutineScope.animate(
     val transition =
         if (reversed) {
             OneOffTransition(
+                key = transitionKey,
                 fromScene = targetScene,
                 toScene = fromScene,
                 currentScene = targetScene,
@@ -166,6 +167,7 @@ private fun CoroutineScope.animate(
             )
         } else {
             OneOffTransition(
+                key = transitionKey,
                 fromScene = fromScene,
                 toScene = targetScene,
                 currentScene = targetScene,
@@ -177,7 +179,7 @@ private fun CoroutineScope.animate(
     // Change the current layout state to start this new transition. This will compute the
     // TransformationSpec associated to this transition, which we need to initialize the Animatable
     // that will actually animate it.
-    layoutState.startTransition(transition, transitionKey, chain)
+    layoutState.startTransition(transition, chain)
 
     // The transition now contains the transformation spec that we should use to instantiate the
     // Animatable.
@@ -190,21 +192,23 @@ private fun CoroutineScope.animate(
         }
 
     // Animate the progress to its target value.
+    // Important: We start atomically to make sure that we start the coroutine even if it is
+    // cancelled right after it is launched, so that finishTransition() is correctly called.
+    // Otherwise, this transition will never be stopped and we will never settle to Idle.
     transition.job =
-        launch { animatable.animateTo(targetProgress, animationSpec, initialVelocity) }
-            .apply {
-                invokeOnCompletion {
-                    // Settle the state to Idle(target). Note that this will do nothing if this
-                    // transition was replaced/interrupted by another one, and this also runs if
-                    // this coroutine is cancelled, i.e. if [this] coroutine scope is cancelled.
-                    layoutState.finishTransition(transition, targetScene)
-                }
+        launch(start = CoroutineStart.ATOMIC) {
+            try {
+                animatable.animateTo(targetProgress, animationSpec, initialVelocity)
+            } finally {
+                layoutState.finishTransition(transition, targetScene)
             }
+        }
 
     return transition
 }
 
 private class OneOffTransition(
+    override val key: TransitionKey?,
     fromScene: SceneKey,
     toScene: SceneKey,
     override val currentScene: SceneKey,

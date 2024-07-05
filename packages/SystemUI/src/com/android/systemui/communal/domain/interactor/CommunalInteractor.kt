@@ -29,7 +29,6 @@ import com.android.compose.animation.scene.TransitionKey
 import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.communal.data.repository.CommunalMediaRepository
 import com.android.systemui.communal.data.repository.CommunalPrefsRepository
-import com.android.systemui.communal.data.repository.CommunalRepository
 import com.android.systemui.communal.data.repository.CommunalWidgetRepository
 import com.android.systemui.communal.domain.model.CommunalContentModel
 import com.android.systemui.communal.domain.model.CommunalContentModel.WidgetContent
@@ -39,6 +38,7 @@ import com.android.systemui.communal.shared.model.CommunalContentSize.HALF
 import com.android.systemui.communal.shared.model.CommunalContentSize.THIRD
 import com.android.systemui.communal.shared.model.CommunalScenes
 import com.android.systemui.communal.shared.model.CommunalWidgetContentModel
+import com.android.systemui.communal.shared.model.EditModeState
 import com.android.systemui.communal.widgets.CommunalAppWidgetHost
 import com.android.systemui.communal.widgets.EditWidgetsActivityStarter
 import com.android.systemui.communal.widgets.WidgetConfigurator
@@ -47,6 +47,7 @@ import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
+import com.android.systemui.keyguard.shared.model.Edge
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.log.LogBuffer
 import com.android.systemui.log.core.Logger
@@ -61,7 +62,6 @@ import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.smartspace.data.repository.SmartspaceRepository
 import com.android.systemui.util.kotlin.BooleanFlowOperators.allOf
-import com.android.systemui.util.kotlin.BooleanFlowOperators.anyOf
 import com.android.systemui.util.kotlin.BooleanFlowOperators.not
 import com.android.systemui.util.kotlin.emitOnStart
 import javax.inject.Inject
@@ -98,10 +98,9 @@ constructor(
     @Application val applicationScope: CoroutineScope,
     @Background val bgDispatcher: CoroutineDispatcher,
     broadcastDispatcher: BroadcastDispatcher,
-    private val communalRepository: CommunalRepository,
     private val widgetRepository: CommunalWidgetRepository,
     private val communalPrefsRepository: CommunalPrefsRepository,
-    mediaRepository: CommunalMediaRepository,
+    private val mediaRepository: CommunalMediaRepository,
     smartspaceRepository: SmartspaceRepository,
     keyguardInteractor: KeyguardInteractor,
     keyguardTransitionInteractor: KeyguardTransitionInteractor,
@@ -111,6 +110,7 @@ constructor(
     private val userTracker: UserTracker,
     private val activityStarter: ActivityStarter,
     private val userManager: UserManager,
+    private val communalSceneInteractor: CommunalSceneInteractor,
     sceneInteractor: SceneInteractor,
     @CommunalLog logBuffer: LogBuffer,
     @CommunalTableLog tableLogBuffer: TableLogBuffer,
@@ -130,7 +130,7 @@ constructor(
         allOf(
                 communalSettingsInteractor.isCommunalEnabled,
                 not(keyguardInteractor.isEncryptedOrLockdown),
-                anyOf(keyguardInteractor.isKeyguardShowing, keyguardInteractor.isDreaming)
+                keyguardInteractor.isKeyguardShowing
             )
             .distinctUntilChanged()
             .onEach { available ->
@@ -166,7 +166,7 @@ constructor(
     /** Whether to start dreaming when returning from occluded */
     val dreamFromOccluded: Flow<Boolean> =
         keyguardTransitionInteractor
-            .transitionStepsToState(KeyguardState.OCCLUDED)
+            .transition(Edge.create(to = KeyguardState.OCCLUDED))
             .map { it.from == KeyguardState.DREAMING }
             .stateIn(scope = applicationScope, SharingStarted.Eagerly, false)
 
@@ -175,15 +175,19 @@ constructor(
      *
      * If [isCommunalAvailable] is false, will return [CommunalScenes.Blank]
      */
-    val desiredScene: Flow<SceneKey> =
-        communalRepository.currentScene.combine(isCommunalAvailable) { scene, available ->
-            if (available) scene else CommunalScenes.Blank
-        }
+    @Deprecated(
+        "Use com.android.systemui.communal.domain.interactor.CommunalSceneInteractor instead"
+    )
+    val desiredScene: Flow<SceneKey> = communalSceneInteractor.currentScene
 
     /** Transition state of the hub mode. */
-    val transitionState: StateFlow<ObservableTransitionState> = communalRepository.transitionState
+    @Deprecated(
+        "Use com.android.systemui.communal.domain.interactor.CommunalSceneInteractor instead"
+    )
+    val transitionState: StateFlow<ObservableTransitionState> =
+        communalSceneInteractor.transitionState
 
-    val _userActivity: MutableSharedFlow<Unit> =
+    private val _userActivity: MutableSharedFlow<Unit> =
         MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val userActivity: Flow<Unit> = _userActivity.asSharedFlow()
 
@@ -213,32 +217,18 @@ constructor(
      *
      * Note that you must call is with `null` when the UI is done or risk a memory leak.
      */
-    fun setTransitionState(transitionState: Flow<ObservableTransitionState>?) {
-        communalRepository.setTransitionState(transitionState)
-    }
+    @Deprecated(
+        "Use com.android.systemui.communal.domain.interactor.CommunalSceneInteractor instead"
+    )
+    fun setTransitionState(transitionState: Flow<ObservableTransitionState>?) =
+        communalSceneInteractor.setTransitionState(transitionState)
 
     /** Returns a flow that tracks the progress of transitions to the given scene from 0-1. */
+    @Deprecated(
+        "Use com.android.systemui.communal.domain.interactor.CommunalSceneInteractor instead"
+    )
     fun transitionProgressToScene(targetScene: SceneKey) =
-        transitionState
-            .flatMapLatest { state ->
-                when (state) {
-                    is ObservableTransitionState.Idle ->
-                        flowOf(CommunalTransitionProgress.Idle(state.currentScene))
-                    is ObservableTransitionState.Transition ->
-                        if (state.toScene == targetScene) {
-                            state.progress.map {
-                                CommunalTransitionProgress.Transition(
-                                    // Clamp the progress values between 0 and 1 as actual progress
-                                    // values can be higher than 0 or lower than 1 due to a fling.
-                                    progress = it.coerceIn(0.0f, 1.0f)
-                                )
-                            }
-                        } else {
-                            flowOf(CommunalTransitionProgress.OtherTransition)
-                        }
-                }
-            }
-            .distinctUntilChanged()
+        communalSceneInteractor.transitionProgressToScene(targetScene)
 
     /**
      * Flow that emits a boolean if the communal UI is the target scene, ie. the [desiredScene] is
@@ -284,34 +274,30 @@ constructor(
      * This will not be true while transitioning to the hub and will turn false immediately when a
      * swipe to exit the hub starts.
      */
-    val isIdleOnCommunal: StateFlow<Boolean> =
-        communalRepository.transitionState
-            .map {
-                it is ObservableTransitionState.Idle && it.currentScene == CommunalScenes.Communal
-            }
-            .stateIn(
-                scope = applicationScope,
-                started = SharingStarted.Eagerly,
-                initialValue = false,
-            )
+    @Deprecated(
+        "Use com.android.systemui.communal.domain.interactor.CommunalSceneInteractor instead"
+    )
+    val isIdleOnCommunal: StateFlow<Boolean> = communalSceneInteractor.isIdleOnCommunal
 
     /**
      * Flow that emits a boolean if any portion of the communal UI is visible at all.
      *
      * This flow will be true during any transition and when idle on the communal scene.
      */
-    val isCommunalVisible: Flow<Boolean> =
-        communalRepository.transitionState.map {
-            !(it is ObservableTransitionState.Idle && it.currentScene == CommunalScenes.Blank)
-        }
+    @Deprecated(
+        "Use com.android.systemui.communal.domain.interactor.CommunalSceneInteractor instead"
+    )
+    val isCommunalVisible: Flow<Boolean> = communalSceneInteractor.isCommunalVisible
 
     /**
      * Asks for an asynchronous scene witch to [newScene], which will use the corresponding
      * installed transition or the one specified by [transitionKey], if provided.
      */
-    fun changeScene(newScene: SceneKey, transitionKey: TransitionKey? = null) {
-        communalRepository.changeScene(newScene, transitionKey)
-    }
+    @Deprecated(
+        "Use com.android.systemui.communal.domain.interactor.CommunalSceneInteractor instead"
+    )
+    fun changeScene(newScene: SceneKey, transitionKey: TransitionKey? = null) =
+        communalSceneInteractor.changeScene(newScene, transitionKey)
 
     fun setEditModeOpen(isOpen: Boolean) {
         _editModeOpen.value = isOpen
@@ -322,6 +308,7 @@ constructor(
         preselectedKey: String? = null,
         shouldOpenWidgetPickerOnStart: Boolean = false,
     ) {
+        communalSceneInteractor.setEditModeState(EditModeState.STARTING)
         editWidgetsActivityStarter.startActivity(preselectedKey, shouldOpenWidgetPickerOnStart)
     }
 
@@ -495,40 +482,41 @@ constructor(
      * A flow of ongoing content, including smartspace timers and umo, ordered by creation time and
      * sized dynamically.
      */
-    val ongoingContent: Flow<List<CommunalContentModel.Ongoing>> =
+    fun getOngoingContent(mediaHostVisible: Boolean): Flow<List<CommunalContentModel.Ongoing>> =
         combine(smartspaceTargets, mediaRepository.mediaModel) { smartspace, media ->
-            val ongoingContent = mutableListOf<CommunalContentModel.Ongoing>()
+                val ongoingContent = mutableListOf<CommunalContentModel.Ongoing>()
 
-            // Add smartspace
-            ongoingContent.addAll(
-                smartspace.map { target ->
-                    CommunalContentModel.Smartspace(
-                        smartspaceTargetId = target.smartspaceTargetId,
-                        remoteViews = target.remoteViews!!,
-                        createdTimestampMillis = target.creationTimeMillis,
+                // Add smartspace
+                ongoingContent.addAll(
+                    smartspace.map { target ->
+                        CommunalContentModel.Smartspace(
+                            smartspaceTargetId = target.smartspaceTargetId,
+                            remoteViews = target.remoteViews!!,
+                            createdTimestampMillis = target.creationTimeMillis,
+                        )
+                    }
+                )
+
+                // Add UMO
+                if (mediaHostVisible && media.hasActiveMediaOrRecommendation) {
+                    ongoingContent.add(
+                        CommunalContentModel.Umo(
+                            createdTimestampMillis = media.createdTimestampMillis,
+                        )
                     )
                 }
-            )
 
-            // Add UMO
-            if (media.hasActiveMediaOrRecommendation) {
-                ongoingContent.add(
-                    CommunalContentModel.Umo(
-                        createdTimestampMillis = media.createdTimestampMillis,
-                    )
-                )
+                // Order by creation time descending
+                ongoingContent.sortByDescending { it.createdTimestampMillis }
+
+                // Dynamic sizing
+                ongoingContent.forEachIndexed { index, model ->
+                    model.size = dynamicContentSize(ongoingContent.size, index)
+                }
+
+                ongoingContent
             }
-
-            // Order by creation time descending
-            ongoingContent.sortByDescending { it.createdTimestampMillis }
-
-            // Dynamic sizing
-            ongoingContent.forEachIndexed { index, model ->
-                model.size = dynamicContentSize(ongoingContent.size, index)
-            }
-
-            return@combine ongoingContent
-        }
+            .flowOn(bgDispatcher)
 
     /**
      * Filter and retain widgets associated with an existing user, safeguarding against displaying
@@ -579,18 +567,4 @@ constructor(
             )
         }
     }
-}
-
-/** Simplified transition progress data class for tracking a single transition between scenes. */
-sealed class CommunalTransitionProgress {
-    /** No transition/animation is currently running. */
-    data class Idle(val scene: SceneKey) : CommunalTransitionProgress()
-
-    /** There is a transition animating to the expected scene. */
-    data class Transition(
-        val progress: Float,
-    ) : CommunalTransitionProgress()
-
-    /** There is a transition animating to a scene other than the expected scene. */
-    data object OtherTransition : CommunalTransitionProgress()
 }

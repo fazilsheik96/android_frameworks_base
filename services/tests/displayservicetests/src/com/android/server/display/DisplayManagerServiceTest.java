@@ -709,6 +709,64 @@ public class DisplayManagerServiceTest {
         assertTrue((ddi.flags & DisplayDeviceInfo.FLAG_OWN_FOCUS) == 0);
     }
 
+    @Test
+    public void testCreateVirtualDisplayOwnFocus_checkDisplayDeviceInfo() throws RemoteException {
+        DisplayManagerService displayManager =
+                new DisplayManagerService(mContext, mBasicInjector);
+        registerDefaultDisplays(displayManager);
+
+        // This is effectively the DisplayManager service published to ServiceManager.
+        DisplayManagerService.BinderService bs = displayManager.new BinderService();
+
+        final String uniqueId = "uniqueId --- Own Focus Test -- checkDisplayDeviceInfo";
+        float refreshRate = 60.0f;
+        int width = 600;
+        int height = 800;
+        int dpi = 320;
+        int flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS;
+
+        when(mContext.checkCallingPermission(ADD_TRUSTED_DISPLAY)).thenReturn(
+                PackageManager.PERMISSION_GRANTED);
+        when(mMockAppToken.asBinder()).thenReturn(mMockAppToken);
+        final VirtualDisplayConfig.Builder builder = new VirtualDisplayConfig.Builder(
+                VIRTUAL_DISPLAY_NAME, width, height, dpi);
+        builder.setFlags(flags);
+        builder.setUniqueId(uniqueId);
+        builder.setRequestedRefreshRate(refreshRate);
+
+        // Create a virtual display in its own display group.
+        final VirtualDisplayConfig ownerDisplayConfig = builder.build();
+        int displayId = bs.createVirtualDisplay(ownerDisplayConfig, /* callback= */ mMockAppToken,
+                /* projection= */ null, PACKAGE_NAME);
+        verify(mMockProjectionService, never()).setContentRecordingSession(any(),
+                nullable(IMediaProjection.class));
+
+        DisplayInfo displayInfo = bs.getDisplayInfo(displayId);
+        assertNotNull(displayInfo);
+        assertTrue((displayInfo.flags & DisplayDeviceInfo.FLAG_OWN_FOCUS) == 0);
+        final String displayUniqueId = VirtualDisplayAdapter.generateDisplayUniqueId(
+                PACKAGE_NAME, Process.myUid(), ownerDisplayConfig);
+        assertEquals(displayInfo.uniqueId, displayUniqueId);
+        assertEquals(displayInfo.name, VIRTUAL_DISPLAY_NAME);
+        assertEquals(displayInfo.ownerPackageName, PACKAGE_NAME);
+        assertEquals(displayInfo.getRefreshRate(), refreshRate, 0.1f);
+
+        performTraversalInternal(displayManager);
+
+        // Flush the handler.
+        displayManager.getDisplayHandler().runWithScissors(() -> {}, /* now= */ 0);
+
+        DisplayDeviceInfo ddi = displayManager.getDisplayDeviceInfoInternal(displayId);
+        assertNotNull(ddi);
+        assertTrue((ddi.flags & DisplayDeviceInfo.FLAG_OWN_FOCUS) == 0);
+        assertEquals(ddi.width, width);
+        assertEquals(ddi.height, height);
+        assertEquals(ddi.name, displayInfo.name);
+        assertEquals(ddi.ownerPackageName, displayInfo.ownerPackageName);
+        assertEquals(ddi.uniqueId, displayInfo.uniqueId);
+        assertEquals(ddi.renderFrameRate, displayInfo.getRefreshRate(), 0.1f);
+    }
+
     /**
      * Tests that the virtual display is created along-side the default display.
      */
@@ -2455,9 +2513,8 @@ public class DisplayManagerServiceTest {
         LogicalDisplay display =
                 logicalDisplayMapper.getDisplayLocked(displayDevice, /* includeDisabled= */ true);
         assertThat(display.isEnabledLocked()).isFalse();
-        // TODO(b/332711269) make sure only one DISPLAY_GROUP_EVENT_ADDED sent.
         assertThat(callback.receivedEvents()).containsExactly(DISPLAY_GROUP_EVENT_ADDED,
-                DISPLAY_GROUP_EVENT_ADDED, EVENT_DISPLAY_CONNECTED).inOrder();
+                EVENT_DISPLAY_CONNECTED).inOrder();
     }
 
     @Test
@@ -2509,6 +2566,63 @@ public class DisplayManagerServiceTest {
 
         assertThat(callback.receivedEvents()).containsExactly(EVENT_DISPLAY_CONNECTED,
                 EVENT_DISPLAY_ADDED).inOrder();
+    }
+
+    @Test
+    public void testPowerOnAndOffInternalDisplay() {
+        manageDisplaysPermission(/* granted= */ true);
+        DisplayManagerService displayManager = new DisplayManagerService(mContext, mBasicInjector);
+        DisplayManagerService.BinderService bs = displayManager.new BinderService();
+        LogicalDisplayMapper logicalDisplayMapper = displayManager.getLogicalDisplayMapper();
+        FakeDisplayManagerCallback callback = new FakeDisplayManagerCallback();
+        bs.registerCallbackWithEventMask(callback, STANDARD_AND_CONNECTION_DISPLAY_EVENTS);
+
+        callback.expectsEvent(EVENT_DISPLAY_ADDED);
+        FakeDisplayDevice displayDevice =
+                createFakeDisplayDevice(displayManager, new float[]{60f}, Display.TYPE_INTERNAL);
+        callback.waitForExpectedEvent();
+
+        LogicalDisplay display =
+                logicalDisplayMapper.getDisplayLocked(displayDevice, /* includeDisabled= */ true);
+
+        assertThat(displayDevice.getDisplayDeviceInfoLocked().committedState)
+                .isEqualTo(Display.STATE_ON);
+
+        assertThat(displayManager.requestDisplayPower(display.getDisplayIdLocked(), false))
+                .isTrue();
+
+        assertThat(displayDevice.getDisplayDeviceInfoLocked().committedState)
+                .isEqualTo(Display.STATE_OFF);
+
+        assertThat(displayManager.requestDisplayPower(display.getDisplayIdLocked(), true))
+                .isTrue();
+
+        assertThat(displayDevice.getDisplayDeviceInfoLocked().committedState)
+                .isEqualTo(Display.STATE_ON);
+    }
+
+    @Test
+    public void testPowerOnAndOffInternalDisplay_withoutPermission_shouldThrowException() {
+        DisplayManagerService displayManager = new DisplayManagerService(mContext, mBasicInjector);
+        DisplayManagerService.BinderService bs = displayManager.new BinderService();
+        LogicalDisplayMapper logicalDisplayMapper = displayManager.getLogicalDisplayMapper();
+        FakeDisplayManagerCallback callback = new FakeDisplayManagerCallback();
+        bs.registerCallbackWithEventMask(callback, STANDARD_AND_CONNECTION_DISPLAY_EVENTS);
+
+        callback.expectsEvent(EVENT_DISPLAY_ADDED);
+        FakeDisplayDevice displayDevice =
+                createFakeDisplayDevice(displayManager, new float[]{60f}, Display.TYPE_INTERNAL);
+        callback.waitForExpectedEvent();
+
+        LogicalDisplay display =
+                logicalDisplayMapper.getDisplayLocked(displayDevice, /* includeDisabled= */ true);
+        var displayId = display.getDisplayIdLocked();
+
+        assertThat(displayDevice.getDisplayDeviceInfoLocked().committedState)
+                .isEqualTo(Display.STATE_ON);
+
+        assertThrows(SecurityException.class, () -> bs.requestDisplayPower(displayId, true));
+        assertThrows(SecurityException.class, () -> bs.requestDisplayPower(displayId, false));
     }
 
     @Test
@@ -3301,8 +3415,11 @@ public class DisplayManagerServiceTest {
         }
         displayDeviceInfo.address = new TestUtils.TestDisplayAddress();
         displayDevice.setDisplayDeviceInfo(displayDeviceInfo);
-        displayManager.getDisplayDeviceRepository()
-                .onDisplayDeviceEvent(displayDevice, DisplayAdapter.DISPLAY_DEVICE_EVENT_ADDED);
+
+        displayManager.getDisplayHandler().runWithScissors(() -> {
+            displayManager.getDisplayDeviceRepository()
+                    .onDisplayDeviceEvent(displayDevice, DisplayAdapter.DISPLAY_DEVICE_EVENT_ADDED);
+        }, 0 /* now */);
         return displayDevice;
     }
 
@@ -3469,6 +3586,7 @@ public class DisplayManagerServiceTest {
 
         public void setDisplayDeviceInfo(DisplayDeviceInfo displayDeviceInfo) {
             mDisplayDeviceInfo = displayDeviceInfo;
+            mDisplayDeviceInfo.committedState = Display.STATE_ON;
         }
 
         @Override
@@ -3497,6 +3615,15 @@ public class DisplayManagerServiceTest {
         @Override
         public Display.Mode getUserPreferredDisplayModeLocked() {
             return mPreferredMode;
+        }
+
+        @Override
+        public Runnable requestDisplayStateLocked(
+                final int state,
+                final float brightnessState,
+                final float sdrBrightnessState,
+                @Nullable DisplayOffloadSessionImpl displayOffloadSession) {
+            return () -> mDisplayDeviceInfo.committedState = state;
         }
     }
 }

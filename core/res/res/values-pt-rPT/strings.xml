@@ -202,6 +202,8 @@
     <string name="work_profile_deleted_description_dpm_wipe" msgid="2477244968924647232">"O seu perfil de trabalho já não está disponível neste dispositivo"</string>
     <string name="work_profile_deleted_reason_maximum_password_failure" msgid="1080323158315663167">"Demasiadas tentativas de introdução da palavra-passe"</string>
     <string name="device_ownership_relinquished" msgid="4080886992183195724">"O administrador anulou o dispositivo para utilização pessoal."</string>
+    <string name="private_space_deleted_by_admin" msgid="1484365588862066939">"Espaço privado removido"</string>
+    <string name="private_space_deleted_by_admin_details" msgid="7007781735201818689">"A sua organização não permite espaços privados neste dispositivo gerido."</string>
     <string name="network_logging_notification_title" msgid="554983187553845004">"O dispositivo é gerido"</string>
     <string name="network_logging_notification_text" msgid="1327373071132562512">"A sua entidade gere este dispositivo e pode monitorizar o tráfego de rede. Toque para obter mais detalhes."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"As apps podem aceder à sua localização"</string>
@@ -284,6 +286,7 @@
     <string name="global_action_voice_assist" msgid="6655788068555086695">"Assist. de voz"</string>
     <string name="global_action_lockdown" msgid="2475471405907902963">"Bloquear"</string>
     <string name="status_bar_notification_info_overflow" msgid="3330152558746563475">"999+"</string>
+    <string name="notification_compact_heads_up_reply" msgid="2425293958371284340">"Responder"</string>
     <string name="notification_hidden_text" msgid="2835519769868187223">"Nova notificação"</string>
     <string name="notification_channel_physical_keyboard" msgid="5417306456125988096">"Teclado físico"</string>
     <string name="notification_channel_security" msgid="8516754650348238057">"Segurança"</string>
@@ -327,7 +330,7 @@
     <string name="permgroupdesc_storage" msgid="5378659041354582769">"aceder aos ficheiros no seu dispositivo"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Música e áudio"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"aceder a música e áudio no seu dispositivo"</string>
-    <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"fotos e vídeos"</string>
+    <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Fotos e vídeos"</string>
     <string name="permgroupdesc_readMediaVisual" msgid="4080463241903508688">"aceder a fotos e vídeos no seu dispositivo"</string>
     <string name="permgrouplab_microphone" msgid="2480597427667420076">"Microfone"</string>
     <string name="permgroupdesc_microphone" msgid="1047786732792487722">"gravar áudio"</string>
@@ -730,7 +733,7 @@
     <skip />
     <string name="face_acquired_recalibrate_alt" msgid="5702674220280332115">"Não é possível criar o seu modelo de rosto. Tente novamente."</string>
     <string name="face_acquired_dark_glasses_detected_alt" msgid="4052123776406041972">"Óculos escuros detetados. O seu rosto tem de estar completamente visível."</string>
-    <string name="face_acquired_mouth_covering_detected_alt" msgid="1122294982850589766">"Máscara detetada. Todo o rosto tem de estar visível"</string>
+    <string name="face_acquired_mouth_covering_detected_alt" msgid="1122294982850589766">"Cobertura facial detetada. O seu rosto tem de estar completamente visível."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="5085202213036026288">"Não pode validar o rosto. Hardware não disponível."</string>
@@ -1289,7 +1292,7 @@
     <string name="android_upgrading_complete" msgid="409800058018374746">"A concluir o arranque."</string>
     <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Premiu o botão ligar/desligar. Geralmente, esta ação desliga o ecrã.\n\nExperimente tocar levemente ao configurar a sua impressão digital."</string>
     <string name="fp_power_button_enrollment_title" msgid="6976841690455338563">"Para terminar, desligue o ecrã"</string>
-    <string name="fp_power_button_enrollment_button_text" msgid="3199783266386029200">"Desligar"</string>
+    <string name="fp_power_button_enrollment_button_text" msgid="3199783266386029200">"Desativar"</string>
     <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Continuar a validar a impressão digital?"</string>
     <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Premiu o botão ligar/desligar. Geralmente, esta ação desliga o ecrã.\n\nExperimente tocar levemente para validar a sua impressão digital."</string>
     <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Desligar ecrã"</string>
@@ -1431,11 +1434,11 @@
     <string name="select_keyboard_layout_notification_message" msgid="8835158247369158154">"Toque para selecionar o idioma e o esquema"</string>
     <string name="fast_scroll_alphabet" msgid="8854435958703888376">" ABCDEFGHIJKLMNOPQRSTUVWXYZ"</string>
     <string name="fast_scroll_numeric_alphabet" msgid="2529539945421557329">" 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"</string>
-    <string name="alert_windows_notification_channel_group_name" msgid="6063891141815714246">"Sobrepor a outras apps"</string>
+    <string name="alert_windows_notification_channel_group_name" msgid="6063891141815714246">"Sobreposição a outras apps"</string>
     <string name="alert_windows_notification_channel_name" msgid="3437528564303192620">"A app <xliff:g id="NAME">%s</xliff:g> sobrepõe-se a outras aplicações"</string>
     <string name="alert_windows_notification_title" msgid="6331662751095228536">"O <xliff:g id="NAME">%s</xliff:g> sobrepõe-se a outras app"</string>
     <string name="alert_windows_notification_message" msgid="6538171456970725333">"Se não quer que a app <xliff:g id="NAME">%s</xliff:g> utilize esta funcionalidade, toque para abrir as definições e desative-a."</string>
-    <string name="alert_windows_notification_turn_off_action" msgid="7805857234839123780">"Desligar"</string>
+    <string name="alert_windows_notification_turn_off_action" msgid="7805857234839123780">"Desativar"</string>
     <string name="ext_media_checking_notification_title" msgid="8299199995416510094">"A verificar o <xliff:g id="NAME">%s</xliff:g>…"</string>
     <string name="ext_media_checking_notification_message" msgid="2231566971425375542">"A rever o conteúdo atual…"</string>
     <string name="ext_media_checking_notification_message" product="tv" msgid="7986154434946021415">"A analisar o armazenamento de multimédia"</string>
@@ -1881,7 +1884,8 @@
     <string name="restr_pin_error_too_short" msgid="1547007808237941065">"O PIN é demasiado pequeno. Deve ter, no mínimo, 4 dígitos."</string>
     <string name="restr_pin_try_later" msgid="5897719962541636727">"Tente mais tarde"</string>
     <string name="immersive_cling_title" msgid="2307034298721541791">"Visualização de ecrã inteiro"</string>
-    <string name="immersive_cling_description" msgid="7092737175345204832">"Para sair, deslize rapidamente para baixo a partir da parte superior."</string>
+    <!-- no translation found for immersive_cling_description (2896205051090870978) -->
+    <skip />
     <string name="immersive_cling_positive" msgid="7047498036346489883">"OK"</string>
     <string name="display_rotation_camera_compat_toast_after_rotation" msgid="7600891546249829854">"Rode para uma melhor visualização"</string>
     <string name="display_rotation_camera_compat_toast_in_multi_window" msgid="2473122980393502775">"Abra <xliff:g id="NAME">%s</xliff:g> em ecrã inteiro para uma melhor visualização"</string>
@@ -2194,7 +2198,6 @@
     <string name="accessibility_system_action_dpad_left_label" msgid="6557647179116479152">"Teclado direcional: para a esquerda"</string>
     <string name="accessibility_system_action_dpad_right_label" msgid="9180196950365804081">"Teclado direcional: para a direita"</string>
     <string name="accessibility_system_action_dpad_center_label" msgid="8149791419358224893">"Teclado direcional: centrar"</string>
-    <string name="accessibility_freeform_caption" msgid="8377519323496290122">"Barra de legendas da app <xliff:g id="APP_NAME">%1$s</xliff:g>."</string>
     <string name="as_app_forced_to_restricted_bucket" msgid="8233871289353898964">"<xliff:g id="PACKAGE_NAME">%1$s</xliff:g> foi colocado no contentor RESTRITO."</string>
     <string name="conversation_single_line_name_display" msgid="8958948312915255999">"<xliff:g id="SENDER_NAME">%1$s</xliff:g>:"</string>
     <string name="conversation_single_line_image_placeholder" msgid="6983271082911936900">"enviou uma imagem"</string>
@@ -2406,6 +2409,7 @@
     <string name="accessibility_label_private_profile" msgid="1436459319135548969">"Espaço privado"</string>
     <string name="accessibility_label_clone_profile" msgid="7579118375042398784">"Clone"</string>
     <string name="accessibility_label_communal_profile" msgid="1437173163111334791">"Comum"</string>
+    <string name="private_space_biometric_prompt_title" msgid="5777592909271728154">"Espaço privado"</string>
     <string name="redacted_notification_message" msgid="1520587845842228816">"Conteúdo das notificações sensíveis ocultado"</string>
     <string name="redacted_notification_action_title" msgid="6942924973335920935"></string>
     <string name="screen_not_shared_sensitive_content" msgid="7058419185079565001">"Conteúdo da app ocultado da partilha de ecrã por motivos de segurança"</string>
@@ -2414,22 +2418,13 @@
     <string name="satellite_notification_open_message" msgid="4149234979688273729">"Abre a app Mensagens"</string>
     <string name="satellite_notification_how_it_works" msgid="3132069321977520519">"Como funciona"</string>
     <string name="unarchival_session_app_label" msgid="6811856981546348205">"Pendente…"</string>
-    <!-- no translation found for fingerprint_dangling_notification_title (7362075195588639989) -->
-    <skip />
-    <!-- no translation found for fingerprint_dangling_notification_msg_1 (6261149111900787302) -->
-    <skip />
-    <!-- no translation found for fingerprint_dangling_notification_msg_2 (7688302770424064884) -->
-    <skip />
-    <!-- no translation found for fingerprint_dangling_notification_msg_all_deleted_1 (2927018569542316055) -->
-    <skip />
-    <!-- no translation found for fingerprint_dangling_notification_msg_all_deleted_2 (6897989352716156176) -->
-    <skip />
-    <!-- no translation found for face_dangling_notification_title (947852541060975473) -->
-    <skip />
-    <!-- no translation found for face_dangling_notification_msg (8806849376915541655) -->
-    <skip />
-    <!-- no translation found for biometric_dangling_notification_action_set_up (8246885009807817961) -->
-    <skip />
-    <!-- no translation found for biometric_dangling_notification_action_not_now (8095249216864443491) -->
-    <skip />
+    <string name="fingerprint_dangling_notification_title" msgid="7362075195588639989">"Configure o Desbloqueio por impressão digital novamente"</string>
+    <string name="fingerprint_dangling_notification_msg_1" msgid="8517140433796229725">"A <xliff:g id="FINGERPRINT">%s</xliff:g> não estava a funcionar bem e foi eliminada"</string>
+    <string name="fingerprint_dangling_notification_msg_2" msgid="7578829498452127613">"A <xliff:g id="FINGERPRINT_0">%1$s</xliff:g> e a <xliff:g id="FINGERPRINT_1">%2$s</xliff:g> não estavam a funcionar bem e foram eliminadas"</string>
+    <string name="fingerprint_dangling_notification_msg_all_deleted_1" msgid="2927018569542316055">"A <xliff:g id="FINGERPRINT">%s</xliff:g> não estava a funcionar bem e foi eliminada. Configure-a novamente para desbloquear o telemóvel com a impressão digital."</string>
+    <string name="fingerprint_dangling_notification_msg_all_deleted_2" msgid="6897989352716156176">"A <xliff:g id="FINGERPRINT_0">%1$s</xliff:g> e a <xliff:g id="FINGERPRINT_1">%2$s</xliff:g> não estavam a funcionar bem e foram eliminadas. Configure-as novamente para desbloquear o telemóvel com a sua impressão digital."</string>
+    <string name="face_dangling_notification_title" msgid="947852541060975473">"Configure o Desbloqueio facial novamente"</string>
+    <string name="face_dangling_notification_msg" msgid="8806849376915541655">"O seu modelo de rosto não estava a funcionar bem e foi eliminado. Configure-o novamente para desbloquear o telemóvel com o rosto."</string>
+    <string name="biometric_dangling_notification_action_set_up" msgid="8246885009807817961">"Configurar"</string>
+    <string name="biometric_dangling_notification_action_not_now" msgid="8095249216864443491">"Agora não"</string>
 </resources>

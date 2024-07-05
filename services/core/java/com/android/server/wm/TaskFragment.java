@@ -40,6 +40,8 @@ import static android.os.Process.INVALID_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.UserHandle.USER_NULL;
 import static android.view.Display.INVALID_DISPLAY;
+import static android.view.Surface.ROTATION_270;
+import static android.view.Surface.ROTATION_90;
 import static android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FLAG_OPEN_BEHIND;
@@ -87,6 +89,7 @@ import android.content.PermissionChecker;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.Insets;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.IBinder;
@@ -1107,21 +1110,34 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     ActivityRecord getTopNonFinishingActivity() {
-        return getTopNonFinishingActivity(true /* includeOverlays */);
+        return getTopNonFinishingActivity(
+                true /* includeOverlays */, true /* includeLaunchedFromBubble */);
     }
 
     /**
      * Returns the top-most non-finishing activity, even if the activity is NOT ok to show to
      * the current user.
      * @param includeOverlays whether the task overlay activity should be included.
+     * @param includeLaunchedFromBubble whether activities that were launched from a bubble should
+     *                                  be included.
      * @see #topRunningActivity(boolean)
      */
-    ActivityRecord getTopNonFinishingActivity(boolean includeOverlays) {
-        // Split into 2 to avoid object creation due to variable capture.
+    ActivityRecord getTopNonFinishingActivity(boolean includeOverlays,
+            boolean includeLaunchedFromBubble) {
+        // Split to avoid object creation due to variable capture.
         if (includeOverlays) {
-            return getActivity((r) -> !r.finishing);
+            if (includeLaunchedFromBubble) {
+                return getActivity(r -> !r.finishing);
+            } else {
+                return getActivity(r -> !r.finishing && !r.getLaunchedFromBubble());
+            }
         }
-        return getActivity((r) -> !r.finishing && !r.isTaskOverlay());
+        if (includeLaunchedFromBubble) {
+            return getActivity(r -> !r.finishing && !r.isTaskOverlay());
+        } else {
+            return getActivity(
+                    r -> !r.finishing && !r.isTaskOverlay() && !r.getLaunchedFromBubble());
+        }
     }
 
     ActivityRecord topRunningActivity() {
@@ -1245,7 +1261,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 // have any running activities, not starting one and not home stack.
                 shouldBeVisible = hasRunningActivities
                         || (starting != null && starting.isDescendantOf(this))
-                        || isActivityTypeHome();
+                        || (isActivityTypeHome() && !isEmbedded());
                 break;
             }
 
@@ -1352,10 +1368,13 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
             // In a multi-resumed environment, like in a freeform device, the top
             // activity can be resumed, but it might not be the focused app.
-            // Set focused app when top activity is resumed
-            if (taskDisplayArea.inMultiWindowMode() && taskDisplayArea.mDisplayContent != null
-                    && taskDisplayArea.mDisplayContent.mFocusedApp != next) {
-                taskDisplayArea.mDisplayContent.setFocusedApp(next);
+            // Set focused app when top activity is resumed. However, we shouldn't do it for a
+            // same task because it can break focused state. (e.g. activity embedding)
+            if (taskDisplayArea.inMultiWindowMode() && taskDisplayArea.mDisplayContent != null) {
+                final ActivityRecord focusedApp = taskDisplayArea.mDisplayContent.mFocusedApp;
+                if (focusedApp == null || focusedApp.getTask() != next.getTask()) {
+                    taskDisplayArea.mDisplayContent.setFocusedApp(next);
+                }
             }
             ProtoLog.d(WM_DEBUG_STATES, "resumeTopActivity: Top activity "
                     + "resumed %s", next);
@@ -1949,6 +1968,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             prev.setWillCloseOrEnterPip(false);
             final boolean wasStopping = prev.isState(STOPPING);
             prev.setState(PAUSED, "completePausedLocked");
+            mPausingActivity = null;
             if (prev.finishing) {
                 // We will update the activity visibility later, no need to do in
                 // completeFinishing(). Updating visibility here might also making the next
@@ -1984,7 +2004,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             if (prev != null) {
                 prev.stopFreezingScreen(true /* unfreezeNow */, true /* force */);
             }
-            mPausingActivity = null;
         }
 
         if (resumeNext) {
@@ -2267,7 +2286,42 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     static class ConfigOverrideHint {
         @Nullable DisplayInfo mTmpOverrideDisplayInfo;
         @Nullable ActivityRecord.CompatDisplayInsets mTmpCompatInsets;
-        boolean mUseOverrideInsetsForStableBounds;
+        @Nullable Rect mParentAppBoundsOverride;
+        int mTmpOverrideConfigOrientation;
+        boolean mUseOverrideInsetsForConfig;
+
+        void resolveTmpOverrides(DisplayContent dc, Configuration parentConfig,
+                boolean isFixedRotationTransforming) {
+            mParentAppBoundsOverride = new Rect(parentConfig.windowConfiguration.getAppBounds());
+            final Insets insets;
+            if (mUseOverrideInsetsForConfig && dc != null) {
+                // Insets are decoupled from configuration by default from V+, use legacy
+                // compatibility behaviour for apps targeting SDK earlier than 35
+                // (see applySizeOverrideIfNeeded).
+                int rotation = parentConfig.windowConfiguration.getRotation();
+                if (rotation == ROTATION_UNDEFINED && !isFixedRotationTransforming) {
+                    rotation = dc.getRotation();
+                }
+                final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
+                final int dw = rotated ? dc.mBaseDisplayHeight : dc.mBaseDisplayWidth;
+                final int dh = rotated ? dc.mBaseDisplayWidth : dc.mBaseDisplayHeight;
+                DisplayPolicy.DecorInsets.Info decorInsets = dc.getDisplayPolicy()
+                        .getDecorInsetsInfo(rotation, dw, dh);
+                final Rect stableBounds = decorInsets.mOverrideConfigFrame;
+                mTmpOverrideConfigOrientation = stableBounds.width() > stableBounds.height()
+                                ? ORIENTATION_LANDSCAPE : ORIENTATION_PORTRAIT;
+                insets = Insets.of(decorInsets.mOverrideNonDecorInsets);
+            } else {
+                insets = Insets.NONE;
+            }
+            mParentAppBoundsOverride.inset(insets);
+        }
+
+        void resetTmpOverrides() {
+            mTmpOverrideDisplayInfo = null;
+            mTmpCompatInsets = null;
+            mTmpOverrideConfigOrientation = ORIENTATION_UNDEFINED;
+        }
     }
 
     void computeConfigResourceOverrides(@NonNull Configuration inOutConfig,
@@ -2300,11 +2354,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             @NonNull Configuration parentConfig, @Nullable ConfigOverrideHint overrideHint) {
         DisplayInfo overrideDisplayInfo = null;
         ActivityRecord.CompatDisplayInsets compatInsets = null;
-        boolean useOverrideInsetsForStableBounds = false;
+        boolean useOverrideInsetsForConfig = false;
         if (overrideHint != null) {
             overrideDisplayInfo = overrideHint.mTmpOverrideDisplayInfo;
             compatInsets = overrideHint.mTmpCompatInsets;
-            useOverrideInsetsForStableBounds = overrideHint.mUseOverrideInsetsForStableBounds;
+            useOverrideInsetsForConfig = overrideHint.mUseOverrideInsetsForConfig;
             if (overrideDisplayInfo != null) {
                 // Make sure the screen related configs can be computed by the provided
                 // display info.
@@ -2353,7 +2407,9 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             if (!customContainerPolicy && windowingMode != WINDOWING_MODE_FREEFORM) {
                 final Rect containingAppBounds;
                 if (insideParentBounds) {
-                    containingAppBounds = parentConfig.windowConfiguration.getAppBounds();
+                    containingAppBounds = useOverrideInsetsForConfig
+                            ? overrideHint.mParentAppBoundsOverride
+                            : parentConfig.windowConfiguration.getAppBounds();
                 } else {
                     // Restrict appBounds to display non-decor rather than parent because the
                     // override bounds are beyond the parent. Otherwise, it won't match the
@@ -2384,7 +2440,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 // The non decor inset are areas that could never be removed in Honeycomb. See
                 // {@link WindowManagerPolicy#getNonDecorInsetsLw}.
                 calculateInsetFrames(mTmpNonDecorBounds, mTmpStableBounds, mTmpFullBounds, di,
-                        useOverrideInsetsForStableBounds);
+                        useOverrideInsetsForConfig);
             } else {
                 // Apply the given non-decor and stable insets to calculate the corresponding bounds
                 // for screen size of configuration.
@@ -3041,6 +3097,9 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     @Override
     void removeImmediately() {
+        if (asTask() == null) {
+            EventLogTags.writeWmTfRemoved(System.identityHashCode(this), getTaskId());
+        }
         mIsRemovalRequested = false;
         resetAdjacentTaskFragment();
         cleanUpEmbeddedTaskFragment();

@@ -20,8 +20,8 @@ import android.os.Handler
 import android.platform.test.annotations.DisableFlags
 import android.platform.test.annotations.EnableFlags
 import android.provider.Settings.Secure.SHOW_NOTIFICATION_SNOOZE
-import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper.RunWithLooper
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import com.android.server.notification.Flags.FLAG_SCREENSHARE_NOTIFICATION_HIDING
 import com.android.systemui.SysuiTestCase
@@ -54,7 +54,7 @@ import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.Mockito.`when` as whenever
 
 @SmallTest
-@RunWith(AndroidTestingRunner::class)
+@RunWith(AndroidJUnit4::class)
 @RunWithLooper
 class NotifUiAdjustmentProviderTest : SysuiTestCase() {
     private val lockscreenUserManager: NotificationLockscreenUserManager = mock()
@@ -69,22 +69,21 @@ class NotifUiAdjustmentProviderTest : SysuiTestCase() {
     private val groupMembershipManager: GroupMembershipManager = mock()
 
     private val section = NotifSection(mock(), 0)
-    private val entry = NotificationEntryBuilder()
-        .setSection(section)
-        .setParent(GroupEntry.ROOT_ENTRY)
-        .build()
+    private val entry =
+        NotificationEntryBuilder().setSection(section).setParent(GroupEntry.ROOT_ENTRY).build()
 
     private lateinit var contentObserver: ContentObserver
 
-    private val adjustmentProvider = NotifUiAdjustmentProvider(
-        handler,
-        secureSettings,
-        lockscreenUserManager,
-        sensitiveNotifProtectionController,
-        sectionStyleProvider,
-        userTracker,
-        groupMembershipManager,
-    )
+    private val adjustmentProvider =
+        NotifUiAdjustmentProvider(
+            handler,
+            secureSettings,
+            lockscreenUserManager,
+            sensitiveNotifProtectionController,
+            sectionStyleProvider,
+            userTracker,
+            groupMembershipManager,
+        )
 
     @Before
     fun setup() {
@@ -92,9 +91,8 @@ class NotifUiAdjustmentProviderTest : SysuiTestCase() {
         adjustmentProvider.addDirtyListener(dirtyListener)
         verify(secureSettings).getIntForUser(eq(SHOW_NOTIFICATION_SNOOZE), any(), any())
         contentObserver = withArgCaptor {
-            verify(secureSettings).registerContentObserverForUser(
-                eq(SHOW_NOTIFICATION_SNOOZE), capture(), any()
-            )
+            verify(secureSettings)
+                .registerContentObserverForUserSync(eq(SHOW_NOTIFICATION_SNOOZE), capture(), any())
         }
         verifyNoMoreInteractions(secureSettings, dirtyListener)
     }

@@ -210,8 +210,8 @@ public class WallpaperCropperTest {
                     new Rect(0, 0, bitmapSize.x, bitmapSize.y),
                     new Rect(100, 200, bitmapSize.x - 100, bitmapSize.y))) {
                 for (int mode: ALL_MODES) {
-                    for (boolean rtl: List.of(true, false)) {
-                        for (boolean parallax: List.of(true, false)) {
+                    for (boolean parallax: List.of(true, false)) {
+                        for (boolean rtl: List.of(true, false)) {
                             assertThat(WallpaperCropper.getAdjustedCrop(
                                     crop, bitmapSize, displaySize, parallax, rtl, mode))
                                     .isEqualTo(crop);
@@ -235,11 +235,12 @@ public class WallpaperCropperTest {
         int expectedWidth = (int) (displaySize.x * (1 + WallpaperCropper.MAX_PARALLAX));
         Point expectedCropSize = new Point(expectedWidth, 1000);
         for (int mode: ALL_MODES) {
-            for (boolean rtl: List.of(false, true)) {
-                assertThat(WallpaperCropper.getAdjustedCrop(
-                        crop, bitmapSize, displaySize, true, rtl, mode))
-                        .isEqualTo(centerOf(crop, expectedCropSize));
-            }
+            assertThat(WallpaperCropper.getAdjustedCrop(
+                    crop, bitmapSize, displaySize, true, false, mode))
+                    .isEqualTo(leftOf(crop, expectedCropSize));
+            assertThat(WallpaperCropper.getAdjustedCrop(
+                    crop, bitmapSize, displaySize, true, true, mode))
+                    .isEqualTo(rightOf(crop, expectedCropSize));
         }
     }
 
@@ -386,9 +387,11 @@ public class WallpaperCropperTest {
             Point displaySize = displaySizes.get(i);
             Point expectedCropSize = expectedCropSizes.get(i);
             for (boolean rtl : List.of(false, true)) {
+                Rect expectedCrop = rtl ? rightOf(bitmapRect, expectedCropSize)
+                        : leftOf(bitmapRect, expectedCropSize);
                 assertThat(mWallpaperCropper.getCrop(
                         displaySize, bitmapSize, suggestedCrops, rtl))
-                        .isEqualTo(centerOf(bitmapRect, expectedCropSize));
+                        .isEqualTo(expectedCrop);
             }
         }
     }

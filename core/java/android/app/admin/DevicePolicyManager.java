@@ -62,6 +62,7 @@ import static android.app.admin.flags.Flags.FLAG_HEADLESS_DEVICE_OWNER_PROVISION
 import static android.app.admin.flags.Flags.FLAG_HEADLESS_DEVICE_OWNER_SINGLE_USER_ENABLED;
 import static android.app.admin.flags.Flags.FLAG_SECURITY_LOG_V2_ENABLED;
 import static android.app.admin.flags.Flags.onboardingBugreportV2Enabled;
+import static android.app.admin.flags.Flags.onboardingConsentlessBugreports;
 import static android.app.admin.flags.Flags.FLAG_IS_MTE_POLICY_ENFORCED;
 import static android.content.Intent.LOCAL_FLAG_FROM_SYSTEM;
 import static android.net.NetworkCapabilities.NET_ENTERPRISE_ID_1;
@@ -1698,7 +1699,7 @@ public class DevicePolicyManager {
 
     /**
      * A boolean extra indicating whether device encryption can be skipped as part of
-     * <a href="#managed-provisioning>provisioning</a>.
+     * <a href="#managed-provisioning">provisioning</a>.
      *
      * <p>Use in an NFC record with {@link #MIME_TYPE_PROVISIONING_NFC} or an intent with action
      * {@link #ACTION_PROVISION_MANAGED_DEVICE} that starts device owner provisioning.
@@ -5842,6 +5843,24 @@ public class DevicePolicyManager {
      * with {@link #PASSWORD_QUALITY_UNSPECIFIED} on that instance prior to setting complexity
      * requirement for the managed profile.
      *
+     * Starting from {@link Build.VERSION_CODES#VANILLA_ICE_CREAM}, after the password
+     * requirement has been set, {@link PolicyUpdateReceiver#onPolicySetResult(Context, String,
+     * Bundle, TargetUser, PolicyUpdateResult)} will notify the admin on whether the policy was
+     * successfully set or not. This callback will contain:
+     * <ul>
+     * <li> The policy identifier {@link DevicePolicyIdentifiers#PASSWORD_COMPLEXITY_POLICY}
+     * <li> The {@link TargetUser} that this policy relates to
+     * <li> The {@link PolicyUpdateResult}, which will be
+     * {@link PolicyUpdateResult#RESULT_POLICY_SET} if the policy was successfully set or the
+     * reason the policy failed to be set
+     * e.g. {@link PolicyUpdateResult#RESULT_FAILURE_CONFLICTING_ADMIN_POLICY})
+     * </ul>
+     * If there has been a change to the policy,
+     * {@link PolicyUpdateReceiver#onPolicyChanged(Context, String, Bundle, TargetUser,
+     * PolicyUpdateResult)} will notify the admin of this change. This callback will contain the
+     * same parameters as PolicyUpdateReceiver#onPolicySetResult and the {@link PolicyUpdateResult}
+     * will contain the reason why the policy changed.
+     *
      * @throws SecurityException if the calling application is not a device owner or a profile
      * owner.
      * @throws IllegalArgumentException if the complexity level is not one of the four above.
@@ -5849,6 +5868,7 @@ public class DevicePolicyManager {
      * are password requirements specified using {@link #setPasswordQuality(ComponentName, int)}
      * on the parent {@code DevicePolicyManager} instance.
      */
+    @SupportsCoexistence
     @RequiresPermission(value = MANAGE_DEVICE_POLICY_LOCK_CREDENTIALS, conditional = true)
     public void setRequiredPasswordComplexity(@PasswordComplexity int passwordComplexity) {
         if (mService == null) {
@@ -5880,6 +5900,7 @@ public class DevicePolicyManager {
      * owner.
      */
     @PasswordComplexity
+    @SupportsCoexistence
     @RequiresPermission(value = MANAGE_DEVICE_POLICY_LOCK_CREDENTIALS, conditional = true)
     public int getRequiredPasswordComplexity() {
         if (mService == null) {
@@ -10427,7 +10448,7 @@ public class DevicePolicyManager {
     @WorkerThread
     public void setApplicationRestrictions(@Nullable ComponentName admin, String packageName,
             Bundle settings) {
-        if (!Flags.dmrhCanSetAppRestriction()) {
+        if (!Flags.dmrhSetAppRestrictions()) {
             throwIfParentInstance("setApplicationRestrictions");
         }
 
@@ -11835,7 +11856,7 @@ public class DevicePolicyManager {
     @WorkerThread
     public @NonNull Bundle getApplicationRestrictions(
             @Nullable ComponentName admin, String packageName) {
-        if (!Flags.dmrhCanSetAppRestriction()) {
+        if (!Flags.dmrhSetAppRestrictions()) {
             throwIfParentInstance("getApplicationRestrictions");
         }
 
@@ -13704,6 +13725,13 @@ public class DevicePolicyManager {
      * {@link #EXTRA_PROVISIONING_SENSORS_PERMISSION_GRANT_OPT_OUT} in the provisioning parameters.
      * In that case the device owner's control will be limited to denying these permissions.
      * <p>
+     * When sensor-related permissions aren't grantable due to the above cases, calling this method
+     * to grant these permissions will silently fail, if device admins are built with
+     * {@code targetSdkVersion} &lt; {@link android.os.Build.VERSION_CODES#VANILLA_ICE_CREAM}. If
+     * they are built with {@code targetSdkVersion} &gt;=
+     * {@link android.os.Build.VERSION_CODES#VANILLA_ICE_CREAM}, this method will throw a
+     * {@link SecurityException}.
+     * <p>
      * NOTE: On devices running {@link android.os.Build.VERSION_CODES#S} and above, control over
      * the following permissions are restricted for managed profile owners:
      * <ul>
@@ -14120,7 +14148,7 @@ public class DevicePolicyManager {
     public @NonNull DevicePolicyManager getParentProfileInstance(@NonNull ComponentName admin) {
         throwIfParentInstance("getParentProfileInstance");
         try {
-            if (Flags.dmrhCanSetAppRestriction()) {
+            if (Flags.dmrhSetAppRestrictions()) {
                 UserManager um = mContext.getSystemService(UserManager.class);
                 if (!um.isManagedProfile()) {
                     throw new SecurityException("The current user does not have a parent profile.");
@@ -17604,6 +17632,17 @@ public class DevicePolicyManager {
     @UnsupportedAppUsage
     public boolean isOnboardingBugreportV2FlagEnabled() {
         return onboardingBugreportV2Enabled();
+    }
+
+    // TODO(b/308755220): Remove once the build is finalised.
+    /**
+     * Returns true if the flag for consentless bugreports is enabled.
+     *
+     * @hide
+     */
+    @UnsupportedAppUsage
+    public boolean isOnboardingConsentlessBugreportFlagEnabled() {
+        return onboardingConsentlessBugreports();
     }
 
     /**

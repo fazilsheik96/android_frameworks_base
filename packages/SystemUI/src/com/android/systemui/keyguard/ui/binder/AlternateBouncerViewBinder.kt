@@ -86,7 +86,10 @@ constructor(
                     privateFlags =
                         WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY or
                             WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION
+                    // Avoid announcing window title.
+                    accessibilityTitle = " "
                 }
+
     private var alternateBouncerView: ConstraintLayout? = null
 
     override fun start() {
@@ -188,23 +191,30 @@ constructor(
         view.repeatWhenAttached { alternateBouncerViewContainer ->
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch("$TAG#viewModel.registerForDismissGestures") {
-                    viewModel.registerForDismissGestures.collect { registerForDismissGestures ->
-                        if (registerForDismissGestures) {
-                            swipeUpAnywhereGestureHandler.addOnGestureDetectedCallback(swipeTag) { _
-                                ->
-                                alternateBouncerDependencies.powerInteractor.onUserTouch()
-                                viewModel.showPrimaryBouncer()
+                        viewModel.registerForDismissGestures.collect { registerForDismissGestures ->
+                            if (registerForDismissGestures) {
+                                swipeUpAnywhereGestureHandler.addOnGestureDetectedCallback(
+                                    swipeTag
+                                ) { _ ->
+                                    alternateBouncerDependencies.powerInteractor.onUserTouch()
+                                    viewModel.showPrimaryBouncer()
+                                }
+                                tapGestureDetector.addOnGestureDetectedCallback(tapTag) { _ ->
+                                    alternateBouncerDependencies.powerInteractor.onUserTouch()
+                                    viewModel.showPrimaryBouncer()
+                                }
+                            } else {
+                                swipeUpAnywhereGestureHandler.removeOnGestureDetectedCallback(
+                                    swipeTag
+                                )
+                                tapGestureDetector.removeOnGestureDetectedCallback(tapTag)
                             }
-                            tapGestureDetector.addOnGestureDetectedCallback(tapTag) { _ ->
-                                alternateBouncerDependencies.powerInteractor.onUserTouch()
-                                viewModel.showPrimaryBouncer()
-                            }
-                        } else {
-                            swipeUpAnywhereGestureHandler.removeOnGestureDetectedCallback(swipeTag)
-                            tapGestureDetector.removeOnGestureDetectedCallback(tapTag)
                         }
                     }
-                }
+                    .invokeOnCompletion {
+                        swipeUpAnywhereGestureHandler.removeOnGestureDetectedCallback(swipeTag)
+                        tapGestureDetector.removeOnGestureDetectedCallback(tapTag)
+                    }
 
                 launch("$TAG#viewModel.scrimAlpha") {
                     viewModel.scrimAlpha.collect { scrim.viewAlpha = it }
@@ -297,6 +307,7 @@ constructor(
             }
         }
     }
+
     companion object {
         private const val TAG = "AlternateBouncerViewBinder"
         private const val swipeTag = "AlternateBouncer-SWIPE"

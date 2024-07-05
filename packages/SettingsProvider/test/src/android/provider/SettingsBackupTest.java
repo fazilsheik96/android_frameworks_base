@@ -63,7 +63,6 @@ public class SettingsBackupTest {
                     Settings.Global.ADB_ENABLED,
                     Settings.Global.ADB_WIFI_ENABLED,
                     Settings.Global.ADB_DISCONNECT_SESSIONS_ON_REVOKE,
-                    Settings.Global.ADD_USERS_WHEN_LOCKED,
                     Settings.Global.AIRPLANE_MODE_ON,
                     Settings.Global.AIRPLANE_MODE_RADIOS,
                     Settings.Global.ALLOW_WORK_PROFILE_TELEPHONY_FOR_NON_DPM_ROLE_HOLDERS,
@@ -381,7 +380,6 @@ public class SettingsBackupTest {
                     Settings.Global.RADIO_WIFI,
                     Settings.Global.RADIO_WIMAX,
                     Settings.Global.RADIO_UWB,
-                    Settings.Global.REMOVE_GUEST_ON_EXIT,
                     Settings.Global.RECOMMENDED_NETWORK_EVALUATOR_CACHE_EXPIRY_MS,
                     Settings.Global.READ_EXTERNAL_STORAGE_ENFORCED_DEFAULT,
                     Settings.Global.RESTRICTED_NETWORKING_MODE,
@@ -485,7 +483,6 @@ public class SettingsBackupTest {
                     Settings.Global.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING,
                     Settings.Global.INSTALL_CARRIER_APP_NOTIFICATION_PERSISTENT,
                     Settings.Global.INSTALL_CARRIER_APP_NOTIFICATION_SLEEP_MILLIS,
-                    Settings.Global.USER_SWITCHER_ENABLED,
                     Settings.Global.WARNING_TEMPERATURE,
                     Settings.Global.WEBVIEW_DATA_REDUCTION_PROXY_KEY,
                     Settings.Global.WEBVIEW_MULTIPROCESS,
@@ -598,6 +595,7 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.MOBILE_SIGNAL_DETECTOR,
                     Settings.Global.Wearable.AMBIENT_LOW_BIT_ENABLED_DEV,
                     Settings.Global.Wearable.AMBIENT_TILT_TO_BRIGHT,
+                    Settings.Global.Wearable.BATTERY_SAVER_MODE,
                     Settings.Global.Wearable.DECOMPOSABLE_WATCHFACE,
                     Settings.Global.Wearable.AMBIENT_FORCE_WHEN_DOCKED,
                     Settings.Global.Wearable.AMBIENT_LOW_BIT_ENABLED,
@@ -622,6 +620,7 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.COOLDOWN_MODE_ON,
                     Settings.Global.Wearable.BEDTIME_MODE,
                     Settings.Global.Wearable.BEDTIME_HARD_MODE,
+                    Settings.Global.Wearable.VIBRATE_FOR_ACTIVE_UNLOCK,
                     Settings.Global.Wearable.LOCK_SCREEN_STATE,
                     Settings.Global.Wearable.DISABLE_AOD_WHILE_PLUGGED,
                     Settings.Global.Wearable.NETWORK_LOCATION_OPT_IN,
@@ -680,6 +679,7 @@ public class SettingsBackupTest {
                  Settings.Secure.COMPLETED_CATEGORY_PREFIX,
                  Settings.Secure.CONNECTIVITY_RELEASE_PENDING_INTENT_DELAY_MS,
                  Settings.Secure.CONTENT_CAPTURE_ENABLED,
+                 Settings.Secure.CONTEXTUAL_SEARCH_PACKAGE,
                  Settings.Secure.DEFAULT_INPUT_METHOD,
                  Settings.Secure.DEFAULT_DEVICE_INPUT_METHOD,
                  Settings.Secure.DEVICE_PAIRED,
@@ -900,6 +900,7 @@ public class SettingsBackupTest {
                         Settings.System.APPEND_FOR_LAST_AUDIBLE, // suffix deprecated since API 2
                         Settings.System.EGG_MODE, // I am the lolrus
                         Settings.System.END_BUTTON_BEHAVIOR, // bug?
+                        Settings.System.DEFAULT_DEVICE_FONT_SCALE, // Non configurable
                         Settings.System
                                 .HIDE_ROTATION_LOCK_TOGGLE_FOR_ACCESSIBILITY,
                         // candidate for backup?

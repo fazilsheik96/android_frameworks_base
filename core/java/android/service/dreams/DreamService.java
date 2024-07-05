@@ -433,7 +433,8 @@ public class DreamService extends Service implements Window.Callback {
                         mTrackingConfirmKey = event.getKeyCode();
                     }
                     case KeyEvent.ACTION_UP -> {
-                        if (mTrackingConfirmKey != event.getKeyCode()) {
+                        if (mTrackingConfirmKey == null
+                                || mTrackingConfirmKey != event.getKeyCode()) {
                             return true;
                         }
 
@@ -1275,13 +1276,22 @@ public class DreamService extends Service implements Window.Callback {
         });
     }
 
+    /**
+     * Whether or not wake requests will be redirected.
+     *
+     * @hide
+     */
+    public boolean getRedirectWake() {
+        return mOverlayConnection != null && mRedirectWake;
+    }
+
     private void wakeUp(boolean fromSystem) {
         if (mDebug) {
             Slog.v(mTag, "wakeUp(): fromSystem=" + fromSystem + ", mWaking=" + mWaking
                     + ", mFinished=" + mFinished);
         }
 
-        if (!fromSystem && mOverlayConnection != null && mRedirectWake) {
+        if (!fromSystem && getRedirectWake()) {
             mOverlayConnection.addConsumer(overlay -> {
                 try {
                     overlay.onWakeRequested();

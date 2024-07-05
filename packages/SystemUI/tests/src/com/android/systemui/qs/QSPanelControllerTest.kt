@@ -1,8 +1,8 @@
 package com.android.systemui.qs
 
 import android.content.res.Configuration
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
-import android.testing.AndroidTestingRunner
 import android.testing.TestableResources
 import android.view.ContextThemeWrapper
 import com.android.internal.logging.MetricsLogger
@@ -10,6 +10,7 @@ import com.android.internal.logging.UiEventLogger
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.haptics.qs.QSLongPressEffect
+import com.android.systemui.media.controls.domain.pipeline.interactor.MediaCarouselInteractor
 import com.android.systemui.media.controls.ui.view.MediaHost
 import com.android.systemui.media.controls.ui.view.MediaHostState
 import com.android.systemui.plugins.FalsingManager
@@ -17,6 +18,7 @@ import com.android.systemui.plugins.qs.QSTile
 import com.android.systemui.qs.customize.QSCustomizerController
 import com.android.systemui.qs.logging.QSLogger
 import com.android.systemui.res.R
+import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.settings.brightness.BrightnessController
 import com.android.systemui.settings.brightness.BrightnessSliderController
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager
@@ -39,7 +41,7 @@ import org.mockito.MockitoAnnotations
 import org.mockito.Mockito.`when` as whenever
 
 @SmallTest
-@RunWith(AndroidTestingRunner::class)
+@RunWith(AndroidJUnit4::class)
 class QSPanelControllerTest : SysuiTestCase() {
 
     @Mock private lateinit var qsPanel: QSPanel
@@ -63,6 +65,9 @@ class QSPanelControllerTest : SysuiTestCase() {
     @Mock private lateinit var configuration: Configuration
     @Mock private lateinit var pagedTileLayout: PagedTileLayout
     @Mock private lateinit var longPressEffectProvider: Provider<QSLongPressEffect>
+    @Mock private lateinit var mediaCarouselInteractor: MediaCarouselInteractor
+
+    private val usingMediaPlayer: Boolean by lazy { !SceneContainerFlag.isEnabled }
 
     private lateinit var controller: QSPanelController
     private val testableResources: TestableResources = mContext.orCreateTestableResources
@@ -88,7 +93,7 @@ class QSPanelControllerTest : SysuiTestCase() {
             tunerService,
             qsHost,
             qsCustomizerController,
-            /* usingMediaPlayer= */ true,
+            /* usingMediaPlayer= */ usingMediaPlayer,
             mediaHost,
             qsTileRevealControllerFactory,
             dumpManager,
@@ -101,6 +106,7 @@ class QSPanelControllerTest : SysuiTestCase() {
             statusBarKeyguardViewManager,
             ResourcesSplitShadeStateController(),
             longPressEffectProvider,
+            mediaCarouselInteractor,
         )
     }
 

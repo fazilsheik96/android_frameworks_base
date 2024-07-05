@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.Manifest.permission.EMBED_ANY_APP_IN_UNTRUSTED_MODE;
 import static android.Manifest.permission.MANAGE_ACTIVITY_TASKS;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
@@ -55,6 +56,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 
+import android.app.ActivityOptions;
 import android.content.pm.SigningDetails;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -287,6 +289,30 @@ public class TaskFragmentTest extends WindowTestsBase {
         // Ensure the activity below is visible
         mTaskFragment.getTask().ensureActivitiesVisible(null /* starting */);
         assertEquals(true, activityBelow.isVisibleRequested());
+    }
+
+    @Test
+    public void testFindTopNonFinishingActivity_ignoresLaunchedFromBubbleActivities() {
+        final ActivityOptions opts = ActivityOptions.makeBasic();
+        opts.setTaskAlwaysOnTop(true);
+        opts.setLaunchedFromBubble(true);
+        ActivityRecord activity = new ActivityBuilder(mAtm)
+                .setUid(DEFAULT_TASK_FRAGMENT_ORGANIZER_UID).setActivityOptions(opts).build();
+        mTaskFragment.addChild(activity);
+
+        assertNull(mTaskFragment.getTopNonFinishingActivity(true, false));
+    }
+
+    @Test
+    public void testFindTopNonFinishingActivity_includesLaunchedFromBubbleActivities() {
+        final ActivityOptions opts = ActivityOptions.makeBasic();
+        opts.setTaskAlwaysOnTop(true);
+        opts.setLaunchedFromBubble(true);
+        ActivityRecord activity = new ActivityBuilder(mAtm)
+                .setUid(DEFAULT_TASK_FRAGMENT_ORGANIZER_UID).setActivityOptions(opts).build();
+        mTaskFragment.addChild(activity);
+
+        assertEquals(mTaskFragment.getTopNonFinishingActivity(true, true), activity);
     }
 
     @Test
@@ -959,6 +985,22 @@ public class TaskFragmentTest extends WindowTestsBase {
         // Ensure the focused app is updated when the left activity resumed.
         taskFragmentLeft.setResumedActivity(appLeftTop, "test");
         assertEquals(appLeftTop, task.getDisplayContent().mFocusedApp);
+    }
+
+    @Test
+    public void testShouldBeVisible_invisibleForEmptyTaskFragment() {
+        final Task task = new TaskBuilder(mSupervisor).setCreateActivity(true)
+                .setWindowingMode(WINDOWING_MODE_FULLSCREEN).build();
+        final TaskFragment taskFragment = new TaskFragmentBuilder(mAtm)
+                .setParentTask(task)
+                .build();
+
+        // Empty taskFragment should be invisible
+        assertFalse(taskFragment.shouldBeVisible(null));
+
+        // Should be invisible even if it is ACTIVITY_TYPE_HOME.
+        when(taskFragment.getActivityType()).thenReturn(ACTIVITY_TYPE_HOME);
+        assertFalse(taskFragment.shouldBeVisible(null));
     }
 
     private WindowState createAppWindow(ActivityRecord app, String name) {

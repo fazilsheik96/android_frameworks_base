@@ -16,6 +16,7 @@
 
 package com.android.server.media;
 
+import android.annotation.NonNull;
 import android.app.ActivityThread;
 import android.content.Context;
 import android.media.MediaMetadata;
@@ -112,6 +113,7 @@ public class MediaShellCommand extends ShellCommand {
         mWriter.println("       media_session list-sessions");
         mWriter.println("       media_session monitor <tag>");
         mWriter.println("       media_session volume [options]");
+        mWriter.println("       media_session expire-temp-engaged-sessions");
         mWriter.println();
         mWriter.println("media_session dispatch: dispatch a media key to the system.");
         mWriter.println("                KEY may be: play, pause, play-pause, mute, headsethook,");
@@ -120,6 +122,9 @@ public class MediaShellCommand extends ShellCommand {
         mWriter.println("media_session monitor: monitor updates to the specified session.");
         mWriter.println("                       Use the tag from list-sessions.");
         mWriter.println("media_session volume:  " + VolumeCtrl.USAGE);
+        mWriter.println("media_session expire-temp-engaged-sessions: Expires any ongoing");
+        mWriter.println("                timers for media sessions in a temporary user-engaged");
+        mWriter.println("                state.");
         mWriter.println();
     }
 
@@ -247,7 +252,7 @@ public class MediaShellCommand extends ShellCommand {
         }
 
         @Override
-        public void onAudioInfoChanged(MediaController.PlaybackInfo info) {
+        public void onAudioInfoChanged(@NonNull MediaController.PlaybackInfo info) {
             mWriter.println("onAudioInfoChanged " + info);
         }
     }

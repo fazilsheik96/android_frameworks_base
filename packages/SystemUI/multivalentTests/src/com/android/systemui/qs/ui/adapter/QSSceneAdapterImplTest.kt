@@ -54,9 +54,11 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.ArgumentMatchers.anyFloat
 import org.mockito.Mockito.anyInt
 import org.mockito.Mockito.clearInvocations
 import org.mockito.Mockito.inOrder
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 
 @SmallTest
@@ -186,16 +188,25 @@ class QSSceneAdapterImplTest : SysuiTestCase() {
             underTest.setState(QSSceneAdapter.State.QQS)
             with(qsImpl!!) {
                 verify(this).setQsVisible(true)
-                verify(this)
+                verify(this, never())
                     .setQsExpansion(
-                        /* expansion= */ 0f,
-                        /* panelExpansionFraction= */ 1f,
-                        /* proposedTranslation= */ 0f,
-                        /* squishinessFraction= */ 1f,
+                        /* expansion= */ anyFloat(),
+                        /* panelExpansionFraction= */ anyFloat(),
+                        /* proposedTranslation= */ anyFloat(),
+                        /* squishinessFraction= */ anyFloat(),
                     )
                 verify(this).setListening(true)
                 verify(this).setExpanded(false)
             }
+
+            underTest.applyLatestExpansionAndSquishiness()
+            verify(qsImpl!!)
+                .setQsExpansion(
+                    /* expansion= */ 0f,
+                    /* panelExpansionFraction= */ 1f,
+                    /* proposedTranslation= */ 0f,
+                    /* squishinessFraction= */ 1f,
+                )
         }
 
     @Test
@@ -210,16 +221,25 @@ class QSSceneAdapterImplTest : SysuiTestCase() {
             underTest.setState(QSSceneAdapter.State.QS)
             with(qsImpl!!) {
                 verify(this).setQsVisible(true)
-                verify(this)
+                verify(this, never())
                     .setQsExpansion(
-                        /* expansion= */ 1f,
-                        /* panelExpansionFraction= */ 1f,
-                        /* proposedTranslation= */ 0f,
-                        /* squishinessFraction= */ 1f,
+                        /* expansion= */ anyFloat(),
+                        /* panelExpansionFraction= */ anyFloat(),
+                        /* proposedTranslation= */ anyFloat(),
+                        /* squishinessFraction= */ anyFloat(),
                     )
                 verify(this).setListening(true)
                 verify(this).setExpanded(true)
             }
+
+            underTest.applyLatestExpansionAndSquishiness()
+            verify(qsImpl!!)
+                .setQsExpansion(
+                    /* expansion= */ 1f,
+                    /* panelExpansionFraction= */ 1f,
+                    /* proposedTranslation= */ 0f,
+                    /* squishinessFraction= */ 1f,
+                )
         }
 
     @Test
@@ -235,16 +255,25 @@ class QSSceneAdapterImplTest : SysuiTestCase() {
             underTest.setState(QSSceneAdapter.State.Expanding(progress))
             with(qsImpl!!) {
                 verify(this).setQsVisible(true)
-                verify(this)
+                verify(this, never())
                     .setQsExpansion(
-                        /* expansion= */ progress,
-                        /* panelExpansionFraction= */ 1f,
-                        /* proposedTranslation= */ 0f,
-                        /* squishinessFraction= */ 1f,
+                        /* expansion= */ anyFloat(),
+                        /* panelExpansionFraction= */ anyFloat(),
+                        /* proposedTranslation= */ anyFloat(),
+                        /* squishinessFraction= */ anyFloat(),
                     )
                 verify(this).setListening(true)
                 verify(this).setExpanded(true)
             }
+
+            underTest.applyLatestExpansionAndSquishiness()
+            verify(qsImpl!!)
+                .setQsExpansion(
+                    /* expansion= */ progress,
+                    /* panelExpansionFraction= */ 1f,
+                    /* proposedTranslation= */ 0f,
+                    /* squishinessFraction= */ 1f,
+                )
         }
 
     @Test
@@ -257,19 +286,28 @@ class QSSceneAdapterImplTest : SysuiTestCase() {
             runCurrent()
             clearInvocations(qsImpl!!)
 
-            underTest.setState(QSSceneAdapter.State.UnsquishingQQS(squishiness))
+            underTest.setState(QSSceneAdapter.State.UnsquishingQQS { squishiness })
             with(qsImpl!!) {
                 verify(this).setQsVisible(true)
-                verify(this)
+                verify(this, never())
                     .setQsExpansion(
-                        /* expansion= */ 0f,
-                        /* panelExpansionFraction= */ 1f,
-                        /* proposedTranslation= */ 0f,
-                        /* squishinessFraction= */ squishiness,
+                        /* expansion= */ anyFloat(),
+                        /* panelExpansionFraction= */ anyFloat(),
+                        /* proposedTranslation= */ anyFloat(),
+                        /* squishinessFraction= */ anyFloat(),
                     )
                 verify(this).setListening(true)
                 verify(this).setExpanded(false)
             }
+
+            underTest.applyLatestExpansionAndSquishiness()
+            verify(qsImpl!!)
+                .setQsExpansion(
+                    /* expansion= */ 0f,
+                    /* panelExpansionFraction= */ 1f,
+                    /* proposedTranslation= */ 0f,
+                    /* squishinessFraction= */ squishiness,
+                )
         }
 
     @Test

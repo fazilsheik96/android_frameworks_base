@@ -63,10 +63,10 @@ constructor(
     private fun setupAccessibilityDelegate() {
         accessibilityDelegate =
             object : AccessibilityDelegate() {
-                private val accessibilityAuthenticateHint =
+                private val accessibilityBouncerHint =
                     AccessibilityNodeInfo.AccessibilityAction(
                         AccessibilityNodeInfoCompat.ACTION_CLICK,
-                        resources.getString(R.string.accessibility_authenticate_hint)
+                        resources.getString(R.string.accessibility_bouncer)
                     )
                 private val accessibilityEnterHint =
                     AccessibilityNodeInfo.AccessibilityAction(
@@ -79,8 +79,8 @@ constructor(
                 ) {
                     super.onInitializeAccessibilityNodeInfo(v, info)
                     when (accessibilityHintType) {
-                        AccessibilityHintType.AUTHENTICATE ->
-                            info.addAction(accessibilityAuthenticateHint)
+                        AccessibilityHintType.BOUNCER ->
+                            info.addAction(accessibilityBouncerHint)
                         AccessibilityHintType.ENTER -> info.addAction(accessibilityEnterHint)
                         AccessibilityHintType.NONE -> return
                     }
@@ -88,6 +88,12 @@ constructor(
             }
     }
 
+    /**
+     * Setups different icon states.
+     * - All lottie views will require a LottieOnCompositionLoadedListener to update
+     *   LottieProperties (like color) of the view.
+     * - Drawable properties can be updated using ImageView properties like imageTintList.
+     */
     private fun setupIconStates() {
         // Lockscreen States
         // LOCK
@@ -268,7 +274,7 @@ constructor(
 
     enum class AccessibilityHintType {
         NONE,
-        AUTHENTICATE,
+        BOUNCER,
         ENTER,
     }
 }

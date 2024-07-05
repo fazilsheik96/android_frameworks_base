@@ -70,6 +70,7 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.media.flags.Flags;
 import com.android.server.LocalServices;
 import com.android.server.pm.UserManagerInternal;
+import com.android.server.statusbar.StatusBarManagerInternal;
 
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
@@ -118,6 +119,7 @@ class MediaRouter2ServiceImpl {
     private final UserManagerInternal mUserManagerInternal;
     private final Object mLock = new Object();
     private final AppOpsManager mAppOpsManager;
+    private final StatusBarManagerInternal mStatusBarManagerInternal;
     final AtomicInteger mNextRouterOrManagerId = new AtomicInteger(1);
     final ActivityManager mActivityManager;
     final PowerManager mPowerManager;
@@ -188,6 +190,7 @@ class MediaRouter2ServiceImpl {
         mPowerManager = mContext.getSystemService(PowerManager.class);
         mUserManagerInternal = LocalServices.getService(UserManagerInternal.class);
         mAppOpsManager = mContext.getSystemService(AppOpsManager.class);
+        mStatusBarManagerInternal = LocalServices.getService(StatusBarManagerInternal.class);
 
         IntentFilter screenOnOffIntentFilter = new IntentFilter();
         screenOnOffIntentFilter.addAction(ACTION_SCREEN_ON);
@@ -255,6 +258,17 @@ class MediaRouter2ServiceImpl {
                 }
             }
             return new ArrayList<>(systemRoutes);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    public boolean showMediaOutputSwitcherWithRouter2(@NonNull String packageName) {
+        UserHandle userHandle = Binder.getCallingUserHandle();
+        final long token = Binder.clearCallingIdentity();
+        try {
+            return showOutputSwitcher(packageName, userHandle);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -404,28 +418,10 @@ class MediaRouter2ServiceImpl {
             long managerRequestId,
             @NonNull RoutingSessionInfo oldSession,
             @NonNull MediaRoute2Info route,
-            Bundle sessionHints,
-            @Nullable UserHandle transferInitiatorUserHandle,
-            @Nullable String transferInitiatorPackageName) {
+            Bundle sessionHints) {
         Objects.requireNonNull(router, "router must not be null");
         Objects.requireNonNull(oldSession, "oldSession must not be null");
         Objects.requireNonNull(route, "route must not be null");
-
-        synchronized (mLock) {
-            if (managerRequestId == MediaRoute2ProviderService.REQUEST_ID_NONE
-                    || transferInitiatorUserHandle == null
-                    || transferInitiatorPackageName == null) {
-                final IBinder binder = router.asBinder();
-                final RouterRecord routerRecord = mAllRouterRecords.get(binder);
-
-                transferInitiatorUserHandle = Binder.getCallingUserHandle();
-                if (routerRecord != null) {
-                    transferInitiatorPackageName = routerRecord.mPackageName;
-                } else {
-                    transferInitiatorPackageName = mContext.getPackageName();
-                }
-            }
-        }
 
         final long token = Binder.clearCallingIdentity();
         try {
@@ -433,8 +429,6 @@ class MediaRouter2ServiceImpl {
                 requestCreateSessionWithRouter2Locked(
                         requestId,
                         managerRequestId,
-                        transferInitiatorUserHandle,
-                        transferInitiatorPackageName,
                         router,
                         oldSession,
                         route,
@@ -798,6 +792,31 @@ class MediaRouter2ServiceImpl {
         }
     }
 
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    public boolean showMediaOutputSwitcherWithProxyRouter(
+            @NonNull IMediaRouter2Manager proxyRouter) {
+        Objects.requireNonNull(proxyRouter, "Proxy router must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                final IBinder binder = proxyRouter.asBinder();
+                ManagerRecord proxyRouterRecord = mAllManagerRecords.get(binder);
+
+                if (proxyRouterRecord.mTargetPackageName == null) {
+                    throw new UnsupportedOperationException(
+                            "Only proxy routers can show the Output Switcher.");
+                }
+
+                return showOutputSwitcher(
+                        proxyRouterRecord.mTargetPackageName,
+                        UserHandle.of(proxyRouterRecord.mUserRecord.mUserId));
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
     // End of methods that implement MediaRouter2Manager operations.
 
     // Start of methods that implements operations for both MediaRouter2 and MediaRouter2Manager.
@@ -952,6 +971,19 @@ class MediaRouter2ServiceImpl {
                     "Must hold INTERACT_ACROSS_USERS_FULL to control an app in a different"
                             + " userId.");
         }
+    }
+
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    private boolean showOutputSwitcher(
+            @NonNull String packageName, @NonNull UserHandle userHandle) {
+        if (mActivityManager.getPackageImportance(packageName) > IMPORTANCE_FOREGROUND) {
+            Slog.w(TAG, "showMediaOutputSwitcher only works when called from foreground");
+            return false;
+        }
+        synchronized (mLock) {
+            mStatusBarManagerInternal.showMediaOutputSwitcher(packageName, userHandle);
+        }
+        return true;
     }
 
     // End of methods that implements operations for both MediaRouter2 and MediaRouter2Manager.
@@ -1281,8 +1313,6 @@ class MediaRouter2ServiceImpl {
     private void requestCreateSessionWithRouter2Locked(
             int requestId,
             long managerRequestId,
-            @NonNull UserHandle transferInitiatorUserHandle,
-            @NonNull String transferInitiatorPackageName,
             @NonNull IMediaRouter2 router,
             @NonNull RoutingSessionInfo oldSession,
             @NonNull MediaRoute2Info route,
@@ -1355,8 +1385,6 @@ class MediaRouter2ServiceImpl {
                         userHandler,
                         uniqueRequestId,
                         managerRequestId,
-                        transferInitiatorUserHandle,
-                        transferInitiatorPackageName,
                         routerRecord,
                         oldSession,
                         route,
@@ -2695,11 +2723,7 @@ class MediaRouter2ServiceImpl {
                     route = mSystemProvider.getDefaultRoute();
                 }
                 routerRecord.mRouter.requestCreateSessionByManager(
-                        uniqueRequestId,
-                        oldSession,
-                        route,
-                        transferInitiatorUserHandle,
-                        transferInitiatorPackageName);
+                        uniqueRequestId, oldSession, route);
             } catch (RemoteException ex) {
                 Slog.w(TAG, "getSessionHintsForCreatingSessionOnHandler: "
                         + "Failed to request. Router probably died.", ex);
@@ -2711,8 +2735,6 @@ class MediaRouter2ServiceImpl {
         private void requestCreateSessionWithRouter2OnHandler(
                 long uniqueRequestId,
                 long managerRequestId,
-                @NonNull UserHandle transferInitiatorUserHandle,
-                @NonNull String transferInitiatorPackageName,
                 @NonNull RouterRecord routerRecord,
                 @NonNull RoutingSessionInfo oldSession,
                 @NonNull MediaRoute2Info route,
@@ -2732,10 +2754,10 @@ class MediaRouter2ServiceImpl {
                             managerRequestId, oldSession, route);
             mSessionCreationRequests.add(request);
 
-            int transferReason = RoutingSessionInfo.TRANSFER_REASON_APP;
-            if (managerRequestId != MediaRoute2ProviderService.REQUEST_ID_NONE) {
-                transferReason = RoutingSessionInfo.TRANSFER_REASON_SYSTEM_REQUEST;
-            }
+            int transferReason =
+                    managerRequestId != MediaRoute2ProviderService.REQUEST_ID_NONE
+                            ? RoutingSessionInfo.TRANSFER_REASON_SYSTEM_REQUEST
+                            : RoutingSessionInfo.TRANSFER_REASON_APP;
 
             provider.requestCreateSession(
                     uniqueRequestId,
@@ -2743,8 +2765,8 @@ class MediaRouter2ServiceImpl {
                     route.getOriginalId(),
                     sessionHints,
                     transferReason,
-                    transferInitiatorUserHandle,
-                    transferInitiatorPackageName);
+                    UserHandle.of(routerRecord.mUserRecord.mUserId),
+                    routerRecord.mPackageName);
         }
 
         // routerRecord can be null if the session is system's or RCN.

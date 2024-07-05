@@ -281,6 +281,10 @@ public class UserManagerService extends IUserManager.Stub {
     private static final String RESTRICTIONS_FILE_PREFIX = "res_";
     private static final String XML_SUFFIX = ".xml";
 
+    private static final String CUSTOM_BIOMETRIC_PROMPT_LOGO_RES_ID_KEY = "custom_logo_res_id";
+    private static final String CUSTOM_BIOMETRIC_PROMPT_LOGO_DESCRIPTION_KEY =
+            "custom_logo_description";
+
     private static final int ALLOWED_FLAGS_FOR_CREATE_USERS_PERMISSION =
             UserInfo.FLAG_MANAGED_PROFILE
             | UserInfo.FLAG_PROFILE
@@ -1924,16 +1928,20 @@ public class UserManagerService extends IUserManager.Stub {
     private void showConfirmCredentialToDisableQuietMode(
             @UserIdInt int userId, @Nullable IntentSender target, @Nullable String callingPackage) {
         if (android.app.admin.flags.Flags.quietModeCredentialBugFix()) {
-            // TODO (b/308121702) It may be brittle to rely on user states to check profile state
-            int state;
-            synchronized (mUserStates) {
-                state = mUserStates.get(userId, UserState.STATE_NONE);
-            }
-            if (state != UserState.STATE_NONE) {
-                Slog.i(LOG_TAG,
-                        "showConfirmCredentialToDisableQuietMode() called too early, user " + userId
-                                + " is still alive.");
-                return;
+            if (!android.multiuser.Flags.restrictQuietModeCredentialBugFixToManagedProfiles()
+                    || getUserInfo(userId).isManagedProfile()) {
+                // TODO (b/308121702) It may be brittle to rely on user states to check managed
+                //  profile state
+                int state;
+                synchronized (mUserStates) {
+                    state = mUserStates.get(userId, UserState.STATE_NONE);
+                }
+                if (state != UserState.STATE_NONE) {
+                    Slog.i(LOG_TAG,
+                            "showConfirmCredentialToDisableQuietMode() called too early, managed "
+                                    + "user " + userId + " is still alive.");
+                    return;
+                }
             }
         }
         // otherwise, we show a profile challenge to trigger decryption of the user
@@ -1966,6 +1974,14 @@ public class UserManagerService extends IUserManager.Stub {
         // intentSender
         unlockIntent.putExtra(Intent.EXTRA_INTENT, pendingIntent.getIntentSender());
         unlockIntent.setFlags(FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+
+        if (Flags.enablePrivateSpaceFeatures() && Flags.usePrivateSpaceIconInBiometricPrompt()
+                && getUserInfo(userId).isPrivateProfile()) {
+            unlockIntent.putExtra(CUSTOM_BIOMETRIC_PROMPT_LOGO_RES_ID_KEY,
+                    com.android.internal.R.drawable.stat_sys_private_profile_status);
+            unlockIntent.putExtra(CUSTOM_BIOMETRIC_PROMPT_LOGO_DESCRIPTION_KEY,
+                    mContext.getString(R.string.private_space_biometric_prompt_title));
+        }
         mContext.startActivityAsUser(
                 unlockIntent, UserHandle.of(getProfileParentIdUnchecked(userId)));
     }
@@ -2304,7 +2320,7 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @Override
-    public @NonNull int getProfileAccessibilityLabelResId(@UserIdInt int userId) {
+    public @StringRes int getProfileAccessibilityLabelResId(@UserIdInt int userId) {
         checkQueryOrInteractPermissionIfCallerInOtherProfileGroup(userId,
                 "getProfileAccessibilityLabelResId");
         final UserInfo userInfo = getUserInfoNoChecks(userId);

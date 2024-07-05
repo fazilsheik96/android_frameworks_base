@@ -333,19 +333,6 @@ public final class InputManager {
     }
 
     /**
-     * Returns true if an input device is enabled. Should return true for most
-     * situations. Some system apps may disable an input device, for
-     * example to prevent unwanted touch events.
-     *
-     * @param id The input device Id.
-     *
-     * @hide
-     */
-    public boolean isInputDeviceEnabled(int id) {
-        return mGlobal.isInputDeviceEnabled(id);
-    }
-
-    /**
      * Enables an InputDevice.
      * <p>
      * Requires {@link android.Manifest.permission#DISABLE_INPUT_DEVICE}.
@@ -976,11 +963,10 @@ public final class InputManager {
      * originate from the system, just that we were unable to verify it. This can
      * happen for a number of reasons during normal operation.
      *
-     * @param event The {@link android.view.InputEvent} to check
+     * @param event The {@link android.view.InputEvent} to check.
      *
      * @return {@link android.view.VerifiedInputEvent}, which is a subset of the provided
-     * {@link android.view.InputEvent}
-     *         {@code null} if the event could not be verified.
+     *     {@link android.view.InputEvent}, or {@code null} if the event could not be verified.
      */
     @Nullable
     public VerifiedInputEvent verifyInputEvent(@NonNull InputEvent event) {

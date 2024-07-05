@@ -16,6 +16,7 @@ package com.android.systemui.statusbar.phone.fragment;
 
 import static android.view.Display.DEFAULT_DISPLAY;
 
+import static com.android.systemui.Flags.FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS;
 import static com.android.systemui.shade.ShadeExpansionStateManagerKt.STATE_CLOSED;
 import static com.android.systemui.shade.ShadeExpansionStateManagerKt.STATE_OPEN;
 
@@ -33,6 +34,8 @@ import android.app.StatusBarManager;
 import android.content.Context;
 import android.os.Bundle;
 import android.os.UserHandle;
+import android.platform.test.annotations.DisableFlags;
+import android.platform.test.annotations.EnableFlags;
 import android.provider.Settings;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
@@ -90,7 +93,6 @@ import java.util.List;
 @RunWithLooper(setAsMainLooper = true)
 @SmallTest
 public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
-
     private NotificationIconAreaController mMockNotificationAreaController;
     private ShadeExpansionStateManager mShadeExpansionStateManager;
     private OngoingCallController mOngoingCallController;
@@ -418,6 +420,7 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
     }
 
     @Test
+    @DisableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
     public void disable_noOngoingCall_chipHidden() {
         CollapsedStatusBarFragment fragment = resumeAndGetFragment();
 
@@ -430,6 +433,7 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
     }
 
     @Test
+    @DisableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
     public void disable_hasOngoingCall_chipDisplayedAndNotificationIconsHidden() {
         CollapsedStatusBarFragment fragment = resumeAndGetFragment();
 
@@ -443,6 +447,7 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
     }
 
     @Test
+    @DisableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
     public void disable_hasOngoingCallButNotificationIconsDisabled_chipHidden() {
         CollapsedStatusBarFragment fragment = resumeAndGetFragment();
 
@@ -456,6 +461,7 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
     }
 
     @Test
+    @DisableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
     public void disable_hasOngoingCallButAlsoHun_chipHidden() {
         CollapsedStatusBarFragment fragment = resumeAndGetFragment();
 
@@ -469,6 +475,7 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
     }
 
     @Test
+    @DisableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
     public void disable_ongoingCallEnded_chipHidden() {
         CollapsedStatusBarFragment fragment = resumeAndGetFragment();
 
@@ -495,8 +502,11 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
     }
 
     @Test
+    @DisableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
     public void disable_hasOngoingCall_hidesNotifsWithoutAnimation() {
         CollapsedStatusBarFragment fragment = resumeAndGetFragment();
+        // Enable animations for testing so that we can verify we still aren't animating
+        fragment.enableAnimationsForTesting();
         fragment.disable(DEFAULT_DISPLAY, 0, 0, false);
 
         // Ongoing call started
@@ -506,6 +516,161 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
         // Notification area is hidden without delay
         assertEquals(0f, getNotificationAreaView().getAlpha(), 0.01);
         assertEquals(View.INVISIBLE, getNotificationAreaView().getVisibility());
+    }
+
+    @Test
+    @DisableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
+    public void screenSharingChipsDisabled_ignoresNewCallback() {
+        CollapsedStatusBarFragment fragment = resumeAndGetFragment();
+
+        // WHEN there *is* an ongoing call via old callback
+        when(mOngoingCallController.hasOngoingCall()).thenReturn(true);
+        fragment.disable(DEFAULT_DISPLAY, 0, 0, true);
+
+        // WHEN there's *no* ongoing activity via new callback
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ false);
+
+        // THEN the old callback value is used, so the view is shown
+        assertEquals(View.VISIBLE,
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
+
+        // WHEN there's *no* ongoing call via old callback
+        when(mOngoingCallController.hasOngoingCall()).thenReturn(false);
+        fragment.disable(DEFAULT_DISPLAY, 0, 0, false);
+
+        // WHEN there *is* an ongoing activity via new callback
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ true);
+
+        // THEN the old callback value is used, so the view is hidden
+        assertEquals(View.GONE,
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
+    }
+
+    @Test
+    @EnableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
+    public void noOngoingActivity_chipHidden() {
+        resumeAndGetFragment();
+
+        // TODO(b/332662551): We *should* be able to just set a value on
+        // mCollapsedStatusBarViewModel.getOngoingActivityChip() instead of manually invoking the
+        // listener, but I'm unable to get the fragment to get attached so that the binder starts
+        // listening to flows.
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ false);
+
+        assertEquals(View.GONE,
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
+    }
+
+    @Test
+    @EnableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
+    public void hasOngoingActivity_chipDisplayedAndNotificationIconsHidden() {
+        resumeAndGetFragment();
+
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ true);
+
+        assertEquals(View.VISIBLE,
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
+        assertEquals(View.INVISIBLE, getNotificationAreaView().getVisibility());
+    }
+
+    @Test
+    @EnableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
+    public void hasOngoingActivityButNotificationIconsDisabled_chipHidden() {
+        CollapsedStatusBarFragment fragment = resumeAndGetFragment();
+
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ true);
+
+        fragment.disable(DEFAULT_DISPLAY,
+                StatusBarManager.DISABLE_NOTIFICATION_ICONS, 0, false);
+
+        assertEquals(View.GONE,
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
+    }
+
+    @Test
+    @EnableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
+    public void hasOngoingActivityButAlsoHun_chipHidden() {
+        CollapsedStatusBarFragment fragment = resumeAndGetFragment();
+
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ true);
+        when(mHeadsUpAppearanceController.shouldBeVisible()).thenReturn(true);
+
+        fragment.disable(DEFAULT_DISPLAY, 0, 0, false);
+
+        assertEquals(View.GONE,
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
+    }
+
+    @Test
+    @EnableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
+    public void ongoingActivityEnded_chipHidden() {
+        resumeAndGetFragment();
+
+        // Ongoing activity started
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ true);
+
+        assertEquals(View.VISIBLE,
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
+
+        // Ongoing activity ended
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ false);
+
+        assertEquals(View.GONE,
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
+    }
+
+    @Test
+    @EnableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
+    public void hasOngoingActivity_hidesNotifsWithoutAnimation() {
+        CollapsedStatusBarFragment fragment = resumeAndGetFragment();
+        // Enable animations for testing so that we can verify we still aren't animating
+        fragment.enableAnimationsForTesting();
+
+        // Ongoing call started
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ true);
+
+        // Notification area is hidden without delay
+        assertEquals(0f, getNotificationAreaView().getAlpha(), 0.01);
+        assertEquals(View.INVISIBLE, getNotificationAreaView().getVisibility());
+    }
+
+    @Test
+    @EnableFlags(FLAG_STATUS_BAR_SCREEN_SHARING_CHIPS)
+    public void screenSharingChipsEnabled_ignoresOngoingCallController() {
+        CollapsedStatusBarFragment fragment = resumeAndGetFragment();
+
+        // WHEN there *is* an ongoing call via old callback
+        when(mOngoingCallController.hasOngoingCall()).thenReturn(true);
+        fragment.disable(DEFAULT_DISPLAY, 0, 0, true);
+
+        // WHEN there's *no* ongoing activity via new callback
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ false);
+
+        // THEN the new callback value is used, so the view is hidden
+        assertEquals(View.GONE,
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
+
+        // WHEN there's *no* ongoing call via old callback
+        when(mOngoingCallController.hasOngoingCall()).thenReturn(false);
+        fragment.disable(DEFAULT_DISPLAY, 0, 0, false);
+
+        // WHEN there *is* an ongoing activity via new callback
+        mCollapsedStatusBarViewBinder.getListener().onOngoingActivityStatusChanged(
+                /* hasOngoingActivity= */ true);
+
+        // THEN the new callback value is used, so the view is shown
+        assertEquals(View.VISIBLE,
+                mFragment.getView().findViewById(R.id.ongoing_activity_chip).getVisibility());
     }
 
     @Test
@@ -768,7 +933,9 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
     private CollapsedStatusBarFragment resumeAndGetFragment() {
         mFragments.dispatchResume();
         processAllMessages();
-        return (CollapsedStatusBarFragment) mFragment;
+        CollapsedStatusBarFragment fragment = (CollapsedStatusBarFragment) mFragment;
+        fragment.disableAnimationsForTesting();
+        return fragment;
     }
 
     private View getUserChipView() {

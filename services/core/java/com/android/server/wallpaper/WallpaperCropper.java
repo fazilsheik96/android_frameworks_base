@@ -176,7 +176,7 @@ public class WallpaperCropper {
         // Case 2: if the orientation exists in the suggested crops, adjust the suggested crop
         Rect suggestedCrop = suggestedCrops.get(orientation);
         if (suggestedCrop != null) {
-                return getAdjustedCrop(suggestedCrop, bitmapSize, displaySize, true, rtl, ADD);
+            return getAdjustedCrop(suggestedCrop, bitmapSize, displaySize, true, rtl, ADD);
         }
 
         // Case 3: if we have the 90° rotated orientation in the suggested crops, reuse it and
@@ -272,7 +272,7 @@ public class WallpaperCropper {
      * Adjust a given crop:
      * <ul>
      *     <li>If parallax = true, make sure we have a parallax of at most {@link #MAX_PARALLAX},
-     *     by removing content from the right (or left if RTL layout) if necessary.
+     *     by removing content from the right (or left if RTL) if necessary.
      *     <li>If parallax = false, make sure we do not have additional width for parallax. If we
      *     have additional width for parallax, remove half of the additional width on both sides.
      *     <li>Make sure the crop fills the screen, i.e. that the width/height ratio of the crop
@@ -297,8 +297,8 @@ public class WallpaperCropper {
                 Rect rotatedCrop = new Rect(newLeft, newTop, newRight, newBottom);
                 Point rotatedBitmap = new Point(bitmapSize.y, bitmapSize.x);
                 Point rotatedScreen = new Point(screenSize.y, screenSize.x);
-                Rect rect = getAdjustedCrop(rotatedCrop, rotatedBitmap, rotatedScreen, false, rtl,
-                        mode);
+                Rect rect = getAdjustedCrop(
+                        rotatedCrop, rotatedBitmap, rotatedScreen, false, rtl, mode);
                 int resultLeft = rect.top;
                 int resultRight = resultLeft + rect.height();
                 int resultTop = rotatedBitmap.x - rect.right;
@@ -309,8 +309,11 @@ public class WallpaperCropper {
             if (additionalWidthForParallax > MAX_PARALLAX) {
                 int widthToRemove = (int) Math.ceil(
                         (additionalWidthForParallax - MAX_PARALLAX) * screenRatio * crop.height());
-                adjustedCrop.left += widthToRemove / 2;
-                adjustedCrop.right -= widthToRemove / 2 + widthToRemove % 2;
+                if (rtl) {
+                    adjustedCrop.left += widthToRemove;
+                } else {
+                    adjustedCrop.right -= widthToRemove;
+                }
             }
         } else {
             // Note: the third case when MODE == BALANCE, -W + sqrt(W * H * R), is the width to add
@@ -318,9 +321,8 @@ public class WallpaperCropper {
             // total surface of W * H. In other words it is the width to add to get the desired
             // aspect ratio R, while preserving the total number of pixels W * H.
             int widthToAdd = mode == REMOVE ? 0
-                    : mode == ADD ? (int) (0.5 + crop.height() * screenRatio - crop.width())
-                    : (int) (0.5 - crop.width()
-                            + Math.sqrt(crop.width() * crop.height() * screenRatio));
+                    : mode == ADD ? (int) (crop.height() * screenRatio - crop.width())
+                    : (int) (-crop.width() + Math.sqrt(crop.width() * crop.height() * screenRatio));
             int availableWidth = bitmapSize.x - crop.width();
             if (availableWidth >= widthToAdd) {
                 int widthToAddLeft = widthToAdd / 2;

@@ -33,8 +33,8 @@ import android.app.wearable.WearableSensingManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManagerInternal;
 import android.os.Binder;
+import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.RemoteCallback;
@@ -49,11 +49,9 @@ import android.util.Slog;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.infra.AbstractMasterSystemService;
 import com.android.server.infra.FrameworkResourcesServiceNameResolver;
-import com.android.server.pm.KnownPackages;
 import com.android.server.utils.quota.MultiRateLimiter;
 
 import java.io.FileDescriptor;
@@ -189,17 +187,10 @@ public class WearableSensingManagerService extends
 
     @Override
     protected int getMaximumTemporaryServiceDurationMs() {
+        if (Build.isDebuggable()) {
+            return Integer.MAX_VALUE;
+        }
         return MAX_TEMPORARY_SERVICE_DURATION_MS;
-    }
-
-    /** Returns {@code true} if the detection service is configured on this device. */
-    public static boolean isDetectionServiceConfigured() {
-        final PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
-        final String[] packageNames = pmi.getKnownPackageNames(
-                KnownPackages.PACKAGE_WEARABLE_SENSING, UserHandle.USER_SYSTEM);
-        boolean isServiceConfigured = (packageNames.length != 0);
-        Slog.i(TAG, "Wearable sensing service configured: " + isServiceConfigured);
-        return isServiceConfigured;
     }
 
     /**

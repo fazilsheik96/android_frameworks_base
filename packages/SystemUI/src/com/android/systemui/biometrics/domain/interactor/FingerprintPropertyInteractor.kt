@@ -46,13 +46,13 @@ constructor(
     displayStateInteractor: DisplayStateInteractor,
     udfpsOverlayInteractor: UdfpsOverlayInteractor,
 ) {
-    val propertiesInitialized: StateFlow<Boolean> = repository.propertiesInitialized
+    val propertiesInitialized: Flow<Boolean> = repository.propertiesInitialized
     val isUdfps: StateFlow<Boolean> =
         repository.sensorType
             .map { it.isUdfps() }
             .stateIn(
                 scope = applicationScope,
-                started = SharingStarted.WhileSubscribed(),
+                started = SharingStarted.Eagerly,
                 initialValue = repository.sensorType.value.isUdfps(),
             )
 
@@ -98,11 +98,11 @@ constructor(
         ) { unscaledSensorLocation, scale ->
             val sensorLocation =
                 SensorLocation(
-                    unscaledSensorLocation.sensorLocationX,
-                    unscaledSensorLocation.sensorLocationY,
-                    unscaledSensorLocation.sensorRadius,
+                    naturalCenterX = unscaledSensorLocation.sensorLocationX,
+                    naturalCenterY = unscaledSensorLocation.sensorLocationY,
+                    naturalRadius = unscaledSensorLocation.sensorRadius,
+                    scale = scale
                 )
-            sensorLocation.scale = scale
             sensorLocation
         }
 

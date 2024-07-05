@@ -59,12 +59,12 @@ import android.os.PowerExemptionManager;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
-import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.text.TextUtils;
 import android.view.View;
 
 import androidx.core.graphics.drawable.IconCompat;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 
 import com.android.settingslib.bluetooth.CachedBluetoothDeviceManager;
@@ -95,7 +95,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @SmallTest
-@RunWith(AndroidTestingRunner.class)
+@RunWith(AndroidJUnit4.class)
 @TestableLooper.RunWithLooper(setAsMainLooper = true)
 public class MediaOutputControllerTest extends SysuiTestCase {
     private static final String TEST_DEVICE_1_ID = "test_device_1_id";
@@ -199,6 +199,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
                         mSpyContext,
                         mPackageName,
                         mContext.getUser(),
+                        /* token */ null,
                         mMediaSessionManager,
                         mLocalBluetoothManager,
                         mStarter,
@@ -292,6 +293,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
                         mSpyContext,
                         null,
                         mContext.getUser(),
+                        /* token */ null,
                         mMediaSessionManager,
                         mLocalBluetoothManager,
                         mStarter,
@@ -333,6 +335,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
                         mSpyContext,
                         null,
                         mSpyContext.getUser(),
+                        /* token */ null,
                         mMediaSessionManager,
                         mLocalBluetoothManager,
                         mStarter,
@@ -588,6 +591,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
                         mSpyContext,
                         "",
                         mSpyContext.getUser(),
+                        /* token */ null,
                         mMediaSessionManager,
                         mLocalBluetoothManager,
                         mStarter,
@@ -621,6 +625,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
                         mSpyContext,
                         "",
                         mSpyContext.getUser(),
+                        /* token */ null,
                         mMediaSessionManager,
                         mLocalBluetoothManager,
                         mStarter,
@@ -667,6 +672,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
                         mSpyContext,
                         null,
                         mSpyContext.getUser(),
+                        /* token */ null,
                         mMediaSessionManager,
                         mLocalBluetoothManager,
                         mStarter,
@@ -693,6 +699,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
                         mSpyContext,
                         null,
                         mSpyContext.getUser(),
+                        /* token */ null,
                         mMediaSessionManager,
                         mLocalBluetoothManager,
                         mStarter,
@@ -972,6 +979,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
                         mSpyContext,
                         null,
                         mSpyContext.getUser(),
+                        /* token */ null,
                         mMediaSessionManager,
                         mLocalBluetoothManager,
                         mStarter,
@@ -1174,6 +1182,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
                         mSpyContext,
                         null,
                         mSpyContext.getUser(),
+                        /* token */ null,
                         mMediaSessionManager,
                         mLocalBluetoothManager,
                         mStarter,

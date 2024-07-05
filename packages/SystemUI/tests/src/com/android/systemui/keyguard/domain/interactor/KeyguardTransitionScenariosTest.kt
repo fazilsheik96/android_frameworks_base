@@ -511,7 +511,6 @@ class KeyguardTransitionScenariosTest(flags: FlagsParameterization?) : SysuiTest
                 .startedTransition(
                     to = KeyguardState.LOCKSCREEN,
                     from = KeyguardState.DOZING,
-                    ownerName = "FromDozingTransitionInteractor",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -570,13 +569,13 @@ class KeyguardTransitionScenariosTest(flags: FlagsParameterization?) : SysuiTest
             // WHEN biometrics succeeds with wake and unlock mode
             powerInteractor.setAwakeForTest()
             keyguardRepository.setBiometricUnlockState(BiometricUnlockMode.WAKE_AND_UNLOCK)
-            advanceTimeBy(60L)
+            runCurrent()
 
             assertThat(transitionRepository)
                 .startedTransition(
                     to = KeyguardState.GONE,
                     from = KeyguardState.DOZING,
-                    ownerName = "FromDozingTransitionInteractor",
+                    ownerName = "FromDozingTransitionInteractor(biometric wake and unlock)",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -600,32 +599,6 @@ class KeyguardTransitionScenariosTest(flags: FlagsParameterization?) : SysuiTest
                 .startedTransition(
                     to = KeyguardState.PRIMARY_BOUNCER,
                     from = KeyguardState.DOZING,
-                    ownerName = "FromDozingTransitionInteractor",
-                    animatorAssertion = { it.isNotNull() }
-                )
-
-            coroutineContext.cancelChildren()
-        }
-
-    /** This handles security method NONE and screen off with lock timeout */
-    @Test
-    fun dozingToGoneWithKeyguardNotShowing() =
-        testScope.runTest {
-            // GIVEN a prior transition has run to DOZING
-            runTransitionAndSetWakefulness(KeyguardState.LOCKSCREEN, KeyguardState.DOZING)
-            runCurrent()
-
-            // WHEN the device wakes up without a keyguard
-            keyguardRepository.setKeyguardShowing(false)
-            keyguardRepository.setKeyguardDismissible(true)
-            powerInteractor.setAwakeForTest()
-            advanceTimeBy(60L)
-
-            assertThat(transitionRepository)
-                .startedTransition(
-                    to = KeyguardState.GONE,
-                    from = KeyguardState.DOZING,
-                    ownerName = "FromDozingTransitionInteractor",
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -683,7 +656,6 @@ class KeyguardTransitionScenariosTest(flags: FlagsParameterization?) : SysuiTest
                 .startedTransition(
                     to = KeyguardState.GLANCEABLE_HUB,
                     from = KeyguardState.DOZING,
-                    ownerName = FromDozingTransitionInteractor::class.simpleName,
                     animatorAssertion = { it.isNotNull() }
                 )
 
@@ -1669,7 +1641,9 @@ class KeyguardTransitionScenariosTest(flags: FlagsParameterization?) : SysuiTest
             // THEN a transition from DOZING => OCCLUDED should occur
             assertThat(transitionRepository)
                 .startedTransition(
-                    ownerName = "FromDozingTransitionInteractor",
+                    ownerName =
+                        "FromDozingTransitionInteractor" +
+                            "(keyguardInteractor.onCameraLaunchDetected)",
                     from = KeyguardState.DOZING,
                     to = KeyguardState.OCCLUDED,
                     animatorAssertion = { it.isNotNull() },

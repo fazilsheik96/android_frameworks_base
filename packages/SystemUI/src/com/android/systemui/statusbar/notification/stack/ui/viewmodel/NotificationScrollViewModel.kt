@@ -18,13 +18,16 @@
 package com.android.systemui.statusbar.notification.stack.ui.viewmodel
 
 import com.android.compose.animation.scene.ObservableTransitionState
+import com.android.compose.animation.scene.SceneKey
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.scene.domain.interactor.SceneInteractor
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
+import com.android.systemui.scene.shared.model.SceneFamilies
 import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
+import com.android.systemui.shade.shared.model.ShadeMode
 import com.android.systemui.statusbar.notification.stack.domain.interactor.NotificationStackAppearanceInteractor
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimClipping
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimShape
@@ -47,7 +50,7 @@ constructor(
     dumpManager: DumpManager,
     stackAppearanceInteractor: NotificationStackAppearanceInteractor,
     shadeInteractor: ShadeInteractor,
-    sceneInteractor: SceneInteractor,
+    private val sceneInteractor: SceneInteractor,
     // TODO(b/336364825) Remove Lazy when SceneContainerFlag is released -
     // while the flag is off, creating this object too early results in a crash
     keyguardInteractor: Lazy<KeyguardInteractor>,
@@ -60,9 +63,11 @@ constructor(
     val expandFraction: Flow<Float> =
         combine(
                 shadeInteractor.shadeExpansion,
+                shadeInteractor.shadeMode,
                 shadeInteractor.qsExpansion,
                 sceneInteractor.transitionState,
-            ) { shadeExpansion, qsExpansion, transitionState ->
+                sceneInteractor.resolveSceneFamily(SceneFamilies.QuickSettings),
+            ) { shadeExpansion, shadeMode, qsExpansion, transitionState, quickSettingsScene ->
                 when (transitionState) {
                     is ObservableTransitionState.Idle -> {
                         if (transitionState.currentScene == Scenes.Lockscreen) {
@@ -73,16 +78,20 @@ constructor(
                     }
                     is ObservableTransitionState.Transition -> {
                         if (
-                            (transitionState.fromScene == Scenes.Shade &&
-                                transitionState.toScene == Scenes.QuickSettings) ||
-                                (transitionState.fromScene == Scenes.QuickSettings &&
-                                    transitionState.toScene == Scenes.Shade)
+                            (transitionState.fromScene in SceneFamilies.NotifShade &&
+                                transitionState.toScene == quickSettingsScene) ||
+                                (transitionState.fromScene in quickSettingsScene &&
+                                    transitionState.toScene in SceneFamilies.NotifShade) ||
+                                (transitionState.fromScene == Scenes.Lockscreen &&
+                                    transitionState.toScene in SceneFamilies.NotifShade) ||
+                                (transitionState.fromScene in SceneFamilies.NotifShade &&
+                                    transitionState.toScene == Scenes.Lockscreen)
                         ) {
                             1f
                         } else if (
-                            (transitionState.fromScene == Scenes.Gone ||
-                                transitionState.fromScene == Scenes.Lockscreen) &&
-                                transitionState.toScene == Scenes.QuickSettings
+                            shadeMode != ShadeMode.Split &&
+                                transitionState.fromScene in SceneFamilies.Home &&
+                                transitionState.toScene in quickSettingsScene
                         ) {
                             // during QS expansion, increase fraction at same rate as scrim alpha,
                             // but start when scrim alpha is at EXPANSION_FOR_DELAYED_STACK_FADE_IN.
@@ -97,6 +106,9 @@ constructor(
             }
             .distinctUntilChanged()
             .dumpWhileCollecting("expandFraction")
+
+    private operator fun SceneKey.contains(scene: SceneKey) =
+        sceneInteractor.isSceneInFamily(scene, this)
 
     /** The bounds of the notification stack in the current scene. */
     private val shadeScrimClipping: Flow<ShadeScrimClipping?> =
@@ -136,23 +148,21 @@ constructor(
      */
     val scrolledToTop: Flow<Boolean> =
         stackAppearanceInteractor.scrolledToTop.dumpValue("scrolledToTop")
-    /** The y-coordinate in px of bottom of the contents of the HUN. */
-    val headsUpTop: Flow<Float> = stackAppearanceInteractor.headsUpTop.dumpValue("headsUpTop")
 
     /** Receives the amount (px) that the stack should scroll due to internal expansion. */
     val syntheticScrollConsumer: (Float) -> Unit = stackAppearanceInteractor::setSyntheticScroll
+
     /**
      * Receives whether the current touch gesture is overscroll as it has already been consumed by
      * the stack.
      */
     val currentGestureOverscrollConsumer: (Boolean) -> Unit =
         stackAppearanceInteractor::setCurrentGestureOverscroll
-    /** Receives the height of the heads up notification. */
-    val headsUpHeightConsumer: (Float) -> Unit = stackAppearanceInteractor::setHeadsUpHeight
 
     /** Whether the notification stack is scrollable or not. */
-    val isScrollable: Flow<Boolean> =
-        sceneInteractor.currentScene.map { it == Scenes.Shade }.dumpWhileCollecting("isScrollable")
+    val isScrollable: Flow<Boolean> = sceneInteractor.currentScene.map {
+        sceneInteractor.isSceneInFamily(it, SceneFamilies.NotifShade) || it == Scenes.Lockscreen
+    }.dumpWhileCollecting("isScrollable")
 
     /** Whether the notification stack is displayed in doze mode. */
     val isDozing: Flow<Boolean> by lazy {

@@ -27,8 +27,8 @@ import static org.mockito.Mockito.verify;
 import android.content.Intent;
 import android.platform.test.annotations.DisableFlags;
 import android.platform.test.annotations.EnableFlags;
-import android.testing.AndroidTestingRunner;
 
+import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 
 import com.android.settingslib.flags.Flags;
@@ -40,7 +40,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 @SmallTest
-@RunWith(AndroidTestingRunner.class)
+@RunWith(AndroidJUnit4.class)
 public class MediaOutputDialogReceiverTest extends SysuiTestCase {
 
     private MediaOutputDialogReceiver mMediaOutputDialogReceiver;
@@ -64,7 +64,7 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
         verify(mMockMediaOutputDialogManager, times(1))
-                .createAndShow(eq(getContext().getPackageName()), eq(false), any(), any());
+                .createAndShow(eq(getContext().getPackageName()), eq(false), any(), any(), any());
         verify(mMockMediaOutputBroadcastDialogManager, never())
                 .createAndShow(any(), anyBoolean(), any());
     }
@@ -76,7 +76,7 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
         verify(mMockMediaOutputDialogManager, never())
-                .createAndShow(any(), anyBoolean(), any(), any());
+                .createAndShow(any(), anyBoolean(), any(), any(), any());
         verify(mMockMediaOutputBroadcastDialogManager, never())
                 .createAndShow(any(), anyBoolean(), any());
     }
@@ -87,7 +87,7 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
         verify(mMockMediaOutputDialogManager, never())
-                .createAndShow(any(), anyBoolean(), any(), any());
+                .createAndShow(any(), anyBoolean(), any(), any(), any());
         verify(mMockMediaOutputBroadcastDialogManager, never())
                 .createAndShow(any(), anyBoolean(), any());
     }
@@ -101,7 +101,7 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
         verify(mMockMediaOutputDialogManager, never())
-                .createAndShow(any(), anyBoolean(), any(), any());
+                .createAndShow(any(), anyBoolean(), any(), any(), any());
         verify(mMockMediaOutputBroadcastDialogManager, never())
                 .createAndShow(any(), anyBoolean(), any());
     }
@@ -115,7 +115,7 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
         verify(mMockMediaOutputDialogManager, never())
-                .createAndShow(any(), anyBoolean(), any(), any());
+                .createAndShow(any(), anyBoolean(), any(), any(), any());
         verify(mMockMediaOutputBroadcastDialogManager, times(1))
                 .createAndShow(eq(getContext().getPackageName()), eq(true), any());
     }
@@ -129,7 +129,7 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
         verify(mMockMediaOutputDialogManager, never())
-                .createAndShow(any(), anyBoolean(), any(), any());
+                .createAndShow(any(), anyBoolean(), any(), any(), any());
         verify(mMockMediaOutputBroadcastDialogManager, never())
                 .createAndShow(any(), anyBoolean(), any());
     }
@@ -142,7 +142,7 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
         verify(mMockMediaOutputDialogManager, never())
-                .createAndShow(any(), anyBoolean(), any(), any());
+                .createAndShow(any(), anyBoolean(), any(), any(), any());
         verify(mMockMediaOutputBroadcastDialogManager, never())
                 .createAndShow(any(), anyBoolean(), any());
     }
@@ -155,7 +155,7 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
         verify(mMockMediaOutputDialogManager, never())
-                .createAndShow(any(), anyBoolean(), any(), any());
+                .createAndShow(any(), anyBoolean(), any(), any(), any());
         verify(mMockMediaOutputBroadcastDialogManager, never())
                 .createAndShow(any(), anyBoolean(), any());
     }
@@ -166,7 +166,7 @@ public class MediaOutputDialogReceiverTest extends SysuiTestCase {
         mMediaOutputDialogReceiver.onReceive(getContext(), intent);
 
         verify(mMockMediaOutputDialogManager, never())
-                .createAndShow(any(), anyBoolean(), any(), any());
+                .createAndShow(any(), anyBoolean(), any(), any(), any());
         verify(mMockMediaOutputBroadcastDialogManager, never())
                 .createAndShow(any(), anyBoolean(), any());
     }

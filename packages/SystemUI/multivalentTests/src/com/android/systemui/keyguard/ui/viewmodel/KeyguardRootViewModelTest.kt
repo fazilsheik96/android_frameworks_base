@@ -26,7 +26,7 @@ import com.android.compose.animation.scene.ObservableTransitionState
 import com.android.systemui.Flags as AConfigFlags
 import com.android.systemui.Flags.FLAG_NEW_AOD_TRANSITION
 import com.android.systemui.SysuiTestCase
-import com.android.systemui.communal.data.repository.communalRepository
+import com.android.systemui.communal.data.repository.communalSceneRepository
 import com.android.systemui.communal.shared.model.CommunalScenes
 import com.android.systemui.coroutines.collectLastValue
 import com.android.systemui.deviceentry.data.repository.fakeDeviceEntryRepository
@@ -39,7 +39,9 @@ import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.shared.model.TransitionState
 import com.android.systemui.keyguard.shared.model.TransitionStep
 import com.android.systemui.kosmos.testScope
+import com.android.systemui.scene.data.repository.Idle
 import com.android.systemui.scene.data.repository.sceneContainerRepository
+import com.android.systemui.scene.data.repository.setSceneTransition
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.shade.shadeTestUtil
@@ -71,7 +73,7 @@ class KeyguardRootViewModelTest(flags: FlagsParameterization) : SysuiTestCase() 
     private val testScope = kosmos.testScope
     private val keyguardTransitionRepository by lazy { kosmos.fakeKeyguardTransitionRepository }
     private val keyguardRepository by lazy { kosmos.fakeKeyguardRepository }
-    private val communalRepository by lazy { kosmos.communalRepository }
+    private val communalRepository by lazy { kosmos.communalSceneRepository }
     private val screenOffAnimationController by lazy { kosmos.screenOffAnimationController }
     private val deviceEntryRepository by lazy { kosmos.fakeDeviceEntryRepository }
     private val notificationsKeyguardInteractor by lazy { kosmos.notificationsKeyguardInteractor }
@@ -290,6 +292,7 @@ class KeyguardRootViewModelTest(flags: FlagsParameterization) : SysuiTestCase() 
                 testScope,
             )
 
+            kosmos.setSceneTransition(Idle(Scenes.Gone))
             // Make sure the value hasn't changed since we're GONE
             keyguardRepository.topClippingBounds.value = 5
             assertThat(topClippingBounds).isEqualTo(1000)
@@ -399,6 +402,53 @@ class KeyguardRootViewModelTest(flags: FlagsParameterization) : SysuiTestCase() 
         }
 
     @Test
+    @DisableSceneContainer
+    fun alphaFromShadeExpansion_doesNotEmitWhenTransitionRunning() =
+        testScope.runTest {
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.AOD,
+                to = KeyguardState.LOCKSCREEN,
+                testScope,
+            )
+
+            val alpha by collectLastValue(underTest.alpha(viewState))
+            shadeTestUtil.setQsExpansion(0f)
+            runCurrent()
+            assertThat(alpha).isEqualTo(1f)
+
+            keyguardTransitionRepository.sendTransitionSteps(
+                from = KeyguardState.LOCKSCREEN,
+                to = KeyguardState.PRIMARY_BOUNCER,
+                testScope,
+            )
+            assertThat(alpha).isEqualTo(0f)
+
+            keyguardTransitionRepository.sendTransitionSteps(
+                listOf(
+                    TransitionStep(
+                        from = KeyguardState.PRIMARY_BOUNCER,
+                        to = KeyguardState.LOCKSCREEN,
+                        transitionState = TransitionState.STARTED,
+                        value = 0f,
+                    ),
+                    TransitionStep(
+                        from = KeyguardState.PRIMARY_BOUNCER,
+                        to = KeyguardState.LOCKSCREEN,
+                        transitionState = TransitionState.RUNNING,
+                        value = 0.8f,
+                    ),
+                ),
+                testScope,
+            )
+            // Alpha should be 1f from the above transition
+            assertThat(alpha).isEqualTo(1f)
+
+            shadeTestUtil.setQsExpansion(0.5f)
+            // Alpha should remain unchanged instead of fading out
+            assertThat(alpha).isEqualTo(1f)
+        }
+
+    @Test
     fun alpha_shadeClosedOverLockscreen_isOne() =
         testScope.runTest {
             val alpha by collectLastValue(underTest.alpha(viewState))
@@ -471,11 +521,14 @@ class KeyguardRootViewModelTest(flags: FlagsParameterization) : SysuiTestCase() 
                 to = KeyguardState.GONE,
                 testScope = testScope,
             )
+            kosmos.setSceneTransition(Idle(Scenes.Gone))
             assertThat(alpha).isEqualTo(0f)
 
-            // Try pulling down shade and ensure the value doesn't change
-            shadeTestUtil.setQsExpansion(0.5f)
-            assertThat(alpha).isEqualTo(0f)
+            if (!SceneContainerFlag.isEnabled) {
+                // Try pulling down shade and ensure the value doesn't change
+                shadeTestUtil.setQsExpansion(0.5f)
+                assertThat(alpha).isEqualTo(0f)
+            }
         }
 
     @Test

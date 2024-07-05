@@ -32,9 +32,10 @@ import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.qs.pipeline.domain.interactor.PanelInteractor
 import com.android.systemui.qs.tiles.base.interactor.QSTileInput
 import com.android.systemui.qs.tiles.base.interactor.QSTileUserActionInteractor
-import com.android.systemui.qs.tiles.impl.screenrecord.domain.model.ScreenRecordTileModel
 import com.android.systemui.qs.tiles.viewmodel.QSTileUserAction
 import com.android.systemui.screenrecord.RecordingController
+import com.android.systemui.screenrecord.data.model.ScreenRecordModel
+import com.android.systemui.screenrecord.data.repository.ScreenRecordRepository
 import com.android.systemui.statusbar.phone.KeyguardDismissUtil
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
@@ -47,6 +48,7 @@ constructor(
     @Application private val context: Context,
     @Main private val mainContext: CoroutineContext,
     @Background private val backgroundContext: CoroutineContext,
+    private val screenRecordRepository: ScreenRecordRepository,
     private val recordingController: RecordingController,
     private val keyguardInteractor: KeyguardInteractor,
     private val keyguardDismissUtil: KeyguardDismissUtil,
@@ -55,19 +57,18 @@ constructor(
     private val mediaProjectionMetricsLogger: MediaProjectionMetricsLogger,
     private val featureFlags: FeatureFlagsClassic,
     private val activityStarter: ActivityStarter,
-) : QSTileUserActionInteractor<ScreenRecordTileModel> {
-    override suspend fun handleInput(input: QSTileInput<ScreenRecordTileModel>): Unit =
+) : QSTileUserActionInteractor<ScreenRecordModel> {
+    override suspend fun handleInput(input: QSTileInput<ScreenRecordModel>): Unit =
         with(input) {
             when (action) {
                 is QSTileUserAction.Click -> {
                     when (data) {
-                        is ScreenRecordTileModel.Starting -> {
+                        is ScreenRecordModel.Starting -> {
                             Log.d(TAG, "Cancelling countdown")
                             withContext(backgroundContext) { recordingController.cancelCountdown() }
                         }
-                        is ScreenRecordTileModel.Recording ->
-                            withContext(backgroundContext) { recordingController.stopRecording() }
-                        is ScreenRecordTileModel.DoingNothing ->
+                        is ScreenRecordModel.Recording -> screenRecordRepository.stopRecording()
+                        is ScreenRecordModel.DoingNothing ->
                             withContext(mainContext) {
                                 showPrompt(action.expandable, user.identifier)
                             }
@@ -122,8 +123,7 @@ constructor(
                             controller,
                             animateBackgroundBoundsChange = true,
                         )
-                    }
-                        ?: dialog.show()
+                    } ?: dialog.show()
                 } else {
                     dialog.show()
                 }

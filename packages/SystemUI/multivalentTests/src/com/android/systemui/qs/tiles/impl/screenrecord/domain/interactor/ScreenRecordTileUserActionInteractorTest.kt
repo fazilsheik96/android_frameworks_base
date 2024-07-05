@@ -33,8 +33,9 @@ import com.android.systemui.plugins.ActivityStarter.OnDismissAction
 import com.android.systemui.plugins.activityStarter
 import com.android.systemui.qs.pipeline.domain.interactor.PanelInteractor
 import com.android.systemui.qs.tiles.base.interactor.QSTileInputTestKtx
-import com.android.systemui.qs.tiles.impl.screenrecord.domain.model.ScreenRecordTileModel
 import com.android.systemui.screenrecord.RecordingController
+import com.android.systemui.screenrecord.data.model.ScreenRecordModel
+import com.android.systemui.screenrecord.data.repository.ScreenRecordRepositoryImpl
 import com.android.systemui.statusbar.phone.KeyguardDismissUtil
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.argumentCaptor
@@ -72,11 +73,18 @@ class ScreenRecordTileUserActionInteractorTest : SysuiTestCase() {
                 .thenReturn(dialog)
         }
 
+    private val screenRecordRepository =
+        ScreenRecordRepositoryImpl(
+            bgCoroutineContext = testScope.testScheduler,
+            recordingController = recordingController,
+        )
+
     private val underTest =
         ScreenRecordTileUserActionInteractor(
             context,
             testScope.testScheduler,
             testScope.testScheduler,
+            screenRecordRepository,
             recordingController,
             keyguardInteractor,
             keyguardDismissUtil,
@@ -89,7 +97,7 @@ class ScreenRecordTileUserActionInteractorTest : SysuiTestCase() {
 
     @Test
     fun handleClick_whenStarting_cancelCountdown() = runTest {
-        val startingModel = ScreenRecordTileModel.Starting(0)
+        val startingModel = ScreenRecordModel.Starting(0)
 
         underTest.handleInput(QSTileInputTestKtx.click(startingModel))
 
@@ -98,7 +106,7 @@ class ScreenRecordTileUserActionInteractorTest : SysuiTestCase() {
 
     @Test
     fun handleClick_whenRecording_stopRecording() = runTest {
-        val recordingModel = ScreenRecordTileModel.Recording
+        val recordingModel = ScreenRecordModel.Recording
 
         underTest.handleInput(QSTileInputTestKtx.click(recordingModel))
 
@@ -107,7 +115,7 @@ class ScreenRecordTileUserActionInteractorTest : SysuiTestCase() {
 
     @Test
     fun handleClick_whenDoingNothing_createDialogDismissPanelShowDialog() = runTest {
-        val recordingModel = ScreenRecordTileModel.DoingNothing
+        val recordingModel = ScreenRecordModel.DoingNothing
 
         underTest.handleInput(QSTileInputTestKtx.click(recordingModel))
         val onStartRecordingClickedCaptor = argumentCaptor<Runnable>()
@@ -143,7 +151,7 @@ class ScreenRecordTileUserActionInteractorTest : SysuiTestCase() {
 
         kosmos.fakeKeyguardRepository.setKeyguardShowing(false)
 
-        val recordingModel = ScreenRecordTileModel.DoingNothing
+        val recordingModel = ScreenRecordModel.DoingNothing
 
         underTest.handleInput(
             QSTileInputTestKtx.click(recordingModel, UserHandle.CURRENT, expandable)

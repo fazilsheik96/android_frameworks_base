@@ -52,8 +52,11 @@ constructor(
     udfpsOverlayInteractor: UdfpsOverlayInteractor,
 ) {
     private val isShowingAodOrDozing: Flow<Boolean> =
-        transitionInteractor.startedKeyguardState.map { keyguardState ->
-            keyguardState == KeyguardState.AOD || keyguardState == KeyguardState.DOZING
+        combine(
+            transitionInteractor.startedKeyguardState,
+            transitionInteractor.transitionValue(KeyguardState.DOZING),
+        ) { startedKeyguardState, dozingTransitionValue ->
+            startedKeyguardState == KeyguardState.AOD || dozingTransitionValue == 1f
         }
 
     private fun getColor(usingBackgroundProtection: Boolean): Int {
@@ -64,13 +67,6 @@ constructor(
         }
     }
 
-    private val color: Flow<Int> =
-        deviceEntryIconViewModel.useBackgroundProtection.flatMapLatest { useBgProtection ->
-            configurationInteractor.onAnyConfigurationChange
-                .map { getColor(useBgProtection) }
-                .onStart { emit(getColor(useBgProtection)) }
-        }
-
     // While dozing, the display can show the AOD UI; show the AOD udfps when dozing
     private val useAodIconVariant: Flow<Boolean> =
         deviceEntryUdfpsInteractor.isUdfpsEnrolledAndEnabled.flatMapLatest { udfspEnrolled ->
@@ -80,6 +76,22 @@ constructor(
                 flowOf(false)
             }
         }
+
+    private val color: Flow<Int> =
+        useAodIconVariant
+            .flatMapLatest { useAodVariant ->
+                if (useAodVariant) {
+                    flowOf(android.graphics.Color.WHITE)
+                } else {
+                    deviceEntryIconViewModel.useBackgroundProtection.flatMapLatest { useBgProtection
+                        ->
+                        configurationInteractor.onAnyConfigurationChange
+                            .map { getColor(useBgProtection) }
+                            .onStart { emit(getColor(useBgProtection)) }
+                    }
+                }
+            }
+            .distinctUntilChanged()
 
     private val padding: Flow<Int> =
         deviceEntryUdfpsInteractor.isUdfpsSupported.flatMapLatest { udfpsSupported ->

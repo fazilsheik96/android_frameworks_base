@@ -46,6 +46,7 @@ package android {
     field public static final String REMAP_MODIFIER_KEYS = "android.permission.REMAP_MODIFIER_KEYS";
     field public static final String REMOVE_TASKS = "android.permission.REMOVE_TASKS";
     field public static final String REQUEST_UNIQUE_ID_ATTESTATION = "android.permission.REQUEST_UNIQUE_ID_ATTESTATION";
+    field public static final String RESERVED_FOR_TESTING_SIGNATURE = "android.permission.RESERVED_FOR_TESTING_SIGNATURE";
     field public static final String RESET_APP_ERRORS = "android.permission.RESET_APP_ERRORS";
     field public static final String REVOKE_POST_NOTIFICATIONS_WITHOUT_KILL = "android.permission.REVOKE_POST_NOTIFICATIONS_WITHOUT_KILL";
     field public static final String SET_AND_VERIFY_LOCKSCREEN_CREDENTIALS = "android.permission.SET_AND_VERIFY_LOCKSCREEN_CREDENTIALS";
@@ -281,6 +282,7 @@ package android.app {
     field public static final String OPSTR_ACTIVITY_RECOGNITION = "android:activity_recognition";
     field public static final String OPSTR_ACTIVITY_RECOGNITION_SOURCE = "android:activity_recognition_source";
     field public static final String OPSTR_MANAGE_ONGOING_CALLS = "android:manage_ongoing_calls";
+    field @FlaggedApi("android.service.notification.redact_sensitive_notifications_from_untrusted_listeners") public static final String OPSTR_RECEIVE_SENSITIVE_NOTIFICATIONS = "android:receive_sensitive_notifications";
     field public static final String OPSTR_RECORD_AUDIO_HOTWORD = "android:record_audio_hotword";
     field public static final String OPSTR_RESERVED_FOR_TESTING = "android:reserved_for_testing";
     field public static final String OPSTR_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER = "android:use_icc_auth_with_device_identifier";
@@ -4260,6 +4262,12 @@ package android.window {
     field @NonNull public static final android.os.Parcelable.Creator<android.window.TaskFragmentOrganizerToken> CREATOR;
   }
 
+  public final class TaskFragmentParentInfo implements android.os.Parcelable {
+    method public int describeContents();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.window.TaskFragmentParentInfo> CREATOR;
+  }
+
   public final class TaskFragmentTransaction implements android.os.Parcelable {
     ctor public TaskFragmentTransaction();
     method public void addChange(@Nullable android.window.TaskFragmentTransaction.Change);
@@ -4284,8 +4292,8 @@ package android.window {
     method @Nullable public android.os.IBinder getActivityToken();
     method @NonNull public android.os.Bundle getErrorBundle();
     method @Nullable public android.os.IBinder getErrorCallbackToken();
-    method @Nullable public android.content.res.Configuration getTaskConfiguration();
     method @Nullable public android.window.TaskFragmentInfo getTaskFragmentInfo();
+    method @Nullable public android.window.TaskFragmentParentInfo getTaskFragmentParentInfo();
     method @Nullable public android.os.IBinder getTaskFragmentToken();
     method public int getTaskId();
     method public int getType();
@@ -4293,7 +4301,6 @@ package android.window {
     method @NonNull public android.window.TaskFragmentTransaction.Change setActivityToken(@NonNull android.os.IBinder);
     method @NonNull public android.window.TaskFragmentTransaction.Change setErrorBundle(@NonNull android.os.Bundle);
     method @NonNull public android.window.TaskFragmentTransaction.Change setErrorCallbackToken(@Nullable android.os.IBinder);
-    method @NonNull public android.window.TaskFragmentTransaction.Change setTaskConfiguration(@NonNull android.content.res.Configuration);
     method @NonNull public android.window.TaskFragmentTransaction.Change setTaskFragmentInfo(@NonNull android.window.TaskFragmentInfo);
     method @NonNull public android.window.TaskFragmentTransaction.Change setTaskFragmentToken(@NonNull android.os.IBinder);
     method @NonNull public android.window.TaskFragmentTransaction.Change setTaskId(int);

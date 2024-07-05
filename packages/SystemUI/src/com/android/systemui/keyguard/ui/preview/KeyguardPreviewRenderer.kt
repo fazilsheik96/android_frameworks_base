@@ -68,7 +68,9 @@ import com.android.systemui.keyguard.ui.binder.KeyguardQuickAffordanceViewBinder
 import com.android.systemui.keyguard.ui.binder.KeyguardRootViewBinder
 import com.android.systemui.keyguard.ui.view.KeyguardRootView
 import com.android.systemui.keyguard.ui.view.layout.sections.DefaultShortcutsSection
+import com.android.systemui.keyguard.ui.viewmodel.KeyguardBlueprintViewModel
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardBottomAreaViewModel
+import com.android.systemui.keyguard.ui.viewmodel.KeyguardClockViewModel
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardPreviewClockViewModel
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardPreviewSmartspaceViewModel
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardQuickAffordancesCombinedViewModel
@@ -134,6 +136,7 @@ constructor(
     private val vibratorHelper: VibratorHelper,
     private val indicationController: KeyguardIndicationController,
     private val keyguardRootViewModel: KeyguardRootViewModel,
+    private val keyguardBlueprintViewModel: KeyguardBlueprintViewModel,
     @Assisted bundle: Bundle,
     private val occludingAppDeviceEntryMessageViewModel: OccludingAppDeviceEntryMessageViewModel,
     private val chipbarCoordinator: ChipbarCoordinator,
@@ -143,6 +146,7 @@ constructor(
     private val communalTutorialViewModel: CommunalTutorialIndicatorViewModel,
     private val defaultShortcutsSection: DefaultShortcutsSection,
     private val keyguardClockInteractor: KeyguardClockInteractor,
+    private val keyguardClockViewModel: KeyguardClockViewModel,
 ) {
     val hostToken: IBinder? = bundle.getBinder(KEY_HOST_TOKEN)
     private val width: Int = bundle.getInt(KEY_VIEW_WIDTH)
@@ -379,12 +383,14 @@ constructor(
                 KeyguardRootViewBinder.bind(
                     keyguardRootView,
                     keyguardRootViewModel,
+                    keyguardBlueprintViewModel,
                     configuration,
                     occludingAppDeviceEntryMessageViewModel,
                     chipbarCoordinator,
                     screenOffAnimationController,
                     shadeInteractor,
                     keyguardClockInteractor,
+                    keyguardClockViewModel,
                     null, // jank monitor not required for preview mode
                     null, // device entry haptics not required preview mode
                     null, // device entry haptics not required for preview mode
@@ -631,7 +637,7 @@ constructor(
             // color will need to use wallpaper's extracted color and consider if the
             // wallpaper's color is dark or light.
             val style = themeStyle ?: fetchThemeStyleFromSetting().also { themeStyle = it }
-            val wallpaperColorScheme = ColorScheme(colors, darkTheme = false, style)
+            val wallpaperColorScheme = ColorScheme(colors, false, style)
             val lightClockColor = wallpaperColorScheme.accent1.s100
             val darkClockColor = wallpaperColorScheme.accent2.s600
 

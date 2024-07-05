@@ -367,9 +367,9 @@ final class InputMethodSubtypeSwitchingController {
         }
 
         protected void dump(final Printer pw, final String prefix) {
-            for (int i = 0; i < mUsageHistoryOfSubtypeListItemIndex.length; ++i) {
-                final int rank = mUsageHistoryOfSubtypeListItemIndex[i];
-                final ImeSubtypeListItem item = mImeSubtypeList.get(i);
+            for (int rank = 0; rank < mUsageHistoryOfSubtypeListItemIndex.length; ++rank) {
+                final int index = mUsageHistoryOfSubtypeListItemIndex[rank];
+                final ImeSubtypeListItem item = mImeSubtypeList.get(index);
                 pw.println(prefix + "rank=" + rank + " item=" + item);
             }
         }
@@ -465,11 +465,11 @@ final class InputMethodSubtypeSwitchingController {
             return result;
         }
 
-        protected void dump(final Printer pw) {
-            pw.println("    mSwitchingAwareRotationList:");
-            mSwitchingAwareRotationList.dump(pw, "      ");
-            pw.println("    mSwitchingUnawareRotationList:");
-            mSwitchingUnawareRotationList.dump(pw, "      ");
+        protected void dump(@NonNull Printer pw, @NonNull String prefix) {
+            pw.println(prefix + "mSwitchingAwareRotationList:");
+            mSwitchingAwareRotationList.dump(pw, prefix + "  ");
+            pw.println(prefix + "mSwitchingUnawareRotationList:");
+            mSwitchingUnawareRotationList.dump(pw, prefix + "  ");
         }
     }
 
@@ -529,11 +529,11 @@ final class InputMethodSubtypeSwitchingController {
         return mController.getNextInputMethod(onlyCurrentIme, imi, subtype);
     }
 
-    public void dump(final Printer pw) {
+    public void dump(@NonNull Printer pw, @NonNull String prefix) {
         if (mController != null) {
-            mController.dump(pw);
+            mController.dump(pw, prefix);
         } else {
-            pw.println("    mController=null");
+            pw.println(prefix + "mController=null");
         }
     }
 }

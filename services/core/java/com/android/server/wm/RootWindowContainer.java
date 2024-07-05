@@ -155,6 +155,7 @@ import com.android.server.policy.PermissionPolicyInternal;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.utils.Slogf;
 import com.android.window.flags.Flags;
+import com.android.server.am.ProcessFreezerManager;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -322,13 +323,19 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         private boolean isDocument;
         private Uri documentData;
 
-        void init(int activityType, String taskAffinity, Intent intent, ActivityInfo info) {
+        // determines whether to include bubbled tasks. defaults to true to preserve previous
+        // behavior.
+        private boolean mIncludeLaunchedFromBubble = true;
+
+        void init(int activityType, String taskAffinity, Intent intent, ActivityInfo info,
+                boolean includeLaunchedFromBubble) {
             mActivityType = activityType;
             mTaskAffinity = taskAffinity;
             mIntent = intent;
             mInfo = info;
             mIdealRecord = null;
             mCandidateRecord = null;
+            mIncludeLaunchedFromBubble = includeLaunchedFromBubble;
         }
 
         /**
@@ -370,7 +377,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             }
 
             // Overlays should not be considered as the task's logical top activity.
-            final ActivityRecord r = task.getTopNonFinishingActivity(false /* includeOverlays */);
+            final ActivityRecord r = task.getTopNonFinishingActivity(
+                    false /* includeOverlays */, mIncludeLaunchedFromBubble);
 
             if (r == null || r.finishing || r.mUserId != userId
                     || r.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE) {
@@ -1701,7 +1709,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     /**
-     * Check if home activity start should be allowed on a display.
+     * Check if home activity start should be allowed on a {@link TaskDisplayArea}.
      *
      * @param homeInfo           {@code ActivityInfo} of the home activity that is going to be
      *                           launched.
@@ -1722,6 +1730,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 mService.getProcessController(homeInfo.processName, homeInfo.applicationInfo.uid);
         if (!allowInstrumenting && app != null && app.isInstrumenting()) {
             // Don't do this if the home app is currently being instrumented.
+            return false;
+        }
+
+        if (taskDisplayArea != null && !taskDisplayArea.canHostHomeTask()) {
             return false;
         }
 
@@ -2454,18 +2466,20 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     @Nullable
-    ActivityRecord findTask(ActivityRecord r, TaskDisplayArea preferredTaskDisplayArea) {
+    ActivityRecord findTask(ActivityRecord r, TaskDisplayArea preferredTaskDisplayArea,
+            boolean includeLaunchedFromBubble) {
         return findTask(r.getActivityType(), r.taskAffinity, r.intent, r.info,
-                preferredTaskDisplayArea, r);
+                preferredTaskDisplayArea, includeLaunchedFromBubble, r);
     }
 
     @Nullable
     ActivityRecord findTask(int activityType, String taskAffinity, Intent intent, ActivityInfo info,
-            TaskDisplayArea preferredTaskDisplayArea, ActivityRecord r) {
+            TaskDisplayArea preferredTaskDisplayArea, boolean includeLaunchedFromBubble, ActivityRecord r) {
         ProtoLog.d(WM_DEBUG_TASKS, "Looking for task of type=%s, taskAffinity=%s, intent=%s"
-                        + ", info=%s, preferredTDA=%s", activityType, taskAffinity, intent, info,
-                preferredTaskDisplayArea);
-        mTmpFindTaskResult.init(activityType, taskAffinity, intent, info);
+                        + ", info=%s, preferredTDA=%s, includeLaunchedFromBubble=%b", activityType,
+                taskAffinity, intent, info, preferredTaskDisplayArea, includeLaunchedFromBubble);
+        mTmpFindTaskResult.init(activityType, taskAffinity, intent, info,
+                includeLaunchedFromBubble);
 
         // Looking up task on preferred display area first
         ActivityRecord candidateActivity = null;
@@ -2488,6 +2502,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                              mUxPerf.perfEvent(BoostFramework.VENDOR_HINT_WARM_LAUNCH, r.packageName, 2, 0, 0);
                          }
                      }
+                    ProcessFreezerManager freezer = ProcessFreezerManager.getInstance();
+                    if (freezer != null && freezer.useFreezerManager()) {
+                        freezer.startFreeze(r.packageName, ProcessFreezerManager.WARM_LAUNCH_FREEZE);
+                    }
                 }
                 return mTmpFindTaskResult.mIdealRecord;
             } else if (mTmpFindTaskResult.mCandidateRecord != null) {
@@ -2500,6 +2518,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             (mTmpFindTaskResult.mIdealRecord.getState() == DESTROYED)) {
             if (r != null && r.isMainIntent(r.intent)) {
                 acquireAppLaunchPerfLock(r);
+                ProcessFreezerManager freezer = ProcessFreezerManager.getInstance();
+                if (freezer != null && freezer.useFreezerManager()) {
+                    freezer.startFreeze(r.packageName, ProcessFreezerManager.FIRST_LAUNCH_FREEZE);
+                }
             } else if (r == null) {
                 Slog.w(TAG, "Should not happen! Didn't apply launch boost");
             }

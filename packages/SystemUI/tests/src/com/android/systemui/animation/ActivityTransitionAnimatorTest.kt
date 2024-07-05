@@ -9,7 +9,6 @@ import android.graphics.Point
 import android.graphics.Rect
 import android.os.Looper
 import android.platform.test.flag.junit.SetFlagsRule
-import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper.RunWithLooper
 import android.view.IRemoteAnimationFinishedCallback
 import android.view.RemoteAnimationAdapter
@@ -20,11 +19,13 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.window.RemoteTransition
 import android.window.TransitionFilter
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.shared.Flags
 import com.android.systemui.util.mockito.any
 import com.android.wm.shell.shared.ShellTransitions
+import com.google.common.truth.Truth.assertThat
 import junit.framework.Assert.assertFalse
 import junit.framework.Assert.assertNotNull
 import junit.framework.Assert.assertNull
@@ -48,7 +49,7 @@ import org.mockito.Spy
 import org.mockito.junit.MockitoJUnit
 
 @SmallTest
-@RunWith(AndroidTestingRunner::class)
+@RunWith(AndroidJUnit4::class)
 @RunWithLooper
 class ActivityTransitionAnimatorTest : SysuiTestCase() {
     private val transitionContainer = LinearLayout(mContext)
@@ -200,6 +201,140 @@ class ActivityTransitionAnimatorTest : SysuiTestCase() {
         waitForIdleSync()
         assertEquals(1, testShellTransitions.remotes.size)
         assertTrue(testShellTransitions.remotesForTakeover.isEmpty())
+    }
+
+    @Test
+    fun registersLongLivedTransition() {
+        setFlagsRule.enableFlags(Flags.FLAG_RETURN_ANIMATION_FRAMEWORK_LIBRARY)
+
+        activityTransitionAnimator.register(
+            object : DelegateTransitionAnimatorController(controller) {
+                override val transitionCookie =
+                    ActivityTransitionAnimator.TransitionCookie("test_cookie_1")
+                override val component = ComponentName("com.test.package", "Test1")
+            }
+        )
+        assertEquals(2, testShellTransitions.remotes.size)
+
+        activityTransitionAnimator.register(
+            object : DelegateTransitionAnimatorController(controller) {
+                override val transitionCookie =
+                    ActivityTransitionAnimator.TransitionCookie("test_cookie_2")
+                override val component = ComponentName("com.test.package", "Test2")
+            }
+        )
+        assertEquals(4, testShellTransitions.remotes.size)
+    }
+
+    @Test
+    fun registersLongLivedTransitionOverridingPreviousRegistration() {
+        setFlagsRule.enableFlags(Flags.FLAG_RETURN_ANIMATION_FRAMEWORK_LIBRARY)
+
+        val cookie = ActivityTransitionAnimator.TransitionCookie("test_cookie")
+        activityTransitionAnimator.register(
+            object : DelegateTransitionAnimatorController(controller) {
+                override val transitionCookie = cookie
+                override val component = ComponentName("com.test.package", "Test1")
+            }
+        )
+        val transitions = testShellTransitions.remotes.values.toList()
+
+        activityTransitionAnimator.register(
+            object : DelegateTransitionAnimatorController(controller) {
+                override val transitionCookie = cookie
+                override val component = ComponentName("com.test.package", "Test2")
+            }
+        )
+        assertEquals(2, testShellTransitions.remotes.size)
+        for (transition in transitions) {
+            assertThat(testShellTransitions.remotes.values).doesNotContain(transition)
+        }
+    }
+
+    @Test
+    fun doesNotRegisterLongLivedTransitionIfFlagIsDisabled() {
+        setFlagsRule.disableFlags(Flags.FLAG_RETURN_ANIMATION_FRAMEWORK_LIBRARY)
+
+        val controller =
+            object : DelegateTransitionAnimatorController(controller) {
+                override val transitionCookie =
+                    ActivityTransitionAnimator.TransitionCookie("test_cookie")
+                override val component = ComponentName("com.test.package", "Test")
+            }
+        assertThrows(IllegalStateException::class.java) {
+            activityTransitionAnimator.register(controller)
+        }
+    }
+
+    @Test
+    fun doesNotRegisterLongLivedTransitionIfMissingRequiredProperties() {
+        setFlagsRule.enableFlags(Flags.FLAG_RETURN_ANIMATION_FRAMEWORK_LIBRARY)
+
+        // No TransitionCookie
+        val controllerWithoutCookie =
+            object : DelegateTransitionAnimatorController(controller) {
+                override val transitionCookie = null
+            }
+        assertThrows(IllegalStateException::class.java) {
+            activityTransitionAnimator.register(controllerWithoutCookie)
+        }
+
+        // No ComponentName
+        val controllerWithoutComponent =
+            object : DelegateTransitionAnimatorController(controller) {
+                override val transitionCookie =
+                    ActivityTransitionAnimator.TransitionCookie("test_cookie")
+                override val component = null
+            }
+        assertThrows(IllegalStateException::class.java) {
+            activityTransitionAnimator.register(controllerWithoutComponent)
+        }
+
+        // No TransitionRegister
+        activityTransitionAnimator =
+            ActivityTransitionAnimator(
+                mainExecutor,
+                transitionRegister = null,
+                testTransitionAnimator,
+                testTransitionAnimator,
+                disableWmTimeout = true,
+            )
+        val validController =
+            object : DelegateTransitionAnimatorController(controller) {
+                override val transitionCookie =
+                    ActivityTransitionAnimator.TransitionCookie("test_cookie")
+                override val component = ComponentName("com.test.package", "Test")
+            }
+        assertThrows(IllegalStateException::class.java) {
+            activityTransitionAnimator.register(validController)
+        }
+    }
+
+    @Test
+    fun unregistersLongLivedTransition() {
+        setFlagsRule.enableFlags(Flags.FLAG_RETURN_ANIMATION_FRAMEWORK_LIBRARY)
+
+        val cookies = arrayOfNulls<ActivityTransitionAnimator.TransitionCookie>(3)
+
+        for (index in 0 until 3) {
+            cookies[index] = ActivityTransitionAnimator.TransitionCookie("test_cookie_$index")
+
+            val controller =
+                object : DelegateTransitionAnimatorController(controller) {
+                    override val transitionCookie = cookies[index]
+                    override val component = ComponentName("foo.bar", "Foobar")
+                }
+            activityTransitionAnimator.register(controller)
+        }
+
+        activityTransitionAnimator.unregister(cookies[0]!!)
+        assertEquals(4, testShellTransitions.remotes.size)
+
+        activityTransitionAnimator.unregister(cookies[2]!!)
+        assertEquals(2, testShellTransitions.remotes.size)
+
+        activityTransitionAnimator.unregister(cookies[1]!!)
+        assertThat(testShellTransitions.remotes).isEmpty()
     }
 
     @Test

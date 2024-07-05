@@ -16,24 +16,21 @@
 
 package com.android.systemui.qs.panels.domain.interactor
 
-import android.testing.AndroidTestingRunner
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.qs.panels.data.repository.IconTilesRepository
 import com.android.systemui.qs.panels.data.repository.gridLayoutTypeRepository
 import com.android.systemui.qs.panels.data.repository.iconTilesRepository
-import com.android.systemui.qs.panels.shared.model.GridLayoutType
 import com.android.systemui.qs.panels.shared.model.InfiniteGridLayoutType
+import com.android.systemui.qs.panels.shared.model.PartitionedGridLayoutType
 import com.android.systemui.qs.pipeline.data.repository.tileSpecRepository
 import com.android.systemui.qs.pipeline.domain.interactor.currentTilesInteractor
 import com.android.systemui.qs.pipeline.shared.TileSpec
 import com.android.systemui.testKosmos
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
@@ -42,40 +39,33 @@ import org.junit.runner.RunWith
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @SmallTest
-@RunWith(AndroidTestingRunner::class)
+@RunWith(AndroidJUnit4::class)
 class GridConsistencyInteractorTest : SysuiTestCase() {
 
-    data object TestGridLayoutType : GridLayoutType
-
     private val iconOnlyTiles =
-        MutableStateFlow(
-            setOf(
-                TileSpec.create("smallA"),
-                TileSpec.create("smallB"),
-                TileSpec.create("smallC"),
-                TileSpec.create("smallD"),
-                TileSpec.create("smallE"),
-            )
+        setOf(
+            TileSpec.create("smallA"),
+            TileSpec.create("smallB"),
+            TileSpec.create("smallC"),
+            TileSpec.create("smallD"),
+            TileSpec.create("smallE"),
         )
 
     private val kosmos =
         testKosmos().apply {
             iconTilesRepository =
                 object : IconTilesRepository {
-                    override val iconTilesSpecs: StateFlow<Set<TileSpec>>
-                        get() = iconOnlyTiles.asStateFlow()
+                    override fun isIconTile(spec: TileSpec): Boolean {
+                        return iconOnlyTiles.contains(spec)
+                    }
                 }
-            gridConsistencyInteractorsMap =
-                mapOf(
-                    Pair(InfiniteGridLayoutType, infiniteGridConsistencyInteractor),
-                    Pair(TestGridLayoutType, noopGridConsistencyInteractor)
-                )
         }
 
     private val underTest = with(kosmos) { gridConsistencyInteractor }
 
     @Before
     fun setUp() {
+        // Mostly testing InfiniteGridConsistencyInteractor because it reorders tiles
         with(kosmos) { gridLayoutTypeRepository.setLayout(InfiniteGridLayoutType) }
         underTest.start()
     }
@@ -86,7 +76,7 @@ class GridConsistencyInteractorTest : SysuiTestCase() {
         with(kosmos) {
             testScope.runTest {
                 // Using the no-op grid consistency interactor
-                gridLayoutTypeRepository.setLayout(TestGridLayoutType)
+                gridLayoutTypeRepository.setLayout(PartitionedGridLayoutType)
 
                 // Setting an invalid layout with holes
                 // [ Large A ] [ sa ]

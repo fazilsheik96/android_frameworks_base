@@ -934,6 +934,7 @@ public final class Settings implements Watchable, Snappable, ResilientAtomicFile
             ret.setTargetSdkVersion(p.getTargetSdkVersion());
             ret.setRestrictUpdateHash(p.getRestrictUpdateHash());
             ret.setScannedAsStoppedSystemApp(p.isScannedAsStoppedSystemApp());
+            ret.setInstallSource(p.getInstallSource());
         }
         mDisabledSysPackages.remove(name);
         return ret;
@@ -2142,7 +2143,8 @@ public final class Settings implements Watchable, Snappable, ResilientAtomicFile
                 ComponentName unflattenOriginalComponentName = ComponentName.unflattenFromString(
                         originalComponentName);
                 if (unflattenOriginalComponentName == null) {
-                    Slog.d(TAG, "Incorrect component name from the attributes");
+                    Slog.wtf(TAG, "Incorrect component name: " + originalComponentName
+                            + " from the attributes");
                     continue;
                 }
 

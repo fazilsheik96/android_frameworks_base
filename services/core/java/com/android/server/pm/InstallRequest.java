@@ -167,24 +167,27 @@ final class InstallRequest {
 
     private int mInstallerUidForInstallExisting = INVALID_UID;
 
+    private final boolean mHasAppMetadataFileFromInstaller;
+
     // New install
     InstallRequest(InstallingSession params) {
         mUserId = params.getUser().getIdentifier();
         mInstallArgs = new InstallArgs(params.mOriginInfo, params.mMoveInfo, params.mObserver,
                 params.mInstallFlags, params.mDevelopmentInstallFlags, params.mInstallSource,
-                params.mVolumeUuid,  params.getUser(), null /*instructionSets*/,
+                params.mVolumeUuid, params.getUser(), null /*instructionSets*/,
                 params.mPackageAbiOverride, params.mPermissionStates,
                 params.mAllowlistedRestrictedPermissions, params.mAutoRevokePermissionsMode,
                 params.mTraceMethod, params.mTraceCookie, params.mSigningDetails,
                 params.mInstallReason, params.mInstallScenario, params.mForceQueryableOverride,
                 params.mDataLoaderType, params.mPackageSource,
-                params.mApplicationEnabledSettingPersistent);
+                params.mApplicationEnabledSettingPersistent, params.mDexoptCompilerFilter);
         mPackageLite = params.mPackageLite;
         mPackageMetrics = new PackageMetrics(this);
         mIsInstallInherit = params.mIsInherit;
         mSessionId = params.mSessionId;
         mRequireUserAction = params.mRequireUserAction;
         mPreVerifiedDomains = params.mPreVerifiedDomains;
+        mHasAppMetadataFileFromInstaller = params.mHasAppMetadataFile;
     }
 
     // Install existing package as user
@@ -203,6 +206,7 @@ final class InstallRequest {
         mAppId = appId;
         mInstallerUidForInstallExisting = installerUid;
         mSystem = isSystem;
+        mHasAppMetadataFileFromInstaller = false;
     }
 
     // addForInit
@@ -224,6 +228,7 @@ final class InstallRequest {
         mSessionId = -1;
         mRequireUserAction = USER_ACTION_UNSPECIFIED;
         mDisabledPs = disabledPs;
+        mHasAppMetadataFileFromInstaller = false;
     }
 
     @Nullable
@@ -369,6 +374,10 @@ final class InstallRequest {
 
     public boolean isArchived() {
         return PackageInstallerSession.isArchivedInstallation(getInstallFlags());
+    }
+
+    public boolean hasAppMetadataFile() {
+        return mHasAppMetadataFileFromInstaller;
     }
 
     @Nullable
@@ -698,6 +707,11 @@ final class InstallRequest {
     @NonNull
     public ArrayList<String> getWarnings() {
         return mWarnings;
+    }
+
+    @Nullable
+    public String getDexoptCompilerFilter() {
+        return mInstallArgs != null ? mInstallArgs.mDexoptCompilerFilter : null;
     }
 
     public void setScanFlags(int scanFlags) {

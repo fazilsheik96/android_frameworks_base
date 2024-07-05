@@ -23,7 +23,9 @@ import com.android.compose.animation.scene.ObservableTransitionState
 import com.android.compose.animation.scene.SceneKey
 import com.android.compose.animation.scene.TransitionKey
 import com.android.systemui.communal.domain.interactor.CommunalInteractor
+import com.android.systemui.communal.domain.interactor.CommunalSceneInteractor
 import com.android.systemui.communal.domain.model.CommunalContentModel
+import com.android.systemui.communal.shared.model.EditModeState
 import com.android.systemui.communal.widgets.WidgetConfigurator
 import com.android.systemui.media.controls.ui.view.MediaHost
 import kotlinx.coroutines.flow.Flow
@@ -33,10 +35,14 @@ import kotlinx.coroutines.flow.flowOf
 
 /** The base view model for the communal hub. */
 abstract class BaseCommunalViewModel(
+    val communalSceneInteractor: CommunalSceneInteractor,
     private val communalInteractor: CommunalInteractor,
     val mediaHost: MediaHost,
 ) {
-    val currentScene: Flow<SceneKey> = communalInteractor.desiredScene
+    val currentScene: Flow<SceneKey> = communalSceneInteractor.currentScene
+
+    /** Used to animate showing or hiding the communal content. */
+    open val isCommunalContentVisible: Flow<Boolean> = MutableStateFlow(false)
 
     /** Whether communal hub should be focused by accessibility tools. */
     open val isFocusable: Flow<Boolean> = MutableStateFlow(false)
@@ -58,8 +64,10 @@ abstract class BaseCommunalViewModel(
     }
 
     fun changeScene(scene: SceneKey, transitionKey: TransitionKey? = null) {
-        communalInteractor.changeScene(scene, transitionKey)
+        communalSceneInteractor.changeScene(scene, transitionKey)
     }
+
+    fun setEditModeState(state: EditModeState?) = communalSceneInteractor.setEditModeState(state)
 
     /**
      * Updates the transition state of the hub [SceneTransitionLayout].
@@ -67,7 +75,7 @@ abstract class BaseCommunalViewModel(
      * Note that you must call is with `null` when the UI is done or risk a memory leak.
      */
     fun setTransitionState(transitionState: Flow<ObservableTransitionState>?) {
-        communalInteractor.setTransitionState(transitionState)
+        communalSceneInteractor.setTransitionState(transitionState)
     }
 
     /**
@@ -88,6 +96,12 @@ abstract class BaseCommunalViewModel(
 
     /** A list of all the communal content to be displayed in the communal hub. */
     abstract val communalContent: Flow<List<CommunalContentModel>>
+
+    /**
+     * Whether to freeze the emission of the communalContent flow to prevent recomposition. Defaults
+     * to false, indicating that the flow will emit new update.
+     */
+    open val isCommunalContentFlowFrozen: Flow<Boolean> = flowOf(false)
 
     /** Whether in edit mode for the communal hub. */
     open val isEditMode = false

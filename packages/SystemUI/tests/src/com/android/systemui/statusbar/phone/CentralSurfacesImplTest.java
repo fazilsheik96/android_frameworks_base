@@ -57,6 +57,7 @@ import android.app.WallpaperManager;
 import android.app.trust.TrustManager;
 import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.hardware.devicestate.DeviceState;
@@ -75,7 +76,6 @@ import android.platform.test.annotations.DisableFlags;
 import android.platform.test.annotations.EnableFlags;
 import android.service.dreams.IDreamManager;
 import android.support.test.metricshelper.MetricsAsserts;
-import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
 import android.util.DisplayMetrics;
@@ -85,6 +85,7 @@ import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
 import android.view.WindowMetrics;
 
+import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 
 import com.android.compose.animation.scene.ObservableTransitionState;
@@ -111,6 +112,7 @@ import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.communal.shared.model.CommunalScenes;
 import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.emergency.EmergencyGestureModule.EmergencyGestureIntentFactory;
 import com.android.systemui.flags.DisableSceneContainer;
 import com.android.systemui.flags.EnableSceneContainer;
 import com.android.systemui.flags.FakeFeatureFlags;
@@ -132,11 +134,13 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.domain.interactor.PowerInteractor;
 import com.android.systemui.res.R;
 import com.android.systemui.scene.domain.interactor.WindowRootViewVisibilityInteractor;
+import com.android.systemui.scene.domain.startable.ScrimStartable;
 import com.android.systemui.scene.shared.flag.SceneContainerFlag;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.settings.brightness.BrightnessSliderController;
 import com.android.systemui.settings.brightness.domain.interactor.BrightnessMirrorShowingInteractor;
 import com.android.systemui.shade.CameraLauncher;
+import com.android.systemui.shade.GlanceableHubContainerController;
 import com.android.systemui.shade.NotificationPanelView;
 import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.shade.NotificationShadeWindowViewController;
@@ -171,7 +175,6 @@ import com.android.systemui.statusbar.notification.init.NotificationsController;
 import com.android.systemui.statusbar.notification.interruption.AvalancheProvider;
 import com.android.systemui.statusbar.notification.interruption.KeyguardNotificationVisibilityProvider;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptLogger;
-import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderImpl;
 import com.android.systemui.statusbar.notification.interruption.VisualInterruptionDecisionLogger;
 import com.android.systemui.statusbar.notification.interruption.VisualInterruptionDecisionProvider;
 import com.android.systemui.statusbar.notification.interruption.VisualInterruptionDecisionProviderTestUtil;
@@ -188,7 +191,6 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserInfoControllerImpl;
 import com.android.systemui.statusbar.window.StatusBarWindowController;
 import com.android.systemui.statusbar.window.StatusBarWindowStateController;
-import com.android.systemui.util.EventLog;
 import com.android.systemui.util.FakeEventLog;
 import com.android.systemui.util.WallpaperController;
 import com.android.systemui.util.concurrency.FakeExecutor;
@@ -196,10 +198,8 @@ import com.android.systemui.util.concurrency.MessageRouterImpl;
 import com.android.systemui.util.kotlin.JavaAdapter;
 import com.android.systemui.util.settings.FakeGlobalSettings;
 import com.android.systemui.util.settings.FakeSettings;
-import com.android.systemui.util.settings.GlobalSettings;
 import com.android.systemui.util.settings.SystemSettings;
 import com.android.systemui.util.time.FakeSystemClock;
-import com.android.systemui.util.time.SystemClock;
 import com.android.systemui.volume.VolumeComponent;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.startingsurface.StartingSurface;
@@ -223,7 +223,7 @@ import java.util.Optional;
 import javax.inject.Provider;
 
 @SmallTest
-@RunWith(AndroidTestingRunner.class)
+@RunWith(AndroidJUnit4.class)
 @RunWithLooper(setAsMainLooper = true)
 @EnableFlags(FLAG_LIGHT_REVEAL_MIGRATION)
 public class CentralSurfacesImplTest extends SysuiTestCase {
@@ -256,7 +256,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @Mock private IDreamManager mDreamManager;
     @Mock private LightRevealScrimViewModel mLightRevealScrimViewModel;
     @Mock private LightRevealScrim mLightRevealScrim;
-    @Mock private ScrimController mScrimController;
     @Mock private DozeScrimController mDozeScrimController;
     @Mock private Lazy<BiometricUnlockController> mBiometricUnlockControllerLazy;
     @Mock private BiometricUnlockController mBiometricUnlockController;
@@ -339,6 +338,9 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @Mock private WindowRootViewVisibilityInteractor mWindowRootViewVisibilityInteractor;
     @Mock private KeyboardShortcuts mKeyboardShortcuts;
     @Mock private KeyboardShortcutListSearch mKeyboardShortcutListSearch;
+    @Mock private PackageManager mPackageManager;
+    @Mock private GlanceableHubContainerController mGlanceableHubContainerController;
+    @Mock private EmergencyGestureIntentFactory mEmergencyGestureIntentFactory;
 
     private ShadeController mShadeController;
     private final FakeSystemClock mFakeSystemClock = new FakeSystemClock();
@@ -355,6 +357,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
 
     private final BrightnessMirrorShowingInteractor mBrightnessMirrorShowingInteractor =
             mKosmos.getBrightnessMirrorShowingInteractor();
+    private ScrimController mScrimController;
 
     @Before
     public void setup() throws Exception {
@@ -371,6 +374,8 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 Handler.createAsync(Looper.myLooper()));
 
         mFakeGlobalSettings.putInt(HEADS_UP_NOTIFICATIONS_ENABLED, HEADS_UP_ON);
+
+        when(mBubbles.canShowBubbleNotification()).thenReturn(true);
 
         mVisualInterruptionDecisionProvider =
                 VisualInterruptionDecisionProviderTestUtil.INSTANCE.createProviderByFlag(
@@ -392,7 +397,9 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                         mock(UiEventLogger.class),
                         mUserTracker,
                         mAvalancheProvider,
-                        mSystemSettings);
+                        mSystemSettings,
+                        mPackageManager,
+                        Optional.of(mBubbles));
         mVisualInterruptionDecisionProvider.start();
 
         mContext.addMockSystemService(TrustManager.class, mock(TrustManager.class));
@@ -467,6 +474,8 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         when(mUserTracker.getUserId()).thenReturn(ActivityManager.getCurrentUser());
         when(mUserTracker.getUserHandle()).thenReturn(
                 UserHandle.of(ActivityManager.getCurrentUser()));
+
+        mScrimController = mKosmos.getScrimController();
 
         createCentralSurfaces();
     }
@@ -588,7 +597,9 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 mUserTracker,
                 () -> mFingerprintManager,
                 mActivityStarter,
-                mBrightnessMirrorShowingInteractor
+                mBrightnessMirrorShowingInteractor,
+                mGlanceableHubContainerController,
+                mEmergencyGestureIntentFactory
         );
         mScreenLifecycle.addObserver(mCentralSurfaces.mScreenObserver);
         mCentralSurfaces.initShadeVisibilityListener();
@@ -728,7 +739,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @Test
     public void testFingerprintNotification_UpdatesScrims() {
         mCentralSurfaces.notifyBiometricAuthModeChanged();
-        verify(mScrimController).transitionTo(any(), any());
+        verify(mScrimController).legacyTransitionTo(any(), any());
     }
 
     @Test
@@ -737,7 +748,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         when(mBiometricUnlockController.getMode())
                 .thenReturn(BiometricUnlockController.MODE_WAKE_AND_UNLOCK);
         mCentralSurfaces.updateScrimController();
-        verify(mScrimController).transitionTo(eq(ScrimState.UNLOCKED), any());
+        verify(mScrimController).legacyTransitionTo(eq(ScrimState.UNLOCKED), any());
     }
 
     @Test
@@ -748,7 +759,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         // Starting a pulse should change the scrim controller to the pulsing state
         when(mCameraLauncher.isLaunchingAffordance()).thenReturn(true);
         mCentralSurfaces.updateScrimController();
-        verify(mScrimController).transitionTo(eq(ScrimState.UNLOCKED), any());
+        verify(mScrimController).legacyTransitionTo(eq(ScrimState.UNLOCKED), any());
     }
 
     @Test
@@ -784,7 +795,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         // Starting a pulse should change the scrim controller to the pulsing state
         when(mCameraLauncher.isLaunchingAffordance()).thenReturn(false);
         mCentralSurfaces.updateScrimController();
-        verify(mScrimController).transitionTo(eq(ScrimState.KEYGUARD));
+        verify(mScrimController).legacyTransitionTo(eq(ScrimState.KEYGUARD));
     }
 
     @Test
@@ -812,12 +823,12 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         // Starting a pulse should change the scrim controller to the pulsing state
         when(mDozeServiceHost.isPulsing()).thenReturn(true);
         mCentralSurfaces.updateScrimController();
-        verify(mScrimController).transitionTo(eq(ScrimState.PULSING), any());
+        verify(mScrimController).legacyTransitionTo(eq(ScrimState.PULSING), any());
 
         // Ending a pulse should take it back to keyguard state
         when(mDozeServiceHost.isPulsing()).thenReturn(false);
         mCentralSurfaces.updateScrimController();
-        verify(mScrimController).transitionTo(eq(ScrimState.KEYGUARD));
+        verify(mScrimController).legacyTransitionTo(eq(ScrimState.KEYGUARD));
     }
 
     @Test
@@ -828,7 +839,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
 
         mCentralSurfaces.updateScrimController();
 
-        verify(mScrimController, times(2)).transitionTo(eq(ScrimState.AOD));
+        verify(mScrimController, times(2)).legacyTransitionTo(eq(ScrimState.AOD));
         verify(mStatusBarKeyguardViewManager).onKeyguardFadedAway();
     }
 
@@ -840,7 +851,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
 
         mCentralSurfaces.updateScrimController();
 
-        verify(mScrimController).transitionTo(eq(ScrimState.AUTH_SCRIMMED_SHADE));
+        verify(mScrimController).legacyTransitionTo(eq(ScrimState.AUTH_SCRIMMED_SHADE));
         verify(mStatusBarKeyguardViewManager).onKeyguardFadedAway();
     }
 
@@ -856,7 +867,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
 
         mCentralSurfaces.updateScrimController();
 
-        verify(mScrimController).transitionTo(eq(ScrimState.AUTH_SCRIMMED));
+        verify(mScrimController).legacyTransitionTo(eq(ScrimState.AUTH_SCRIMMED));
     }
 
     @Test
@@ -872,7 +883,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         mCentralSurfaces.updateScrimController();
 
         // Tests the safeguard to reset the scrimstate
-        verify(mScrimController, never()).transitionTo(any());
+        verify(mScrimController, never()).legacyTransitionTo(any());
     }
 
     @Test
@@ -888,7 +899,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         mCentralSurfaces.updateScrimController();
 
         // Tests the safeguard to reset the scrimstate
-        verify(mScrimController, never()).transitionTo(eq(ScrimState.KEYGUARD));
+        verify(mScrimController, never()).legacyTransitionTo(eq(ScrimState.KEYGUARD));
     }
 
     @Test
@@ -903,7 +914,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
 
         mCentralSurfaces.updateScrimController();
 
-        verify(mScrimController).transitionTo(eq(ScrimState.AUTH_SCRIMMED_SHADE));
+        verify(mScrimController).legacyTransitionTo(eq(ScrimState.AUTH_SCRIMMED_SHADE));
     }
 
     @Test
@@ -915,7 +926,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         mTestScope.getTestScheduler().runCurrent();
 
         // ScrimState also transitions.
-        verify(mScrimController).transitionTo(ScrimState.GLANCEABLE_HUB);
+        verify(mScrimController).legacyTransitionTo(ScrimState.GLANCEABLE_HUB);
 
         // Transition away from the glanceable hub.
         mKosmos.getCommunalRepository()
@@ -924,7 +935,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         mTestScope.getTestScheduler().runCurrent();
 
         // ScrimState goes back to UNLOCKED.
-        verify(mScrimController).transitionTo(eq(ScrimState.UNLOCKED), any());
+        verify(mScrimController).legacyTransitionTo(eq(ScrimState.UNLOCKED), any());
     }
 
     @Test
@@ -940,7 +951,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         mTestScope.getTestScheduler().runCurrent();
 
         // ScrimState also transitions.
-        verify(mScrimController).transitionTo(ScrimState.GLANCEABLE_HUB_OVER_DREAM);
+        verify(mScrimController).legacyTransitionTo(ScrimState.GLANCEABLE_HUB_OVER_DREAM);
 
         // Transition away from the glanceable hub.
         mKosmos.getCommunalRepository()
@@ -949,7 +960,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         mTestScope.getTestScheduler().runCurrent();
 
         // ScrimState goes back to UNLOCKED.
-        verify(mScrimController).transitionTo(eq(ScrimState.DREAMING));
+        verify(mScrimController).legacyTransitionTo(eq(ScrimState.DREAMING));
     }
 
     @Test
@@ -1159,6 +1170,8 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @EnableSceneContainer
     public void brightnesShowingChanged_flagEnabled_ScrimControllerNotified() {
         mCentralSurfaces.registerCallbacks();
+        final ScrimStartable scrimStartable = mKosmos.getScrimStartable();
+        scrimStartable.start();
 
         mBrightnessMirrorShowingInteractor.setMirrorShowing(true);
         mTestScope.getTestScheduler().runCurrent();
@@ -1168,7 +1181,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         mTestScope.getTestScheduler().runCurrent();
         ArgumentCaptor<ScrimState> captor = ArgumentCaptor.forClass(ScrimState.class);
         // The default is to call the one with the callback argument
-        verify(mScrimController, atLeastOnce()).transitionTo(captor.capture(), any());
+        verify(mScrimController, atLeastOnce()).transitionTo(captor.capture());
         assertThat(captor.getValue()).isNotEqualTo(ScrimState.BRIGHTNESS_MIRROR);
     }
 
@@ -1179,8 +1192,9 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
 
         mBrightnessMirrorShowingInteractor.setMirrorShowing(true);
         mTestScope.getTestScheduler().runCurrent();
-        verify(mScrimController, never()).transitionTo(ScrimState.BRIGHTNESS_MIRROR);
-        verify(mScrimController, never()).transitionTo(eq(ScrimState.BRIGHTNESS_MIRROR), any());
+        verify(mScrimController, never()).legacyTransitionTo(ScrimState.BRIGHTNESS_MIRROR);
+        verify(mScrimController, never())
+                .legacyTransitionTo(eq(ScrimState.BRIGHTNESS_MIRROR), any());
     }
 
     @Test
@@ -1414,47 +1428,5 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 ArgumentCaptor.forClass(StatusBarStateController.StateListener.class);
         verify(mStatusBarStateController).addCallback(callbackCaptor.capture(), anyInt());
         callbackCaptor.getValue().onDozingChanged(isDozing);
-    }
-
-    public static class TestableNotificationInterruptStateProviderImpl extends
-            NotificationInterruptStateProviderImpl {
-
-        TestableNotificationInterruptStateProviderImpl(
-                PowerManager powerManager,
-                AmbientDisplayConfiguration ambientDisplayConfiguration,
-                StatusBarStateController controller,
-                KeyguardStateController keyguardStateController,
-                BatteryController batteryController,
-                HeadsUpManager headsUpManager,
-                NotificationInterruptLogger logger,
-                Handler mainHandler,
-                NotifPipelineFlags flags,
-                KeyguardNotificationVisibilityProvider keyguardNotificationVisibilityProvider,
-                UiEventLogger uiEventLogger,
-                UserTracker userTracker,
-                DeviceProvisionedController deviceProvisionedController,
-                SystemClock systemClock,
-                GlobalSettings globalSettings,
-                EventLog eventLog) {
-            super(
-                    powerManager,
-                    ambientDisplayConfiguration,
-                    batteryController,
-                    controller,
-                    keyguardStateController,
-                    headsUpManager,
-                    logger,
-                    mainHandler,
-                    flags,
-                    keyguardNotificationVisibilityProvider,
-                    uiEventLogger,
-                    userTracker,
-                    deviceProvisionedController,
-                    systemClock,
-                    globalSettings,
-                    eventLog
-            );
-            mUseHeadsUp = true;
-        }
     }
 }

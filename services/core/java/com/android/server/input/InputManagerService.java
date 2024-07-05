@@ -960,12 +960,6 @@ public class InputManagerService extends IInputManager.Stub
 
     // Binder call
     @Override
-    public boolean isInputDeviceEnabled(int deviceId) {
-        return mNative.isInputDeviceEnabled(deviceId);
-    }
-
-    // Binder call
-    @Override
     public void enableInputDevice(int deviceId) {
         if (!checkCallingPermission(android.Manifest.permission.DISABLE_INPUT_DEVICE,
                 "enableInputDevice()")) {
@@ -2671,24 +2665,6 @@ public class InputManagerService extends IInputManager.Stub
         return null;
     }
 
-    private static class PointerDisplayIdChangedArgs {
-        final int mPointerDisplayId;
-        final float mXPosition;
-        final float mYPosition;
-        PointerDisplayIdChangedArgs(int pointerDisplayId, float xPosition, float yPosition) {
-            mPointerDisplayId = pointerDisplayId;
-            mXPosition = xPosition;
-            mYPosition = yPosition;
-        }
-    }
-
-    // Native callback.
-    @SuppressWarnings("unused")
-    @VisibleForTesting
-    void onPointerDisplayIdChanged(int pointerDisplayId, float xPosition, float yPosition) {
-        // TODO(b/311416205): Remove.
-    }
-
     @Override
     @EnforcePermission(Manifest.permission.MONITOR_STICKY_MODIFIER_STATE)
     public void registerStickyModifierStateListener(
@@ -3370,6 +3346,14 @@ public class InputManagerService extends IInputManager.Stub
 
     void setUseLargePointerIcons(boolean useLargeIcons) {
         mPointerIconCache.setUseLargePointerIcons(useLargeIcons);
+    }
+
+    void setPointerFillStyle(@PointerIcon.PointerIconVectorStyleFill int fillStyle) {
+        mPointerIconCache.setPointerFillStyle(fillStyle);
+    }
+
+    void setPointerScale(float scale) {
+        mPointerIconCache.setPointerScale(scale);
     }
 
     interface KeyboardBacklightControllerInterface {

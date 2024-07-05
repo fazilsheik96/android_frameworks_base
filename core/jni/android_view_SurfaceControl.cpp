@@ -358,7 +358,8 @@ public:
 
         jobject stats =
                 env->NewObject(gTransactionStatsClassInfo.clazz, gTransactionStatsClassInfo.ctor,
-                               latchTime, presentFence.get());
+                               latchTime,
+                               static_cast<jlong>(reinterpret_cast<uintptr_t>(presentFence.get())));
         env->CallVoidMethod(mTransactionCompletedListenerObject, gConsumerClassInfo.accept, stats);
         env->DeleteLocalRef(stats);
         DieIfException(env, "Uncaught exception in TransactionCompletedListener.");
@@ -1008,11 +1009,11 @@ static void nativeSetShadowRadius(JNIEnv* env, jclass clazz, jlong transactionOb
 }
 
 static void nativeSetTrustedOverlay(JNIEnv* env, jclass clazz, jlong transactionObj,
-                                    jlong nativeObject, jboolean isTrustedOverlay) {
+                                    jlong nativeObject, jint trustedOverlay) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
 
     SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
-    transaction->setTrustedOverlay(ctrl, isTrustedOverlay);
+    transaction->setTrustedOverlay(ctrl, static_cast<gui::TrustedOverlay>(trustedOverlay));
 }
 
 static void nativeSetFrameRate(JNIEnv* env, jclass clazz, jlong transactionObj, jlong nativeObject,
@@ -2201,6 +2202,10 @@ static jobject nativeGetStalledTransactionInfo(JNIEnv* env, jclass clazz, jint p
     return jStalledTransactionInfo;
 }
 
+static void nativeNotifyShutdown() {
+    SurfaceComposerClient::notifyShutdown();
+}
+
 // ----------------------------------------------------------------------------
 
 SurfaceControl* android_view_SurfaceControl_getNativeSurfaceControl(JNIEnv* env,
@@ -2443,7 +2448,7 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetTransformHint },
     {"nativeGetTransformHint", "(J)I",
             (void*)nativeGetTransformHint },
-    {"nativeSetTrustedOverlay", "(JJZ)V",
+    {"nativeSetTrustedOverlay", "(JJI)V",
             (void*)nativeSetTrustedOverlay },
     {"nativeGetLayerId", "(J)I",
             (void*)nativeGetLayerId },
@@ -2476,6 +2481,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*) nativeGetStalledTransactionInfo },
     {"nativeSetDesiredPresentTimeNanos", "(JJ)V",
             (void*) nativeSetDesiredPresentTimeNanos },
+    {"nativeNotifyShutdown", "()V",
+            (void*)nativeNotifyShutdown },
         // clang-format on
 };
 
