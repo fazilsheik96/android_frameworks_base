@@ -32,6 +32,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.settingslib.Utils;
 import com.android.settingslib.graph.SignalDrawable;
+import com.android.systemui.FontSizeUtils;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.pipeline.mobile.ui.view.ModernShadeCarrierGroupMobileView;
 import com.android.systemui.util.LargeScreenUtils;
@@ -166,10 +167,7 @@ public class ShadeCarrier extends LinearLayout {
     }
 
     public void updateTextAppearance(@StyleRes int resId) {
-        mCarrierText.setTextAppearance(resId);
-        if (mModernMobileView != null) {
-            mModernMobileView.updateTextAppearance(resId);
-        }
+        FontSizeUtils.updateFontSizeFromStyle(mCarrierText, resId);
     }
 
     @Override
