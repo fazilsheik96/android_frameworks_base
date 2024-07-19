@@ -718,9 +718,13 @@ public class AudioService extends IAudioService.Stub
     // Streams currently muted by ringer mode and dnd
     protected static volatile int sRingerAndZenModeMutedStreams;
 
-    /** Streams that can be muted. Do not resolve to aliases when checking.
+    /** Streams that can be muted by system. Do not resolve to aliases when checking.
      * @see System#MUTE_STREAMS_AFFECTED */
     private int mMuteAffectedStreams;
+
+    /** Streams that can be muted by user. Do not resolve to aliases when checking.
+     * @see System#MUTE_STREAMS_AFFECTED */
+    private int mUserMutableStreams;
 
     @NonNull
     private SoundEffectsHelper mSfxHelper;
@@ -2385,6 +2389,7 @@ public class AudioService extends IAudioService.Stub
                 mMuteAffectedStreams &= ~(1 << vss.mStreamType);
             }
         }
+        updateUserMutableStreams();
     }
 
     private void createStreamStates() {
@@ -2454,6 +2459,8 @@ public class AudioService extends IAudioService.Stub
         }
         pw.print("\n- mute affected streams = 0x");
         pw.println(Integer.toHexString(mMuteAffectedStreams));
+        pw.print("\n- user mutable streams = 0x");
+        pw.println(Integer.toHexString(mUserMutableStreams));
     }
 
     private void updateStreamVolumeAlias(boolean updateVolumes, String caller) {
@@ -2948,6 +2955,7 @@ public class AudioService extends IAudioService.Stub
         mMuteAffectedStreams = mSettings.getSystemIntForUser(cr,
                 System.MUTE_STREAMS_AFFECTED, AudioSystem.DEFAULT_MUTE_STREAMS_AFFECTED,
                 UserHandle.USER_CURRENT);
+        updateUserMutableStreams();
 
         updateMasterMono(cr);
 
@@ -2965,6 +2973,12 @@ public class AudioService extends IAudioService.Stub
 
         // Load settings for the volume controller
         mVolumeController.loadSettings(cr);
+    }
+
+    private void updateUserMutableStreams() {
+        mUserMutableStreams = mMuteAffectedStreams;
+        mUserMutableStreams &= ~(1 << AudioSystem.STREAM_VOICE_CALL);
+        mUserMutableStreams &= ~(1 << AudioSystem.STREAM_BLUETOOTH_SCO);
     }
 
     @GuardedBy("mSettingsLock")
@@ -7179,6 +7193,11 @@ public class AudioService extends IAudioService.Stub
     @Override
     public boolean isStreamAffectedByMute(int streamType) {
         return (mMuteAffectedStreams & (1 << streamType)) != 0;
+    }
+
+    @Override
+    public boolean isStreamMutableByUi(int streamType) {
+        return (mUserMutableStreams & (1 << streamType)) != 0;
     }
 
     private void ensureValidDirection(int direction) {
