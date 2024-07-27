@@ -92,8 +92,6 @@ import com.android.systemui.statusbar.phone.CentralSurfaces;
 import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
-import com.android.systemui.statusbar.window.StatusBarWindowController;
-import com.android.systemui.user.domain.interactor.SelectedUserInteractor;
 import com.android.systemui.util.RingerModeTracker;
 import com.android.systemui.util.leak.RotationUtils;
 import com.android.systemui.util.settings.GlobalSettings;
@@ -198,7 +196,6 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
             SysuiColorExtractor colorExtractor,
             IStatusBarService statusBarService,
             NotificationShadeWindowController notificationShadeWindowController,
-            StatusBarWindowController statusBarOptional,
             IWindowManager iWindowManager,
             LightBarController lightBarController,
             @Background Executor backgroundExecutor,
@@ -207,10 +204,10 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
             @Main Handler handler,
             UserContextProvider userContextProvider,
             PackageManager packageManager,
+            Optional<CentralSurfaces> statusBarOptional,
             ShadeController shadeController,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
             DialogLaunchAnimator dialogLaunchAnimator,
-            SelectedUserInteractor selectedUserInteractor,
             ControlsComponent controlsComponent) {
         super(context,
                 windowManagerFuncs,
@@ -235,17 +232,16 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
                 statusBarService,
                 lightBarController,
                 notificationShadeWindowController,
-                statusBarOptional,
                 iWindowManager,
                 backgroundExecutor,
                 uiEventLogger,
                 ringerModeTracker,
                 handler,
                 packageManager,
+                statusBarOptional,
                 shadeController,
                 keyguardUpdateMonitor,
                 dialogLaunchAnimator,
-                selectedUserInteractor,
                 controlsComponent);
 
         mLockPatternUtils = lockPatternUtils;
@@ -311,7 +307,7 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
         }
 
         String[] preferredControlsPackages = getContext().getResources()
-                .getStringArray(com.android.systemui.res.R.array.config_controlsPreferredPackages);
+                .getStringArray(com.android.systemui.R.array.config_controlsPreferredPackages);
 
         SharedPreferences prefs = mUserContextProvider.getUserContext()
                 .getSharedPreferences(PREFS_CONTROLS_FILE, Context.MODE_PRIVATE);
@@ -384,7 +380,7 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
     @Override
     protected int getMaxShownPowerItems() {
         return getContext().getResources().getInteger(
-                com.android.systemui.res.R.integer.power_menu_max_columns);
+                com.android.systemui.R.integer.power_menu_max_columns);
     }
 
     /**
@@ -402,12 +398,12 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
         }
         ActionsDialog dialog = new ActionsDialog(getContext(), mAdapter, mOverflowAdapter,
         this::getWalletViewController, mSysuiColorExtractor,
-                mCentralSurfacesService, mLightBarController, mKeyguardStateController,
-                mNotificationShadeWindowController, mStatusBarWindowController,
-                controlsAvailable(), uiController, this::onRefresh, mKeyguardShowing,
-                mPowerAdapter, mRestartAdapter, mUsersAdapter, mUiEventLogger,
-                mShadeController, mKeyguardUpdateMonitor,
-                mLockPatternUtils, mSelectedUserInteractor);
+                mCentralSurfacesService, mLightBarController, mNotificationShadeWindowController,
+                mKeyguardStateController, controlsAvailable(), uiController,
+                this::onRefresh, mKeyguardShowing, mPowerAdapter,
+                mRestartAdapter, mUsersAdapter, mUiEventLogger,
+                mCentralSurfacesOptional, mShadeController, mKeyguardUpdateMonitor,
+                mLockPatternUtils);
 
         dialog.setCanceledOnTouchOutside(false); // Handled by the custom class.
         dialog.setOnDismissListener(this);
@@ -437,24 +433,24 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
     @Override
     protected int getEmergencyTextColor(Context context, boolean dummy) {
         return context.getResources().getColor(
-                com.android.systemui.res.R.color.global_actions_emergency_text);
+                com.android.systemui.R.color.global_actions_emergency_text);
     }
 
     @Override
     protected int getEmergencyIconColor(Context context, boolean dummy) {
         return getContext().getResources().getColor(
-                com.android.systemui.res.R.color.global_actions_emergency_text);
+                com.android.systemui.R.color.global_actions_emergency_text);
     }
 
     @Override
     protected int getEmergencyBackgroundColor(Context context, boolean dummy) {
         return getContext().getResources().getColor(
-                com.android.systemui.res.R.color.global_actions_emergency_background);
+                com.android.systemui.R.color.global_actions_emergency_background);
     }
 
     @Override
     protected int getGridItemLayoutResource() {
-        return com.android.systemui.res.R.layout.global_actions_grid_item_v2;
+        return com.android.systemui.R.layout.global_actions_grid_item_v2;
     }
 
     @VisibleForTesting
@@ -474,21 +470,19 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
                 Provider<GlobalActionsPanelPlugin.PanelViewController> walletFactory,
                 SysuiColorExtractor sysuiColorExtractor, IStatusBarService statusBarService,
                 LightBarController lightBarController,
-                KeyguardStateController keyguardStateController,
                 NotificationShadeWindowController notificationShadeWindowController,
-                StatusBarWindowController statusBarOptional, boolean controlsAvailable,
+                KeyguardStateController keyguardStateController, boolean controlsAvailable,
                 @Nullable ControlsUiController controlsUiController, Runnable onRotateCallback,
                 boolean keyguardShowing, MyPowerOptionsAdapter powerAdapter,
                 MyRestartOptionsAdapter restartAdapter, MyUsersAdapter usersAdapter,
-                UiEventLogger uiEventLogger, ShadeController shadeController,
-                KeyguardUpdateMonitor keyguardUpdateMonitor, LockPatternUtils lockPatternUtils,
-                SelectedUserInteractor selectedUserInteractor) {
-            super(context, com.android.systemui.res.R.style.Theme_SystemUI_Dialog_GlobalActions,
+                UiEventLogger uiEventLogger, Optional<CentralSurfaces> statusBarOptional,
+                ShadeController shadeController, KeyguardUpdateMonitor keyguardUpdateMonitor, LockPatternUtils lockPatternUtils) {
+            super(context, com.android.systemui.R.style.Theme_SystemUI_Dialog_GlobalActions,
                     adapter, overflowAdapter, sysuiColorExtractor, statusBarService,
-                    lightBarController, keyguardStateController, notificationShadeWindowController,
-                    statusBarOptional, onRotateCallback, keyguardShowing, powerAdapter,
-                    restartAdapter, usersAdapter, uiEventLogger, shadeController,
-                    keyguardUpdateMonitor, lockPatternUtils, selectedUserInteractor);
+                    lightBarController, notificationShadeWindowController, keyguardStateController,
+                    onRotateCallback, keyguardShowing, powerAdapter, restartAdapter, usersAdapter,
+                    uiEventLogger, statusBarOptional, shadeController,
+                    keyguardUpdateMonitor, lockPatternUtils);
             mControlsAvailable = controlsAvailable;
             mControlsUiController = controlsUiController;
             mWalletFactory = walletFactory;
@@ -531,7 +525,7 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
             }
 
             boolean isLandscapeWalletViewShown = mContext.getResources().getBoolean(
-                    com.android.systemui.res.R.bool.global_actions_show_landscape_wallet_view);
+                    com.android.systemui.R.bool.global_actions_show_landscape_wallet_view);
 
             int rotation = RotationUtils.getRotation(mContext);
             boolean rotationLocked = RotationPolicy.isRotationLocked(mContext);
@@ -548,7 +542,7 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
                     // otherwise onConfigurationChanged() may not get invoked.
                     mGlobalActionsLayout.post(() ->
                             RotationPolicy.setRotationLockAtAngle(
-                                    mContext, false, RotationUtils.ROTATION_NONE, TAG));
+                                    mContext, false, RotationUtils.ROTATION_NONE));
 
                     if (!isLandscapeWalletViewShown) {
                         return;
@@ -570,7 +564,7 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
                     // otherwise onConfigurationChanged() may not get invoked.
                     mGlobalActionsLayout.post(() ->
                             RotationPolicy.setRotationLockAtAngle(
-                            mContext, shouldLockRotation, RotationUtils.ROTATION_NONE, TAG));
+                            mContext, shouldLockRotation, RotationUtils.ROTATION_NONE));
                 }
             }
 
@@ -578,19 +572,19 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
             setRotationSuggestionsEnabled(false);
 
             FrameLayout panelContainer =
-                    findViewById(com.android.systemui.res.R.id.global_actions_wallet);
+                    findViewById(com.android.systemui.R.id.global_actions_wallet);
             FrameLayout.LayoutParams panelParams =
                     new FrameLayout.LayoutParams(
                             FrameLayout.LayoutParams.MATCH_PARENT,
                             FrameLayout.LayoutParams.MATCH_PARENT);
             if (!mControlsAvailable) {
                 panelParams.topMargin = mContext.getResources().getDimensionPixelSize(
-                        com.android.systemui.res.R.dimen.global_actions_wallet_top_margin);
+                        com.android.systemui.R.dimen.global_actions_wallet_top_margin);
             }
             View walletView = mWalletViewController.getPanelContent();
             panelContainer.addView(walletView, panelParams);
             // Smooth transitions when wallet is resized, which can happen when a card is added
-            ViewGroup root = findViewById(com.android.systemui.res.R.id.global_actions_grid_root);
+            ViewGroup root = findViewById(com.android.systemui.R.id.global_actions_grid_root);
             if (root != null) {
                 walletView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                     int oldHeight = ob - ot;
@@ -607,17 +601,17 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
 
         @Override
         protected int getLayoutResource() {
-            return com.android.systemui.res.R.layout.global_actions_grid_v2;
+            return com.android.systemui.R.layout.global_actions_grid_v2;
         }
 
         @Override
         protected void initializeLayout() {
             super.initializeLayout();
-            mControlsView = findViewById(com.android.systemui.res.R.id.global_actions_controls);
+            mControlsView = findViewById(com.android.systemui.R.id.global_actions_controls);
             mLockMessageContainer = requireViewById(
-                    com.android.systemui.res.R.id.global_actions_lock_message_container);
+                    com.android.systemui.R.id.global_actions_lock_message_container);
             mLockMessage =
-                    requireViewById(com.android.systemui.res.R.id.global_actions_lock_message);
+                    requireViewById(com.android.systemui.R.id.global_actions_lock_message);
             initializeWalletView();
             getWindow().setBackgroundDrawable(mBackgroundDrawable);
         }
@@ -709,7 +703,7 @@ public class GlobalActionsDialog extends GlobalActionsDialogLite
         private void resetOrientation() {
             if (mResetOrientationData != null) {
                 RotationPolicy.setRotationLockAtAngle(mContext, mResetOrientationData.locked,
-                        mResetOrientationData.rotation, TAG);
+                        mResetOrientationData.rotation);
             }
             setRotationSuggestionsEnabled(true);
         }

@@ -2702,6 +2702,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                 SysuiColorExtractor sysuiColorExtractor, IStatusBarService statusBarService,
                 LightBarController lightBarController,
                 NotificationShadeWindowController notificationShadeWindowController,
+                KeyguardStateController keyguardStateController,
                 Runnable onRefreshCallback, boolean keyguardShowing,
                 MyPowerOptionsAdapter powerAdapter, MyRestartOptionsAdapter restartAdapter,
                 MyUsersAdapter usersAdapter,
