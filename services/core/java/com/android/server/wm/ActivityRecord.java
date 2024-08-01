@@ -6665,7 +6665,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         mTaskSupervisor.updateHomeProcessIfNeeded(this);
         try {
-            mTaskSupervisor.new PreferredAppsTask().execute();
+            if (isActivityTypeHome()) {
+                mTaskSupervisor.new PreferredAppsTask().execute();
+            }
         } catch (Exception e) {
             Slog.v (TAG, "Exception: " + e);
         }
