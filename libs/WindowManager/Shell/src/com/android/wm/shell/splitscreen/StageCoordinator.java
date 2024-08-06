@@ -2650,7 +2650,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             @Nullable TransitionRequestInfo request) {
         final ActivityManager.RunningTaskInfo triggerTask = request.getTriggerTask();
         if (triggerTask == null) {
-            if (isSplitScreenVisible()) {
+            if (isSplitActive()) {
                 ProtoLog.d(WM_SHELL_SPLIT_SCREEN, "handleRequest: transition=%d display rotation",
                         request.getDebugId());
                 // Check if the display is rotating.
@@ -2659,6 +2659,10 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                 if (request.getType() == TRANSIT_CHANGE && displayChange != null
                         && displayChange.getStartRotation() != displayChange.getEndRotation()) {
                     mSplitLayout.setFreezeDividerWindow(true);
+                }
+                if (request.getRemoteTransition() != null) {
+                    mSplitTransitions.setRemotePassThroughTransition(transition,
+                            request.getRemoteTransition());
                 }
                 // Still want to monitor everything while in split-screen, so return non-null.
                 return new WindowContainerTransaction();
@@ -2986,6 +2990,13 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                 notifySplitAnimationFinished();
                 return true;
             }
+        } else if (mSplitTransitions.isPendingPassThrough(transition)) {
+            ProtoLog.d(WM_SHELL_SPLIT_SCREEN,
+                    "startAnimation: passThrough transition=%d", info.getDebugId());
+            mSplitTransitions.mPendingRemotePassthrough.mRemoteHandler.startAnimation(transition,
+                    info, startTransaction, finishTransaction, finishCallback);
+            notifySplitAnimationFinished();
+            return true;
         }
 
         return startPendingAnimation(transition, info, startTransaction, finishTransaction,
