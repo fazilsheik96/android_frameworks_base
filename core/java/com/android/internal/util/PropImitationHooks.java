@@ -92,6 +92,8 @@ public class PropImitationHooks {
     private static final String PROP_SECURITY_PATCH = "persist.sys.pihooks.security_patch";
     private static final String PROP_FIRST_API_LEVEL = "persist.sys.pihooks.first_api_level";
 
+    private static final String SPOOF_GMS = "persist.sys.paranoid.gms.enabled";
+
     private static final ComponentName GMS_ADD_ACCOUNT_ACTIVITY = ComponentName.unflattenFromString(
             "com.google.android.gms/.auth.uiflows.minutemaid.MinuteMaidActivity");
 
@@ -108,7 +110,7 @@ public class PropImitationHooks {
     private static volatile String sStockFp, sNetflixModel;
 
     private static volatile String sProcessName;
-    private static volatile boolean sIsPixelDevice, sIsGms, sIsFinsky, sIsPhotos;
+    private static volatile boolean sIsPixelDevice, sIsGms, sIsFinsky, sIsPhotos, sShouldApplyGMS;
 
     private static final String[] certifiedProps = {
         "MANUFACTURER",
@@ -145,12 +147,13 @@ public class PropImitationHooks {
         sIsGms = packageName.equals(PACKAGE_GMS) && processName.equals(PROCESS_GMS_UNSTABLE);
         sIsFinsky = packageName.equals(PACKAGE_FINSKY);
         sIsPhotos = packageName.equals(PACKAGE_GPHOTOS);
+        sShouldApplyGMS = SystemProperties.getBoolean(SPOOF_GMS, true);
 
         /* Set Certified Properties for GMSCore
          * Set Stock Fingerprint for ARCore
          * Set custom model for Netflix
          */
-        if (sIsGms) {
+        if (sIsGms && sShouldApplyGMS) {
             setCertifiedPropsForGms();
         } else if (!sStockFp.isEmpty() && packageName.equals(PACKAGE_ARCORE)) {
             dlog("Setting stock fingerprint for: " + packageName);
@@ -288,7 +291,7 @@ public class PropImitationHooks {
         }
 
         // Check stack for SafetyNet or Play Integrity
-        if (isCallerSafetyNet() || sIsFinsky) {
+        if ((isCallerSafetyNet() || sIsFinsky) && sShouldApplyGMS) {
             dlog("Blocked key attestation sIsGms=" + sIsGms + " sIsFinsky=" + sIsFinsky);
             throw new UnsupportedOperationException();
         }
