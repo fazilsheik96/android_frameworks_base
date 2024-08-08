@@ -144,7 +144,11 @@ java_library {
     },
     exclude_kotlinc_generated_files: true,
 
-    srcs: [":services-main-sources"],
+    srcs: [
+        ":services-main-sources",
+        ":java/com/libremobileos/**/*.java",
+        ":java/com/libremobileos/**/*.kt",
+    ],
 
     // The convention is to name each service module 'services.$(module_name)'
     static_libs: [
@@ -184,6 +188,7 @@ java_library {
         "service-blobstore",
         "service-jobscheduler",
         "android.hidl.base-V1.0-java",
+        "lmofreeform-server",
     ],
 
     libs: [

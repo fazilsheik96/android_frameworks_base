@@ -1305,6 +1305,10 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:protectionLevel="signature|appop|preinstalled" />
 
+    <!-- @hide -->
+    <permission android:name="com.libremobileos.permission.START_FREEFORM"
+                android:protectionLevel="signature|privileged" />
+
     <!-- Allows an application to modify and delete media files on this device or any connected
          storage device without user confirmation. Applications must already be granted the
          {@link #READ_EXTERNAL_STORAGE} or {@link #MANAGE_EXTERNAL_STORAGE}} permissions for this

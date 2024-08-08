@@ -236,6 +236,7 @@ import com.android.server.wm.WindowManagerGlobalLock;
 import com.android.server.wm.WindowManagerService;
 import com.android.server.lineage.health.HealthInterfaceService;
 import com.android.server.derp.LineageGlobalActionsService;
+import com.libremobileos.server.display.LMOFreeformSystemService;
 
 import dalvik.system.VMRuntime;
 import dalvik.system.PathClassLoader;
@@ -1749,6 +1750,10 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("LineageGlobalActionsService");
             mSystemServiceManager.startService(LineageGlobalActionsService.class);
+            t.traceEnd();
+
+            t.traceBegin("LMOFreeformSystemService");
+            mSystemServiceManager.startService(LMOFreeformSystemService.class);
             t.traceEnd();
 
             if (context.getResources().getBoolean(R.bool.config_dozeAlwaysOnDisplayAvailable)) {
