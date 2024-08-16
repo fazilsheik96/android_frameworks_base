@@ -1145,13 +1145,6 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
             putExtra(EXTRA_PLMN, plmn)
         }
 
-    private fun getFiveGStateCallback(): FiveGServiceClient.IFiveGStateListener {
-        val callbackCaptor = argumentCaptor<FiveGServiceClient.IFiveGStateListener>()
-        Mockito.verify(fiveGServiceClient)
-                .registerListener(any(), callbackCaptor.capture())
-        return callbackCaptor.value!!
-    }
-
     companion object {
         private const val SUB_1_ID = 1
 
