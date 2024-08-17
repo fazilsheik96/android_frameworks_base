@@ -65,15 +65,15 @@ public class PropImitationHooks {
     private static final String PACKAGE_SUBSCRIPTION_RED = "com.google.android.apps.subscriptions.red";
     private static final String PACKAGE_VELVET = "com.google.android.googlequicksearchbox";
 
-    private static final Map<String, String> sPixelEightProps = Map.of(
-        "PRODUCT", "husky",
-        "DEVICE", "husky",
-        "MANUFACTURER", "Google",
+    private static final Map<String, String> sPixel9ProProps = Map.of(
         "BRAND", "google",
-        "MODEL", "Pixel 8 Pro",
-        "HARDWARE", "husky",
-        "ID", "AP2A.240605.024",
-        "FINGERPRINT", "google/husky/husky:14/AP2A.240605.024/11860263:user/release-keys"
+        "MANUFACTURER", "Google",
+        "DEVICE", "caiman",
+        "PRODUCT", "caiman",
+        "HARDWARE", "caiman",
+        "MODEL", "Pixel 9 Pro",
+        "ID", "AD1A.240530.047.U1",
+        "FINGERPRINT", "google/caiman/caiman:14/AD1A.240530.047.U1/12150698:user/release-keys"
     );
 
     private static final Map<String, String> sPixelXLProps = new HashMap<>();
@@ -162,8 +162,8 @@ public class PropImitationHooks {
                 || packageName.equals(PACKAGE_GBOARD)
                 || packageName.equals(PACKAGE_SUBSCRIPTION_RED)
                 || packageName.equals(PACKAGE_VELVET)) && SystemProperties.getBoolean(spoofGApps, false)) {
-            dlog("Spoofing Pixel 8 Pro for: " + packageName + " process: " + processName);
-            sPixelEightProps.forEach((k, v) -> setPropValue(k, v));
+            dlog("Spoofing Pixel 9 Pro for: " + packageName);
+            sPixel9ProProps.forEach((k, v) -> setPropValue(k, v));
         } else if (!sNetflixModel.isEmpty() && packageName.equals(PACKAGE_NETFLIX)) {
             dlog("Setting model to " + sNetflixModel + " for Netflix");
             setPropValue("MODEL", sNetflixModel);
