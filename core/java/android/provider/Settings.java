@@ -6322,6 +6322,13 @@ public final class Settings {
         public static final String LESS_BORING_HEADS_UP = "less_boring_heads_up";
 
         /**
+         * 1 if we force notifications to not be dismissible if they are ongoing.
+         *
+         * @hide
+         */
+        public static final String NOTIFICATION_FORCE_NON_DISMISSIBLE = "notification_force_non_dismissible";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
